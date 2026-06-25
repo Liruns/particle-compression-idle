@@ -1,0 +1,9 @@
+{
+  "//": "프로젝트 브라우저 MCP — 스크린샷·DOM 자동화(visual-qa, oh-my-design 토큰 추출 등). 재시작 후 활성화.",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }
+  }
+}
