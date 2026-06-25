@@ -10,7 +10,7 @@
  * 이 모듈만이 Decimal↔string 변환 지점을 안다. 게임 로직은 항상 살아있는 Decimal만 본다.
  */
 
-import { toStore, fromStore } from '../bignum';
+import { Decimal, toStore, fromStore, ZERO } from '../bignum';
 import {
   type GameState,
   type SettingsState,
@@ -39,6 +39,8 @@ export interface SaveData {
   };
   chain: {
     bought: number[];
+    /** 누적 생산분(Decimal → string[8]). 구버전 세이브엔 없을 수 있음 → validate에서 0 채움. */
+    produced?: string[];
   };
   prestige: {
     count: number;
@@ -64,7 +66,10 @@ export function serializeState(s: GameState): SaveData {
       lifetime_C: toStore(s.resources.lifetime_C),
       D_lifetime: toStore(s.resources.D_lifetime),
     },
-    chain: { bought: [...s.chain.bought] },
+    chain: {
+      bought: [...s.chain.bought],
+      produced: s.chain.produced.map((d) => toStore(d)),
+    },
     prestige: {
       count: s.prestige.count,
       runIndex: s.prestige.runIndex,
@@ -85,6 +90,7 @@ export function deserializeState(data: SaveData): GameState {
   const bought = Array.isArray(data.chain?.bought)
     ? normalizeBought(data.chain.bought)
     : init.chain.bought;
+  const produced = normalizeProduced(data.chain?.produced);
 
   return {
     meta: {
@@ -101,7 +107,7 @@ export function deserializeState(data: SaveData): GameState {
       lifetime_C: fromStore(data.resources?.lifetime_C),
       D_lifetime: fromStore(data.resources?.D_lifetime),
     },
-    chain: { bought },
+    chain: { bought, produced },
     prestige: {
       count: data.prestige?.count ?? 0,
       runIndex: data.prestige?.runIndex ?? 0,
@@ -123,6 +129,20 @@ function normalizeBought(arr: number[]): number[] {
   for (let i = 0; i < CHAIN_TIERS; i++) {
     const v = arr[i];
     out[i] = typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+  }
+  return out;
+}
+
+/**
+ * 누적 생산분 배열을 항상 길이 CHAIN_TIERS Decimal로 정규화.
+ * 구버전 세이브(produced 없음) → 전부 0(§1.3 "누락 필드는 validate에서 기본값").
+ * 손상 문자열은 fromStore가 0으로 방어.
+ */
+function normalizeProduced(arr: string[] | undefined): Decimal[] {
+  const out = new Array<Decimal>(CHAIN_TIERS).fill(ZERO);
+  if (!Array.isArray(arr)) return out;
+  for (let i = 0; i < CHAIN_TIERS; i++) {
+    out[i] = fromStore(arr[i]);
   }
   return out;
 }

@@ -25,6 +25,12 @@ export interface GameEvents {
   offlineApplied: { seconds: number };
   /** 세이브 완료. */
   saved: { at: number };
+  /** 압축기 구매 성공(티어·수량). (system-flows §2.1) */
+  chain_purchased: { tier: number; count: number };
+  /** 압축기 구매 실패(자원 부족). UI 피드백용. */
+  buy_failed: { tier: number };
+  /** 수동 압축 클릭(ui-flow §2). */
+  manual_compress: Record<string, never>;
 }
 
 export type EventName = keyof GameEvents;

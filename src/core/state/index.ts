@@ -14,7 +14,8 @@
  *   채운다. layers·codex·research·stats·메커니즘 상태는 후속 마일스톤에서 확장(타입에 자리만 표시).
  */
 
-import { Decimal, D } from '../bignum';
+import { Decimal, D, ZERO } from '../bignum';
+import { SEED_T1_BOUGHT } from '../chain/engine';
 
 // --- 네임스페이스 타입 (§1.1 스키마 표) ---------------------------------------
 
@@ -44,10 +45,20 @@ export interface ResourcesState {
   D_lifetime: Decimal;
 }
 
-/** chain: 8단 압축기 각 티어의 보유 개수(bought). 정수 카운트 = native number(§2.2). */
+/**
+ * chain: 8단 압축기 상태.
+ *  - bought:   각 티어 구매 개수(정수, native number §2.2). 비용·마일스톤 기준. 세이브 대상.
+ *  - produced: 상위 티어가 생산해 누적된 분량(Decimal). 진짜 누적 상태 → 세이브 대상.
+ *
+ * [tech-architect 보고] data-spec §6-D는 chain에 bought[8]만 명시하나, 8단 자기증식 모델에서
+ *   상위 티어가 만든 하위 티어 분량(produced)은 bought만으로 복원 불가한 누적 상태다(C와 동급).
+ *   따라서 produced[8] Decimal 배열을 세이브 스키마에 추가한다. owned = bought + produced(파생).
+ */
 export interface ChainState {
-  /** 길이 8(T1~T8). 비용·생산량은 파생 → 저장 안 함, 로드 시 재계산. */
+  /** 길이 8(T1~T8) 구매 개수. */
   bought: number[];
+  /** 길이 8(T1~T8) 누적 생산분(Decimal). 상위 티어 생산 결과. */
+  produced: Decimal[];
 }
 
 /** prestige: 상전이·빅 크런치·재하강 상태(§1.1, §3.3 오프라인 보너스 플래그). */
@@ -93,6 +104,13 @@ export interface GameState {
 /** 8단 체인. */
 export const CHAIN_TIERS = 8;
 
+/** 새 런 시작 시드 bought 배열: T1만 SEED_T1_BOUGHT개. (재하강 리셋·새 게임 공용.) */
+export function seedBought(): number[] {
+  const arr = new Array<number>(CHAIN_TIERS).fill(0);
+  arr[0] = SEED_T1_BOUGHT;
+  return arr;
+}
+
 /** 새 게임 초기 상태. (세이브 없을 때 / 새 시작 시) */
 export function createInitialState(now: number = Date.now()): GameState {
   return {
@@ -111,7 +129,9 @@ export function createInitialState(now: number = Date.now()): GameState {
       D_lifetime: D(0),
     },
     chain: {
-      bought: new Array<number>(CHAIN_TIERS).fill(0),
+      // T1 1개 시드 → C가 t=0부터 누적(engine.py start_g1=1과 정합, economy §2.2 dec1=0.009h).
+      bought: seedBought(),
+      produced: new Array<Decimal>(CHAIN_TIERS).fill(ZERO),
     },
     prestige: {
       count: 0,
