@@ -96,6 +96,16 @@ export interface CodexState {
 }
 
 /**
+ * research: 연구 트리(research-tree.md, M1.7). 구매한 노드 ID 집합(영구 보존, 상전이/재하강 불변).
+ *  메모리에선 Set<string>(빠른 has). 저장 시 정렬 배열로 직렬화(§1.1 "집합은 ID 배열로", 스파스).
+ *  효과(체인 티어 배율)는 파생 — 저장 안 함(chainTierMultipliers가 집합에서 재계산).
+ */
+export interface ResearchState {
+  /** 구매한 연구 노드 ID 집합(A1·A2 등, 프로토타입 = A가지 2노드). */
+  purchased: Set<string>;
+}
+
+/**
  * mechanics: 층별 메커니즘 모듈의 **살아있는 인스턴스**(tech-arch §1.1·§4.4 자기완결).
  *  Decimal 필드와 같은 규칙: 메모리에선 live 객체, 저장 시 save 모듈이 .serialize()로 평문화.
  *  M1.4: 오비탈 공명(원자층 L2). M1.6: 위상 겹침(프리온 L6) + 진동 하모닉스(끈 L7).
@@ -133,9 +143,9 @@ export interface GameState {
   layers: LayersState; // M1.3: 알려진 물리 5층 진입 추적
   codex: CodexState; // M1.3: 발견 입자 ID 집합(영구 보존)
   mechanics: MechanicsState; // M1.4: 층별 메커니즘 살아있는 인스턴스(오비탈 공명)
+  research: ResearchState; // M1.7: 구매 연구 노드 ID 집합(영구 보존)
   settings: SettingsState;
-  // TODO(M1.7+): research  — 구매 노드 ID 집합(영구 보존)
-  // TODO(M1.7+): stats     — 누적 통계(정확 카운터 = native 정수), D_total 텔레메트리(R8)
+  // TODO(M3+): stats     — 누적 통계(정확 카운터 = native 정수), D_total 텔레메트리(R8)
 }
 
 /** 8단 체인. */
@@ -187,6 +197,9 @@ export function createInitialState(now: number = Date.now()): GameState {
       orbital: new OrbitalResonance(),
       phase: new PhaseOverlap(),
       harmonics: new Harmonics(),
+    },
+    research: {
+      purchased: new Set<string>(),
     },
     settings: {
       offlinePrecise: false,

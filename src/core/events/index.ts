@@ -51,6 +51,8 @@ export interface GameEvents {
   phase_unpinned: Record<string, never>;
   /** 하모닉 공명 발생(끈층 — 티어 폭발, systems §2-F) — UI 펄스·로그. */
   harmonic_resonance: { tier: number };
+  /** 연구 노드 구매 성공(M1.7, system-flows §9.1) — UI 트리 갱신·로그. */
+  research_purchased: { nodeId: string; branch: string };
 }
 
 export type EventName = keyof GameEvents;

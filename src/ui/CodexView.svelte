@@ -96,6 +96,11 @@
 
       <div class="cx-holo">
         <span class="cx-holo-label">홀로그래픽 배율</span>
+        <!-- 완성도 바(ui-flow §4-C): 발견 discoverable / 76. -->
+        <div class="cx-holo-bar" role="progressbar" aria-valuenow={codex.collected} aria-valuemax={codex.denominator}>
+          <div class="cx-holo-fill" style="width: {Math.round(codex.completion * 100)}%"></div>
+        </div>
+        <span class="cx-holo-frac dim">{codex.collected}/{codex.denominator} ({Math.round(codex.completion * 100)}%)</span>
         <span class="cx-holo-val">×{holoMult.toFixed(3)}</span>
         <span class="cx-holo-note dim">완주 시 ×1.350 (정보층에서 적용)</span>
       </div>
@@ -242,6 +247,24 @@
   .cx-holo-label {
     font-size: var(--text-label-sm);
     color: var(--foreground-dim);
+  }
+  /* 완성도 바(ui-flow §4-C): QF 녹 채움. 곡선 B(c²) 시각화는 단순 선형 진행률로 표시. */
+  .cx-holo-bar {
+    height: 6px;
+    background: var(--surface);
+    border-radius: var(--rounded-full);
+    overflow: hidden;
+    margin: 2px 0;
+  }
+  .cx-holo-fill {
+    height: 100%;
+    background: var(--qf);
+    border-radius: var(--rounded-full);
+    transition: width var(--motion-codex-reveal, 0.4s) ease-out;
+  }
+  .cx-holo-frac {
+    font-family: var(--font-numeric);
+    font-size: var(--text-label-sm);
   }
   .cx-holo-val {
     font-family: var(--font-numeric);

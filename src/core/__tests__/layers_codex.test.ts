@@ -375,11 +375,22 @@ describe('FTUE 점진 공개 — deriveFtue (ux.md §3)', () => {
     expect(f.showMechanismSlot).toBe(true);
   });
 
-  it('M1.3은 연구·D·QF 미노출', () => {
+  it('D 없으면 연구 탭/D 행 미노출 (상전이 전엔 QF도)', () => {
     const f = deriveFtue({ ...base, layerIndex: 5, discoveredCount: 40 });
-    expect(f.showResearchTab).toBe(false);
+    expect(f.showResearchTab).toBe(false); // D 없음 → 연구 탭 잠금.
     expect(f.showResourceD).toBe(false);
     expect(f.showResourceQF).toBe(false);
+  });
+
+  it('연구 탭 게이트(M1.7): 첫 D + 원자층(L2) 동시 충족 시만 해금', () => {
+    // D 있으나 분자층(L1) → 미해금(원자층 게이트).
+    expect(deriveFtue({ ...base, layerIndex: 1, hasDiscoveryData: true }).showResearchTab).toBe(
+      false,
+    );
+    // D 있고 원자층(L2) → 해금.
+    expect(deriveFtue({ ...base, layerIndex: 2, hasDiscoveryData: true }).showResearchTab).toBe(
+      true,
+    );
   });
 });
 

@@ -18,7 +18,7 @@ import { Decimal, D, ZERO, add, sub } from './core/bignum';
 import { getState, setState, createInitialState, CHAIN_TIERS, type GameState } from './core/state';
 import type { SlotPhase, PhaseState } from './core/layers/mechanics';
 import { PhaseOverlap, Harmonics } from './core/layers/mechanics';
-import { MANUAL_COMPRESS, PHASE_OVERLAP } from './data/constants';
+import { MANUAL_COMPRESS, PHASE_OVERLAP, RESONANCE } from './data/constants';
 import { GameLoop, Scheduler } from './core/loop';
 import { SaveManager, type LoadResult } from './core/save';
 import {
@@ -60,6 +60,15 @@ import {
   type LayerCompletion,
 } from './core/codex';
 import { deriveFtue, type FtueState } from './core/ftue';
+import { computeOffline, applyOfflineCredit, type OfflineResult } from './core/offline';
+import {
+  RESEARCH_NODES,
+  buyResearchNode,
+  chainTierMultipliers,
+  researchSnapshot,
+  isResearchUnlocked,
+  type ResearchView,
+} from './core/research';
 
 /** 한 티어의 표시용 스냅샷(ui-flow §2-D 체인 테이블 한 행). */
 export interface TierSnapshot {
@@ -194,6 +203,27 @@ export interface PrestigeSnapshot {
   count: number;
 }
 
+/**
+ * 오프라인 복귀 모달 표시용(ui-flow §10, M1.7). 로드 시 elapsed > 60초면 채워진다(아니면 null).
+ *  UI는 이 값만 읽어 모달(자리비움 시간·유효시간·획득 자원)을 그린다. 확인하면 dismissOffline로 소거.
+ */
+export interface OfflineSnapshot {
+  /** 자리비움 실제 시간(초, 클램프 전). UI "N시간 N분 자리 비움". */
+  rawSeconds: number;
+  /** 보상에 쓰인 유효 온라인 환산(초). UI "유효 온라인 환산: Xh (×mod)". */
+  effectiveSeconds: number;
+  /** 적용 modifier(0.65 또는 1.0 상전이 직후). */
+  modifier: number;
+  /** CAP(24h) 초과로 잘렸는지(UI "24시간 상한 도달" 안내). */
+  cappedHit: boolean;
+  /** 지급된 C 증분. */
+  dC: Decimal;
+  /** 지급된 E 증분. */
+  dE: Decimal;
+  /** 지급된 D 증분(공명 방치 기본 — 0일 수 있음). */
+  dD: Decimal;
+}
+
 /** UI가 읽는 표시용 스냅샷(읽기 전용). Decimal 그대로 — format은 UI에서. */
 export interface GameSnapshot {
   C: Decimal;
@@ -223,8 +253,12 @@ export interface GameSnapshot {
   harmonics: HarmonicsSnapshot;
   /** 상전이 상태(M1.5 — 미지 벽 도달 시 점등). */
   prestige: PrestigeSnapshot;
+  /** 연구 화면 상태(M1.7 — A가지 체인증폭 노드). */
+  research: ResearchView;
   /** FTUE 점진 공개 상태(M1.3). */
   ftue: FtueState;
+  /** 오프라인 복귀 모달(M1.7 — 로드 시 elapsed>60s). null이면 모달 없음. */
+  offline: OfflineSnapshot | null;
   totalTicks: number;
   loadKind: LoadResult['kind'];
 }
@@ -244,6 +278,8 @@ export class Game {
   private loadKind: LoadResult['kind'] = 'fresh';
   /** 상전이 가능 1회 발화 가드(prestige_ready 이벤트 중복 방지). 가능→불가→가능 재발화 허용. */
   private prestigeReadyEmitted = false;
+  /** 오프라인 복귀 모달 데이터(로드 시 elapsed>60s면 채워짐, M1.7). 확인하면 null로 소거. */
+  private offlineSnapshot: OfflineSnapshot | null = null;
 
   constructor() {
     this.platform = detectPlatform();
@@ -253,11 +289,9 @@ export class Game {
     this.loop = new GameLoop({
       tick: (dt) => this.tick(dt),
       render: () => this.notify(),
-      // catch-up 상한 초과분은 지금은 폐기(오프라인 적용은 M1.7).
-      onOverflow: (s) => {
-        // TODO(M1.7): offline.computeOffline로 일괄 반영.
-        void s;
-      },
+      // catch-up 상한 초과분(백그라운드 탭/장시간 멈춤)은 오프라인 경로로 일괄 흡수(§6.4).
+      //   "백그라운드 = 짧은 오프라인" — 48h 클램프·modifier 동일 적용(익스플로잇 차단).
+      onOverflow: (overflowSeconds) => this.applyOverflowOffline(overflowSeconds),
     });
   }
 
@@ -268,6 +302,11 @@ export class Game {
     const result = await this.save.load();
     this.loadKind = result.kind;
     setState(result.state);
+
+    // 오프라인 복귀(M1.7, system-flows §7.1). 로드 직후 단 한 번 — meta.lastSave로부터 elapsed
+    //   계산 → 끊긴 시점 rate × 유효시간 일괄 지급(economy §3.1 하한). 새 게임(lastSave≈now)은 0.
+    //   진행 동기화(processProgression) 전에 적용 — 오프라인으로 넘은 dec를 층/도감이 함께 흡수.
+    this.applyLoadOffline();
 
     // 부팅 직후 진행 동기화(M1.3): 로드된 dec 기준 층/도감을 즉시 정합.
     //  - 새 게임(dec0): 물 분자(unlockDec 0) 즉시 발견 가능 → 시작부터 도감 1개.
@@ -318,9 +357,13 @@ export class Game {
 
     // 1d. 진동 하모닉스(끈층 L7+, systems §2-F, M1.6). V 누적 + 티어별 공명 배율 산출.
     //     전체 곱이 아닌 **티어 선택 배율**(특정 티어만 폭발) — chainTick tierMult로 전달.
-    const tierMult = this.updateHarmonics(dt);
+    const harmonicMult = this.updateHarmonics(dt);
 
-    // 2. 8단 체인 생산(역순 단일 패스, engine.py 동형). 전체 배율 mult + 티어별 하모닉 배율.
+    // 1e. 연구 체인증폭(A가지, M1.7). 구매 노드의 **티어 내부 배율**(C안 — research_mult 불변).
+    //     하모닉과 동형 티어별 배율 → 합성(같은 인덱스 곱)해 chainTick tierMult로 전달.
+    const tierMult = this.composeTierMult(harmonicMult);
+
+    // 2. 8단 체인 생산(역순 단일 패스, engine.py 동형). 전체 배율 mult + 티어별(하모닉·연구) 배율.
     const { dC, dE, produced } = chainTick(s.chain.bought, s.chain.produced, mult, dt, tierMult);
     s.chain.produced = produced;
 
@@ -411,6 +454,171 @@ export class Game {
   /** 진동 하모닉스 활성 조건: 끈층(L7) 이상 도달(layers.currentIndex ≥ 7). */
   private isHarmonicsActive(): boolean {
     return getState().layers.currentIndex >= 7;
+  }
+
+  /**
+   * 티어별 배율 합성(M1.7): 하모닉(끈층) × 연구 체인증폭(A가지). 둘 다 티어별(인덱스 0..7) 배율 →
+   *   같은 인덱스끼리 곱한다. 둘 다 1이면 undefined 반환(chainTick이 전부 1로 처리 — Decimal 연산 절약).
+   *   ★ 연구 배율은 **체인 내부**(특정 티어만, C안) — 전역 production_mult에 안 들어간다(research_mult 불변).
+   * @param harmonicMult updateHarmonics 결과(없으면 undefined).
+   */
+  private composeTierMult(harmonicMult: number[] | undefined): number[] | undefined {
+    const purchased = getState().research.purchased;
+    const hasResearch = purchased.size > 0;
+    if (!harmonicMult && !hasResearch) return undefined; // 둘 다 없음 → 전부 1.
+
+    const research = hasResearch ? chainTierMultipliers(purchased) : undefined;
+    if (harmonicMult && !research) return harmonicMult;
+    if (research && !harmonicMult) return research;
+
+    // 둘 다 있음 → 인덱스별 곱(길이 8).
+    const out = new Array<number>(CHAIN_TIERS);
+    for (let i = 0; i < CHAIN_TIERS; i++) {
+      out[i] = (harmonicMult ? harmonicMult[i] : 1) * (research ? research[i] : 1);
+    }
+    return out;
+  }
+
+  // --- 오프라인 복귀 (M1.7, system-flows §7, economy §3) ------------------------
+
+  /**
+   * 로드 직후 오프라인 복귀 처리(system-flows §7.1). 한 번만 호출(start 안).
+   *   meta.lastSave를 last_save로 채택(§1.7 — 단일 클라이언트에선 파일 기록값. Cloud 교차검증은 M3).
+   *   60초 이하면 모달 없음(ui-flow §10-A — 짧은 자리비움은 무시). elapsed > 60s면 모달 데이터 채움.
+   */
+  private applyLoadOffline(): void {
+    const s = getState();
+    const credit = this.runOffline(Date.now(), s.meta.lastSave, s.prestige.offlineBonusPending);
+    if (!credit) return;
+    // 60초 초과만 모달 노출(ui-flow §10-A "elapsed > 60초"). 그 이하 지급분은 조용히 반영됨.
+    if (credit.result.rawSeconds > 60) {
+      this.offlineSnapshot = {
+        rawSeconds: credit.result.rawSeconds,
+        effectiveSeconds: credit.result.effectiveSeconds,
+        modifier: credit.result.modifier,
+        cappedHit: credit.result.cappedHit,
+        dC: credit.credit.dC,
+        dE: credit.credit.dE,
+        dD: credit.credit.dD,
+      };
+    }
+  }
+
+  /**
+   * 루프 catch-up 상한 초과분을 오프라인으로 흡수(tech-arch §6.4 "백그라운드 = 짧은 오프라인").
+   *   모달은 띄우지 않음(메인 진행 중 자연 흡수). last_save 비교가 아니라 overflowSeconds를 직접
+   *   유효시간 공식에 태우기 위해, now/lastSave를 overflow만큼 벌려 같은 단일 진입점(runOffline)을 탄다.
+   *   → 시계조작 방어·modifier·48h 클램프가 동일하게 적용(경로 일원화).
+   */
+  private applyOverflowOffline(overflowSeconds: number): void {
+    if (overflowSeconds <= 0) return;
+    const now = Date.now();
+    // afterPrestige=false: 백그라운드 흡수는 복귀 임팩트 보너스 대상 아님(상전이 직후 1회성과 구분).
+    this.runOffline(now, now - overflowSeconds * 1000, false);
+  }
+
+  /**
+   * 오프라인 단일 진입점(§3.2 "클램프는 함수 입구에서 딱 한 번"). 시간 수식(computeOffline) +
+   *   일괄 지급(applyOfflineCredit)을 묶어 자원에 반영하고 결과를 돌려준다. 유효시간 0이면 null.
+   *
+   *   끊긴 시점 rate(끊겼다 가정 — 현재 owned·mult 기준 dC/dt, 보수적 하한 §3.1) × 유효시간.
+   *   D는 메커니즘 방치 기본 트리클(§3.4 — 현재 활성 메커니즘의 방치 기본율, 최댓값 아님).
+   *   상전이 직후 modifier=1.0 플래그는 여기서 소비(1회성, §3.3).
+   */
+  private runOffline(
+    now: number,
+    lastSave: number,
+    afterPrestige: boolean,
+  ): { result: OfflineResult; credit: ReturnType<typeof applyOfflineCredit> } | null {
+    const s = getState();
+    const result = computeOffline({ now, lastSave, afterPrestige });
+    if (result.effectiveSeconds <= 0) return null;
+
+    // 끊긴 시점 dC/dt(=g1·mult). mult는 현재 production_mult(QF항만 — 메커니즘 배율은 방치 기본으로
+    //   rateD에 별도 반영. C 생산엔 보수적으로 QF항만 — 일괄 하한 정신, 메커니즘 곱 미반영).
+    const mult = productionMult(s.resources.QF);
+    const owned = composeOwned(s.chain.bought, s.chain.produced);
+    const rateC = owned[0].mul(mult);
+    const rateD = this.offlineDRate();
+
+    const credit = applyOfflineCredit(result.effectiveSeconds, rateC, rateD);
+
+    // 자원 반영(§7.1 단계 6): C·E 가산 + lifetime_C 누적 + D_current·D_lifetime 가산.
+    s.resources.C = add(s.resources.C, credit.dC);
+    s.resources.E = add(s.resources.E, credit.dE);
+    s.resources.lifetime_C = add(s.resources.lifetime_C, credit.dC);
+    if (credit.dD.gt(0)) {
+      s.resources.D_current = add(s.resources.D_current, credit.dD);
+      s.resources.D_lifetime = add(s.resources.D_lifetime, credit.dD);
+    }
+
+    // 상전이 직후 modifier=1.0 1회성 소비(§3.3). afterPrestige=true로 적용됐으면 플래그 끔.
+    if (afterPrestige && s.prestige.offlineBonusPending) {
+      s.prestige.offlineBonusPending = false;
+    }
+
+    bus.emit('offlineApplied', { seconds: result.effectiveSeconds });
+    return { result, credit };
+  }
+
+  /**
+   * 오프라인 중 D 트리클율(초당, §3.4 메커니즘 방치 기본값). 현재 활성 메커니즘의 방치 기본 D율.
+   *   - 원자~쿼크(오비탈 공명 활성): 자동 공명 방치 기본 D율(D_PER_IDLE / 주기).
+   *   - 프리온+(위상 겹침): 분산 상태 평균 기여(자동 순환 중 일부 시간 분산) — 보수적으로 1/3.
+   *   "방치 기본 배율 — 최댓값 아님(익스플로잇 방지)·최악값 아님(불쾌 방지)"(tech-arch §3.4).
+   */
+  private offlineDRate(): number {
+    const i = getState().layers.currentIndex;
+    if (i >= 2 && i < 6) {
+      // 오비탈 자동 공명: SLOT_INTERVAL+WINDOW 주기마다 D_PER_IDLE 1회 → 초당 평균.
+      const period = RESONANCE.SLOT_INTERVAL_SECONDS + RESONANCE.SLOT_WINDOW_SECONDS;
+      return RESONANCE.D_PER_IDLE / period;
+    }
+    if (i >= 6) {
+      // 위상 자동 순환: 3상태 중 분산 1/3 시간 가정 → 분산 D율의 1/3(방치 기본, 보수적).
+      return PHASE_OVERLAP.DISPERSED_D_RATE / 3;
+    }
+    return 0; // 분자층(메커니즘 없음).
+  }
+
+  /** 오프라인 모달 확인(소거). UI "확인" 클릭 시. */
+  dismissOffline(): void {
+    this.offlineSnapshot = null;
+    this.notify();
+  }
+
+  // --- 연구 (M1.7, system-flows §9) --------------------------------------------
+
+  /**
+   * 연구 노드 구매(system-flows §9.1). D_current로 비용 지불 → 구매 기록 → 효과(체인 티어 배율)는
+   *   파생이라 다음 tick부터 자동 반영(composeTierMult가 구매 집합에서 재계산). research_mult 불변(C안).
+   *   해금(첫 D + 원자층)·선행·중복·D 충분을 buyResearchNode가 판정, 성공 시에만 D 차감.
+   * @returns 구매 성공 여부(UI 주스 분기).
+   */
+  buyResearch(nodeId: string): boolean {
+    const s = getState();
+    const node = RESEARCH_NODES.find((n) => n.id === nodeId);
+    if (!node) return false;
+
+    // 해금 게이트(첫 D + 원자층). 미해금이면 구매 자체 불가.
+    const hasD = s.resources.D_lifetime.gt(0) || s.resources.D_current.gt(0);
+    if (!isResearchUnlocked(s.layers.currentIndex, hasD)) return false;
+
+    // D 충분 판정(Decimal 경계 §2.2 — 비교는 Decimal, 결과 boolean을 순수 함수에 주입).
+    const affordable = s.resources.D_current.gte(node.costD);
+    const r = buyResearchNode(nodeId, s.research.purchased, affordable);
+    if (!r.ok || !r.node) {
+      bus.emit('buy_failed', { tier: 0 }); // 연구 실패도 동일 피드백 채널(tier 0=연구).
+      return false;
+    }
+
+    // 원자적 적용: D 차감 → 구매 기록.
+    s.resources.D_current = sub(s.resources.D_current, D(r.node.costD));
+    s.research.purchased.add(r.node.id);
+
+    bus.emit('research_purchased', { nodeId: r.node.id, branch: r.node.branch });
+    this.notify();
+    return true;
   }
 
   /**
@@ -572,8 +780,12 @@ export class Game {
     if (resonanceMult > 1) mult = mult.mul(resonanceMult);
     if (phaseMult > 1) mult = mult.mul(phaseMult);
     const owned = composeOwned(s.chain.bought, s.chain.produced);
-    // 현재 dC/dt(=g1·mult)의 CLICK_SECONDS초 분량. 체인이 비어도(T1 시드) 소폭 진행.
-    const bump = owned[0].mul(mult).mul(MANUAL_COMPRESS.CLICK_SECONDS);
+    // 연구 T1 체인증폭(M1.7)도 클릭에 반영(클릭도 T1 강화 혜택 — 곱 구조 일관). C안 — 체인 내부 배율.
+    const researchT1 = chainTierMultipliers(s.research.purchased)[0];
+    let clickRate = owned[0].mul(mult);
+    if (researchT1 !== 1) clickRate = clickRate.mul(researchT1);
+    // 현재 dC/dt의 CLICK_SECONDS초 분량. 체인이 비어도(T1 시드) 소폭 진행.
+    const bump = clickRate.mul(MANUAL_COMPRESS.CLICK_SECONDS);
     s.resources.C = add(s.resources.C, bump);
     s.resources.E = add(s.resources.E, bump);
     s.resources.lifetime_C = add(s.resources.lifetime_C, bump);
@@ -708,18 +920,25 @@ export class Game {
     const mult = productionMult(s.resources.QF);
     const owned = composeOwned(s.chain.bought, s.chain.produced);
 
+    // 연구 체인증폭 티어 배율(M1.7, C안). 표시 생산율에 반영(체인 내부 배율 — 실제 tick과 일치).
+    //   하모닉(끈층)은 burst 순간 배율이라 정적 표시엔 미반영(체인 테이블은 연구 정적 배율만).
+    const researchTierMult = chainTierMultipliers(s.research.purchased);
+
     const tiers: TierSnapshot[] = [];
     for (let i = 0; i < CHAIN_TIERS; i++) {
       const tier = i + 1;
       const nextCost = tierCost(tier, s.chain.bought[i]);
       // 해금: T1 항상, 그 외 직전 티어 보유 ≥1 (ui-flow §2-D +1 노출 규칙).
       const unlocked = i === 0 || owned[i - 1].gt(0) || s.chain.bought[i] > 0;
+      // 표시 생산율: 전역 mult × 연구 티어 배율(해당 티어 강화 시). 미강화 티어는 ×1.
+      let rate = tierProductionRate(i, owned, mult);
+      if (researchTierMult[i] !== 1) rate = rate.mul(researchTierMult[i]);
       tiers.push({
         tier,
         bought: s.chain.bought[i],
         owned: owned[i],
         nextCost,
-        rate: tierProductionRate(i, owned, mult),
+        rate,
         affordable: s.resources.E.gte(nextCost),
         unlocked,
       });
@@ -733,14 +952,22 @@ export class Game {
     // T1 첫 구매 가능 여부(FTUE 체인 노출 게이트).
     const t1NextCost = tierCost(1, s.chain.bought[0]);
     const hasBoughtAnyTier = s.chain.bought.some((b, i) => b > (i === 0 ? 1 : 0)); // T1 시드 1 제외
+    // D 보유: 현재 런 또는 lifetime(상전이로 D_current=0이 돼도 연구 탭은 영구 유지 — D_lifetime).
+    const hasDiscoveryData = s.resources.D_current.gt(0) || s.resources.D_lifetime.gt(0);
     const ftue = deriveFtue({
       hasBoughtAnyTier,
       canAffordFirstTier: s.resources.E.gte(t1NextCost),
       discoveredCount: discovered.size,
       layerIndex: s.layers.currentIndex,
       hasPrestiged: s.prestige.count > 0,
-      hasDiscoveryData: s.resources.D_current.gt(0),
+      hasDiscoveryData,
     });
+
+    // 연구 화면 스냅샷(M1.7). 해금(첫 D + 원자층) + 노드별 D 충분 판정.
+    const researchUnlocked = isResearchUnlocked(s.layers.currentIndex, hasDiscoveryData);
+    const research = researchSnapshot(s.research.purchased, researchUnlocked, (costD) =>
+      s.resources.D_current.gte(costD),
+    );
 
     // 오비탈 공명 위젯 상태(원자층 L2+ 활성). 표시 전용 — 메커니즘 인스턴스 직접 질의.
     //   미지 진입(L6+) 후엔 오비탈 위젯 비표시(active=false) — 미지 메커니즘이 그 자리를 차지.
@@ -813,6 +1040,10 @@ export class Game {
           count: s.prestige.count,
         };
 
+    // 표시 dC/dt: 전역 displayMult × 연구 T1 배율(체인 내부 — 실제 C 생산율과 일치).
+    let rateC = owned[0].mul(displayMult);
+    if (researchTierMult[0] !== 1) rateC = rateC.mul(researchTierMult[0]);
+
     return {
       C: s.resources.C,
       E: s.resources.E,
@@ -821,7 +1052,7 @@ export class Game {
       dec,
       r: computeRadius(s.resources.C),
       mult: displayMult,
-      rateC: owned[0].mul(displayMult),
+      rateC,
       tiers,
       layer: {
         index: def.index,
@@ -845,7 +1076,9 @@ export class Game {
       phase,
       harmonics,
       prestige,
+      research,
       ftue,
+      offline: this.offlineSnapshot,
       totalTicks: this.loop.totalTicks,
       loadKind: this.loadKind,
     };
@@ -856,6 +1089,7 @@ export class Game {
     setState(createInitialState());
     this.loadKind = 'fresh';
     this.prestigeReadyEmitted = false; // 상전이 가드 초기화(M1.5).
+    this.offlineSnapshot = null; // 오프라인 모달 소거(M1.7).
     // dec0에서 물 분자(unlockDec 0) 즉시 발견 → 시작부터 도감 1개(FTUE 도감 탭 등장).
     this.processProgression(computeDec(getState().resources.C));
     this.notify();

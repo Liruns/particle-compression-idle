@@ -58,6 +58,10 @@ export interface SaveData {
   codex?: {
     discovered: string[];
   };
+  /** M1.7 추가. 구매 연구 노드 ID 배열(Set → array, §1.1 스파스). 구버전 없음 → 빈 배열. */
+  research?: {
+    purchased: string[];
+  };
   /**
    * M1.4 추가. 층별 메커니즘 직렬화 상태(§1.1 R7 — 메커니즘이 .serialize()로 평문화).
    * 구버전(없음) → deserialize에서 새 인스턴스 기본값. 각 메커니즘 형태는 모듈이 책임(불투명).
@@ -100,6 +104,7 @@ export function serializeState(s: GameState): SaveData {
     layers: { currentIndex: s.layers.currentIndex },
     // Set → 정렬된 배열(결정적 직렬화 — 동일 상태 → 동일 봉투 → 체크섬 안정).
     codex: { discovered: [...s.codex.discovered].sort() },
+    research: { purchased: [...s.research.purchased].sort() },
     // 메커니즘은 각자 .serialize()로 평문화(§1.1 R7 — save는 형태를 모름, 불투명 값 그대로).
     mechanics: {
       orbital: s.mechanics.orbital.serialize(),
@@ -151,6 +156,10 @@ export function deserializeState(data: SaveData): GameState {
     codex: {
       // 발견 ID 배열 → Set. 문자열 아닌 값은 무시(§1.3 방어).
       discovered: normalizeDiscovered(data.codex?.discovered),
+    },
+    research: {
+      // 구매 노드 ID 배열 → Set. 문자열 아닌 값은 무시(§1.3 방어). 구버전 없음 → 빈 집합.
+      purchased: normalizeDiscovered(data.research?.purchased),
     },
     mechanics: {
       // 새 인스턴스 + 저장 상태 복원(§1.3 — deserialize가 누락/손상을 기본값으로 방어).

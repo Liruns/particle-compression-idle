@@ -8,7 +8,9 @@
  *   탭(압축/도감)은 진행에 따라 등장. 연구 탭은 D 획득(M1.7) 게이트 — M1.3에선 항상 잠금.
  *
  * M1.4 추가: 원자층 오비탈 공명 → 첫 D 획득 시 **자원 D 행 노출**(ui-flow §2-C "D 첫 획득 후").
- *   연구 탭은 여전히 M1.7 게이트(D는 모이되 소비처는 후속). showResourceD만 D>0에서 켜진다.
+ *
+ * M1.7 추가: 첫 D 획득 시 **연구 탭 해금**(ui-flow §7 "발견 데이터 축적. 연구 가능." §3-D).
+ *   D는 모이는 화폐이자 이제 소비처(연구 노드)가 생김. showResearchTab이 D>0 + 원자층(L2)에서 켜진다.
  *
  * 입력은 "진실 상태에서 파생 가능한 신호"만(저장 안 함, 매 스냅샷 재계산):
  *   - 체인 보유(첫 구매 여부), 발견 입자 수, 현재 dec/층, D 보유 여부.
@@ -29,7 +31,7 @@ export interface FtueState {
   showChain: boolean;
   /** 도감 탭 표시(첫 발견 후 — 게임 시작 직후 물 분자부터). */
   showCodexTab: boolean;
-  /** 연구 탭 표시(D 소비 — M1.7. M1.4도 false: D는 모이되 소비처는 후속). */
+  /** 연구 탭 표시(첫 D 획득 + 원자층 — M1.7. 연구 노드 소비처 등장). */
   showResearchTab: boolean;
   /** 자원 D 행 표시(D 첫 획득 후 — M1.4 오비탈 공명, ui-flow §2-C). */
   showResourceD: boolean;
@@ -108,7 +110,8 @@ export function deriveFtue(input: FtueInput): FtueState {
     stage,
     showChain,
     showCodexTab,
-    showResearchTab: false, // M1.7 (D 소비처)
+    // 연구 탭: 첫 D 획득 + 원자층(L2+) 진입 시 해금(M1.7, ui-flow §3-C). A가지 = 첫 D 게이트.
+    showResearchTab: hasDiscoveryData && layerIndex >= 2,
     showResourceD: hasDiscoveryData, // M1.4 — D 첫 획득 후(오비탈 공명)
     showResourceQF: hasPrestiged, // M1.5 (M1.3/M1.4 항상 false)
     showMechanismSlot,

@@ -255,10 +255,10 @@ describe('FTUE — D 첫 획득 시 자원 D 행 노출 (ui-flow §2-C)', () => 
     expect(deriveFtue(base).showResourceD).toBe(false);
   });
 
-  it('D 보유 → showResourceD true (연구 탭은 여전히 false — M1.7)', () => {
+  it('D 보유 → showResourceD true + 연구 탭 해금(M1.7 — 첫 D + 원자층)', () => {
     const f = deriveFtue({ ...base, hasDiscoveryData: true });
     expect(f.showResourceD).toBe(true);
-    expect(f.showResearchTab).toBe(false);
+    expect(f.showResearchTab).toBe(true); // M1.7: 첫 D + L2(base layerIndex 2) → 연구 탭.
   });
 });
 

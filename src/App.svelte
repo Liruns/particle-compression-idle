@@ -20,6 +20,8 @@
   import PhaseWidget from './ui/PhaseWidget.svelte';
   import HarmonicsWidget from './ui/HarmonicsWidget.svelte';
   import PrestigeView from './ui/PrestigeView.svelte';
+  import ResearchView from './ui/ResearchView.svelte';
+  import OfflineModal from './ui/OfflineModal.svelte';
   import Toast from './ui/Toast.svelte';
   import type { PhaseState } from './core/layers/mechanics';
 
@@ -30,7 +32,7 @@
   let toast: Toast;
 
   /** 현재 탭. */
-  type Tab = 'compress' | 'codex' | 'prestige';
+  type Tab = 'compress' | 'research' | 'codex' | 'prestige';
   let tab: Tab = 'compress';
 
   const loadLabel: Record<GameSnapshot['loadKind'], string> = {
@@ -101,6 +103,14 @@
   function onBuy(tier: number, mode: BuyMode) {
     game?.buy(tier, mode);
   }
+  // 연구 노드 구매(M1.7): D 소비 → 체인 티어 배율 효과(C안).
+  function onBuyResearch(nodeId: string) {
+    game?.buyResearch(nodeId);
+  }
+  // 오프라인 모달 확인(M1.7): 모달 소거.
+  function onDismissOffline() {
+    game?.dismissOffline();
+  }
   async function onSave() {
     await game?.persist();
   }
@@ -118,6 +128,10 @@
   // 도감 탭은 첫 발견 후 등장(FTUE). 발견 시 압축 탭에 배지.
   $: showCodexTab = snap?.ftue.showCodexTab ?? false;
   $: codexCount = snap?.codex.collected ?? 0;
+  // 연구 탭은 첫 D 획득 + 원자층 후 등장(FTUE, M1.7).
+  $: showResearchTab = snap?.ftue.showResearchTab ?? false;
+  // 연구 탭이 사라졌는데 머물러 있으면 압축 메인으로 폴백(방어).
+  $: if (!showResearchTab && tab === 'research') tab = 'compress';
   // 상전이 탭(M1.5): 미지 6벽 도달 시만 점등(알려진 물리 비점등, ui-flow §1-C·GDD §15).
   $: showPrestigeTab = snap?.prestige.available ?? false;
   $: prestigeFirst = (snap?.prestige.available && snap?.prestige.isFirst) ?? false;
@@ -126,6 +140,11 @@
 </script>
 
 <Toast bind:this={toast} />
+
+<!-- 오프라인 복귀 모달(M1.7, ui-flow §10). 로드 시 elapsed>60s면 표시. -->
+{#if snap?.offline}
+  <OfflineModal offline={snap.offline} onDismiss={onDismissOffline} />
+{/if}
 
 <main data-layer={snap?.layer.slug ?? 'mol'}>
   <header>
@@ -140,6 +159,10 @@
     <nav class="tabs" aria-label="화면">
       <button class="tab" class:active={tab === 'compress'} on:click={() => (tab = 'compress')}
         >압축</button>
+      {#if showResearchTab}
+        <button class="tab" class:active={tab === 'research'} on:click={() => (tab = 'research')}
+          >연구</button>
+      {/if}
       {#if showCodexTab}
         <button class="tab" class:active={tab === 'codex'} on:click={() => (tab = 'codex')}>
           도감{#if codexCount > 0}<span class="tab-badge">{codexCount}</span>{/if}
@@ -230,6 +253,8 @@
       {#if snap.ftue.showChain}
         <ChainTable tiers={snap.tiers} {onBuy} />
       {/if}
+    {:else if tab === 'research'}
+      <ResearchView research={snap.research} dCurrent={snap.D} onBuy={onBuyResearch} />
     {:else if tab === 'codex'}
       <CodexView codex={snap.codex} />
     {:else if tab === 'prestige'}
