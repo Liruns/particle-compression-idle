@@ -75,6 +75,25 @@ export interface PrestigeState {
   offlineBonusPending: boolean;
 }
 
+/**
+ * layers: 현재 층 추적(systems §1, M1.3). 알려진 물리 5층 무상전이 진입.
+ *  currentIndex만 진실 상태(파생 아님 — 진입 이벤트/비트는 "처음 도달" 1회만 발화하므로
+ *  dec에서 매번 재계산하면 비트가 중복 발화됨 → 도달한 최대 층을 상태로 기억).
+ */
+export interface LayersState {
+  /** 현재(=지금까지 도달한 최대) 알려진 물리 층 index(1..5). 초기 1=분자층. */
+  currentIndex: number;
+}
+
+/**
+ * codex: 입자 도감(codex.md §13, M1.3). 발견된 입자 ID 집합(영구 보존, 상전이/재하강 불변).
+ *  메모리에선 Set<string>(빠른 has). 저장 시 배열로 직렬화(§1.1 "집합은 ID 배열로", 스파스).
+ */
+export interface CodexState {
+  /** 발견된 입자 ID 집합. */
+  discovered: Set<string>;
+}
+
 /** settings: 게임 진행과 분리. 마이그레이션 영향 최소(§1.1). */
 export interface SettingsState {
   /** 오프라인 정밀모드 on/off(§3.1 미니 시뮬). */
@@ -94,9 +113,10 @@ export interface GameState {
   resources: ResourcesState;
   chain: ChainState;
   prestige: PrestigeState;
+  layers: LayersState; // M1.3: 알려진 물리 5층 진입 추적
+  codex: CodexState; // M1.3: 발견 입자 ID 집합(영구 보존)
   settings: SettingsState;
-  // TODO(M1.3+): layers   — 현재 층/서브층 인덱스 + 메커니즘 상태(§1.1)
-  // TODO(M1.6+): codex     — 발견 입자 ID 집합(영구 보존)
+  // TODO(M1.6+): 메커니즘 상태(오비탈 공명·위상 겹침 등 §1.1 LayerMechanic.serialize)
   // TODO(M1.7+): research  — 구매 노드 ID 집합(영구 보존)
   // TODO(M1.7+): stats     — 누적 통계(정확 카운터 = native 정수), D_total 텔레메트리(R8)
 }
@@ -139,6 +159,12 @@ export function createInitialState(now: number = Date.now()): GameState {
       qfClaimed: D(0),
       focusSublayer: null,
       offlineBonusPending: false,
+    },
+    layers: {
+      currentIndex: 1, // 분자층에서 시작.
+    },
+    codex: {
+      discovered: new Set<string>(),
     },
     settings: {
       offlinePrecise: false,

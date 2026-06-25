@@ -30,6 +30,21 @@ import {
 } from './core/chain';
 import { detectPlatform, type PlatformAdapter } from './platform';
 import { bus } from './core/events';
+import {
+  layersEnteredSince,
+  currentLayer,
+  isNearKnownBoundary,
+  type LayerDefinition,
+} from './core/layers';
+import {
+  evaluateDiscoveries,
+  knownLayerCompletions,
+  codexCompletion,
+  discoverableCollected,
+  CODEX_DENOMINATOR,
+  type LayerCompletion,
+} from './core/codex';
+import { deriveFtue, type FtueState } from './core/ftue';
 
 /** 한 티어의 표시용 스냅샷(ui-flow §2-D 체인 테이블 한 행). */
 export interface TierSnapshot {
@@ -49,6 +64,40 @@ export interface TierSnapshot {
   unlocked: boolean;
 }
 
+/** 현재 층 표시용 스냅샷(ui-flow §2 우측 층 카드). */
+export interface LayerSnapshot {
+  /** 층 index(1..5 알려진 물리). */
+  index: number;
+  /** CSS data-layer 슬러그(팔레트 토큰 전환 키). */
+  slug: string;
+  /** 한국어 층 이름. */
+  nameKo: string;
+  /** 영문 층 이름. */
+  nameEn: string;
+  /** 메커니즘 한국어 이름(M1.4 풀 구현 — M1.3은 이름만). */
+  mechanismNameKo: string;
+  /** 대표 스케일(m 문자열). */
+  scaleM: string;
+  /** 서사 decade 범위 [start,end]. */
+  decadeRange: readonly [number, number];
+  /** 알려진 입자 경계 근접(dec15+) — ux.md §5-6 신호. */
+  nearBoundary: boolean;
+}
+
+/** 도감 표시용 스냅샷(ui-flow §4). */
+export interface CodexSnapshot {
+  /** 발견된 입자 ID 집합(UI 카드 발견 여부 판정). */
+  discovered: ReadonlySet<string>;
+  /** 발견 discoverable 수(분모 76 기준). */
+  collected: number;
+  /** 분모(76, LEGENDARY 제외). */
+  denominator: number;
+  /** 완성도(0~1). */
+  completion: number;
+  /** 알려진 물리 층별 완성 현황(L1~L5). */
+  layerCompletions: LayerCompletion[];
+}
+
 /** UI가 읽는 표시용 스냅샷(읽기 전용). Decimal 그대로 — format은 UI에서. */
 export interface GameSnapshot {
   C: Decimal;
@@ -64,6 +113,12 @@ export interface GameSnapshot {
   rateC: Decimal;
   /** 8단 체인 각 티어 표시 정보. */
   tiers: TierSnapshot[];
+  /** 현재 층(M1.3). */
+  layer: LayerSnapshot;
+  /** 도감(M1.3). */
+  codex: CodexSnapshot;
+  /** FTUE 점진 공개 상태(M1.3). */
+  ftue: FtueState;
   totalTicks: number;
   loadKind: LoadResult['kind'];
 }
@@ -106,6 +161,12 @@ export class Game {
     this.loadKind = result.kind;
     setState(result.state);
 
+    // 부팅 직후 진행 동기화(M1.3): 로드된 dec 기준 층/도감을 즉시 정합.
+    //  - 새 게임(dec0): 물 분자(unlockDec 0) 즉시 발견 가능 → 시작부터 도감 1개.
+    //  - 로드 세이브: 발견 누락분 보충(데이터 추가/조건 단순화로 새로 해금된 입자 흡수).
+    //  멱등이므로 이미 기록된 것은 재발화 안 함.
+    this.processProgression(computeDec(getState().resources.C));
+
     // everySecond: lastSave·플레이타임 갱신(저빈도, §4.2).
     this.scheduler.every('everySecond', 1, () => {
       const s = getState();
@@ -142,6 +203,35 @@ export class Game {
     s.resources.C = add(s.resources.C, dC);
     s.resources.E = add(s.resources.E, dE);
     s.resources.lifetime_C = add(s.resources.lifetime_C, dC);
+
+    // 4. 층 진입 + 도감 발견 판정(M1.3). dec 파생 → 상태 갱신 → 이벤트 발행.
+    this.processProgression(computeDec(s.resources.C));
+  }
+
+  /**
+   * 층 진입·도감 발견 판정(M1.3). tick 끝과 오프라인 적용 후 공용.
+   *  - 알려진 물리 5층: dec가 새 층 임계 도달 시 currentIndex 갱신 + layerEnter 발행(무상전이).
+   *  - 도감: dec ≥ unlockDec 인 입자 발견(영구) + codexDiscover 발행. LEGENDARY는 층 완성 시.
+   * 멱등 안전: 이미 도달한 층/발견한 입자는 다시 발화하지 않는다(상태가 기억).
+   */
+  private processProgression(dec: number): void {
+    const s = getState();
+
+    // 층 진입(알려진 물리). 오프라인 점프로 여러 층을 건너뛰어도 각 진입을 순서대로 발행.
+    const entered = layersEnteredSince(s.layers.currentIndex, dec);
+    if (entered.length > 0) {
+      s.layers.currentIndex = entered[entered.length - 1];
+      for (const idx of entered) {
+        bus.emit('layerEnter', { layer: idx, sublayer: 0 });
+      }
+    }
+
+    // 도감 발견. 새로 발견된 ID만 집합에 추가 + 개별 이벤트 발행.
+    const newly = evaluateDiscoveries(dec, s.codex.discovered);
+    for (const id of newly) {
+      s.codex.discovered.add(id);
+      bus.emit('codexDiscover', { particleId: id });
+    }
   }
 
   /**
@@ -181,6 +271,8 @@ export class Game {
     s.resources.C = add(s.resources.C, bump);
     s.resources.E = add(s.resources.E, bump);
     s.resources.lifetime_C = add(s.resources.lifetime_C, bump);
+    // 클릭으로 dec가 임계를 넘었을 수 있음 — 층/도감 동기화.
+    this.processProgression(computeDec(s.resources.C));
     bus.emit('manual_compress', {});
     this.notify();
   }
@@ -217,15 +309,48 @@ export class Game {
       });
     }
 
+    const dec = computeDec(s.resources.C);
+    const def: LayerDefinition = currentLayer(dec);
+    const discovered = s.codex.discovered;
+
+    // T1 첫 구매 가능 여부(FTUE 체인 노출 게이트).
+    const t1NextCost = tierCost(1, s.chain.bought[0]);
+    const hasBoughtAnyTier = s.chain.bought.some((b, i) => b > (i === 0 ? 1 : 0)); // T1 시드 1 제외
+    const ftue = deriveFtue({
+      hasBoughtAnyTier,
+      canAffordFirstTier: s.resources.E.gte(t1NextCost),
+      discoveredCount: discovered.size,
+      layerIndex: s.layers.currentIndex,
+      hasPrestiged: s.prestige.count > 0,
+    });
+
     return {
       C: s.resources.C,
       E: s.resources.E,
       QF: s.resources.QF,
-      dec: computeDec(s.resources.C),
+      dec,
       r: computeRadius(s.resources.C),
       mult,
       rateC: owned[0].mul(mult),
       tiers,
+      layer: {
+        index: def.index,
+        slug: def.slug,
+        nameKo: def.nameKo,
+        nameEn: def.nameEn,
+        mechanismNameKo: def.mechanismNameKo,
+        scaleM: def.scaleM,
+        decadeRange: def.decadeRange,
+        nearBoundary: isNearKnownBoundary(dec),
+      },
+      codex: {
+        discovered,
+        collected: discoverableCollected(discovered),
+        denominator: CODEX_DENOMINATOR,
+        completion: codexCompletion(discovered),
+        layerCompletions: knownLayerCompletions(discovered),
+      },
+      ftue,
       totalTicks: this.loop.totalTicks,
       loadKind: this.loadKind,
     };
@@ -235,6 +360,8 @@ export class Game {
   resetToFresh(): void {
     setState(createInitialState());
     this.loadKind = 'fresh';
+    // dec0에서 물 분자(unlockDec 0) 즉시 발견 → 시작부터 도감 1개(FTUE 도감 탭 등장).
+    this.processProgression(computeDec(getState().resources.C));
     this.notify();
   }
 

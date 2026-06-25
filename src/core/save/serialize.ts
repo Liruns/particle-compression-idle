@@ -49,6 +49,14 @@ export interface SaveData {
     focusSublayer: number | null;
     offlineBonusPending: boolean;
   };
+  /** M1.3 추가. 구버전 세이브엔 없음 → validate에서 분자층(1) 기본. */
+  layers?: {
+    currentIndex: number;
+  };
+  /** M1.3 추가. 발견 입자 ID 배열(Set → array, §1.1 스파스). 구버전 없음 → 빈 배열. */
+  codex?: {
+    discovered: string[];
+  };
   settings: SettingsState;
   /** validate가 채운 누락 필드 흔적 등 후속 확장 자리. */
   [extra: string]: unknown;
@@ -77,6 +85,9 @@ export function serializeState(s: GameState): SaveData {
       focusSublayer: s.prestige.focusSublayer,
       offlineBonusPending: s.prestige.offlineBonusPending,
     },
+    layers: { currentIndex: s.layers.currentIndex },
+    // Set → 정렬된 배열(결정적 직렬화 — 동일 상태 → 동일 봉투 → 체크섬 안정).
+    codex: { discovered: [...s.codex.discovered].sort() },
     settings: { ...s.settings },
   };
 }
@@ -115,6 +126,14 @@ export function deserializeState(data: SaveData): GameState {
       focusSublayer: data.prestige?.focusSublayer ?? null,
       offlineBonusPending: data.prestige?.offlineBonusPending ?? false,
     },
+    layers: {
+      // 구버전(layers 없음) → 분자층(1). 범위 밖 값은 1로 클램프(§1.3 validate).
+      currentIndex: normalizeLayerIndex(data.layers?.currentIndex),
+    },
+    codex: {
+      // 발견 ID 배열 → Set. 문자열 아닌 값은 무시(§1.3 방어).
+      discovered: normalizeDiscovered(data.codex?.discovered),
+    },
     settings: {
       offlinePrecise: data.settings?.offlinePrecise ?? init.settings.offlinePrecise,
       notation: data.settings?.notation ?? init.settings.notation,
@@ -145,4 +164,23 @@ function normalizeProduced(arr: string[] | undefined): Decimal[] {
     out[i] = fromStore(arr[i]);
   }
   return out;
+}
+
+/** 층 index를 1..11로 정규화(구버전/손상 방어). 알려진 물리는 1..5만 쓰나 상한은 11. */
+function normalizeLayerIndex(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 1;
+  const i = Math.floor(v);
+  if (i < 1) return 1;
+  if (i > 11) return 11;
+  return i;
+}
+
+/** 발견 ID 배열 → Set<string>. 문자열만 채택(중복 자동 제거, §1.3 방어). */
+function normalizeDiscovered(arr: unknown): Set<string> {
+  const set = new Set<string>();
+  if (!Array.isArray(arr)) return set;
+  for (const v of arr) {
+    if (typeof v === 'string' && v.length > 0) set.add(v);
+  }
+  return set;
 }
