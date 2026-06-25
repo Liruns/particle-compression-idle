@@ -1,0 +1,306 @@
+/* ============================================================
+   Micro Idle — Design Tokens (CSS Custom Properties)
+   Source: design/DESIGN.md  (CSS Custom Properties Export 블록 그대로)
+   Target: game canvas root element (:root)
+   Generated: 2026-06-26 (art-director) — game-programmer가 스캐폴딩에 적용
+   ============================================================ */
+
+:root {
+  /* --- 베이스 팔레트 --- */
+  --canvas:          #080b0e;
+  --canvas-layer:    #0e1418;
+  --surface:         #141c23;
+  --border:          #1e2c38;
+  --foreground:      #e8eef3;
+  --foreground-sub:  #7a8f9e;
+  --foreground-dim:  #3d5162;
+
+  /* --- 자원 컬러 --- */
+  --energy:          #f5c842;
+  --depth:           #5b9bd5;
+  --data:            #9b72cf;
+  --qf:              #3ecf8e;
+  --primary:         #3ecf8e;   /* alias: --qf, r 게이지 코어, 집중 서브층 강조 */
+
+  /* --- 기능 컬러 --- */
+  --col-glow-core:   #3ecf8e;   /* r 게이지 중심 글로우 */
+  --col-energy:      #f5c842;
+  --col-depth:       #5b9bd5;
+  --col-data:        #9b72cf;
+  --col-qf:          #3ecf8e;
+  --col-reset:       #c0392b;
+  --col-keep:        #27ae60;
+  --col-partial:     #e67e22;
+  --legendary:       #f5c842;
+  --bigcrunch-flash: #ffffff;
+  --bigcrunch-bg:    #000000;
+
+  /* --- 층별 팔레트 (11층 × accent/glow/bg) --- */
+  /* L1 분자층 */
+  --layer-mol-accent: #8bc34a;
+  --layer-mol-glow:   #6ea832;
+  --layer-mol-bg:     #0a0e09;
+
+  /* L2 원자층 */
+  --layer-atom-accent: #26c6da;
+  --layer-atom-glow:   #1aa8ba;
+  --layer-atom-bg:     #090d0e;
+
+  /* L3 핵층 */
+  --layer-nuc-accent: #ff7043;
+  --layer-nuc-glow:   #e05a2b;
+  --layer-nuc-bg:     #0e0a08;
+
+  /* L4 핵자층 (삼원색 세트) */
+  --layer-ncl-accent-r: #e040fb;
+  --layer-ncl-accent-g: #40c4ff;
+  --layer-ncl-accent-b: #69f0ae;
+  --layer-ncl-glow:     #b030d0;
+  --layer-ncl-bg:       #0d090e;
+
+  /* L5 쿼크층 */
+  --layer-qrk-accent: #f0f4f8;
+  --layer-qrk-glow:   #d8dfe6;
+  --layer-qrk-bg:     #080b0e;   /* 극미니멀 — canvas와 동일 */
+
+  /* L6 프리온층 */
+  --layer-prn-accent: #7c4dff;
+  --layer-prn-glow:   #6030e0;
+  --layer-prn-bg:     #09080e;
+
+  /* L7 끈층 */
+  --layer-str-accent: #ff4081;
+  --layer-str-glow:   #e02060;
+  --layer-str-bg:     #0e080a;
+
+  /* L8 루프층 */
+  --layer-lp-accent:  #3d5afe;
+  --layer-lp-glow:    #2a3fd0;
+  --layer-lp-bg:      #08090e;
+
+  /* L9 거품층 */
+  --layer-fm-accent:  #eceff1;
+  --layer-fm-glow:    #ccd0d2;
+  --layer-fm-bg:      #09090a;
+
+  /* L10 정보층 */
+  --layer-inf-accent: #00e5ff;
+  --layer-inf-glow:   #00c0d8;
+  --layer-inf-bg:     #08090e;
+
+  /* L11 플랑크층 */
+  --layer-plk-accent: #ffffff;
+  --layer-plk-glow:   #e0e0e0;
+  --layer-plk-bg:     #070a0d;
+
+  /* --- 런타임 현재 층 (game-programmer가 층 전환 시 교체) --- */
+  --layer-accent: var(--layer-mol-accent);   /* 현재 층 악센트 (초기=분자층) */
+  --layer-glow:   var(--layer-mol-glow);
+  --layer-bg:     var(--layer-mol-bg);
+
+  /* --- 타이포그래피 --- */
+  --font-numeric:   'JetBrains Mono', 'IBM Plex Mono', monospace;
+  --font-label:     'Inter', 'IBM Plex Sans', sans-serif;
+  --font-narrative: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+
+  --text-num-xl:    20px;
+  --text-num-lg:    16px;
+  --text-num-md:    13px;
+  --text-label-lg:  15px;
+  --text-label-md:  13px;
+  --text-label-sm:  11px;
+  --text-narr-md:   12px;
+  --text-narr-sm:   11px;
+
+  /* --- 스페이싱 --- */
+  --space-xs:    4px;
+  --space-sm:    8px;
+  --space-base:  12px;
+  --space-md:    16px;
+  --space-lg:    24px;
+  --space-xl:    32px;
+  --space-xxl:   48px;
+
+  /* --- 라운드 --- */
+  --rounded-sm:   2px;
+  --rounded-md:   4px;
+  --rounded-lg:   8px;
+  --rounded-full: 9999px;
+
+  /* --- 글로우 --- */
+  --glow-core-radius-min: 3px;
+  --glow-core-radius-mid: 8px;
+  --glow-core-radius-max: 14px;
+  --glow-layer-ambient:   24px;
+
+  /* --- 모션 토큰 --- */
+  /* 클릭 */
+  --motion-click-scale:    0.97;
+  --motion-click-duration: 60ms;
+  --motion-click-glow:     200ms;
+  --motion-click-float:    800ms;
+
+  /* 구매 */
+  --motion-purchase-scale:    0.95;
+  --motion-purchase-duration: 80ms;
+  --motion-purchase-tint:     400ms;
+  --motion-purchase-unlock:   400ms;
+
+  /* 발견 */
+  --motion-codex-reveal:      800ms;
+  --motion-legendary-flash:   1000ms;
+
+  /* 층 전환 (알려진 물리) */
+  --motion-layer-bg-fade:     300ms;
+  --motion-layer-gauge-burst: 200ms;
+  --motion-layer-accent-shift:500ms;
+  --motion-layer-card-slide:  200ms;
+  --motion-widget-slide:      300ms;
+  --motion-particle-fade-out: 300ms;
+  --motion-particle-fade-in:  500ms;
+
+  /* 상전이 */
+  --motion-phase-desaturate:  500ms;
+  --motion-phase-flash-normal-opacity: 0.15;
+  --motion-phase-flash-first-opacity:  0.30;
+  --motion-phase-flash-duration: 50ms;
+  --motion-phase-accent-fade: 800ms;
+  --motion-phase-gauge-expand:400ms;
+  --motion-phase-gauge-appear:300ms;
+  --motion-phase-qf-counter:  600ms;
+  --motion-phase-qf-icon:     300ms;
+
+  /* 빅 크런치 */
+  --motion-bigcrunch-ring:    400ms;
+  --motion-bigcrunch-flash-opacity: 0.12;
+  --motion-bigcrunch-flash:   150ms;
+  --motion-bigcrunch-blackout:3000ms;
+  --motion-bigcrunch-runstart:500ms;
+  --motion-text-reveal:       200ms;
+
+  /* 앰비언트 */
+  --motion-ambient-pulse:     4000ms;
+  --motion-ambient-tab-pulse: 1500ms;
+
+  /* UI */
+  --motion-fade-cross:     200ms;
+  --motion-toast-slide:    300ms;
+  --motion-modal-slide:    300ms;
+  --motion-error-shake:    150ms;
+}
+
+
+/* ============================================================
+   색맹 보정 모드 (accessibility.md §1-C)
+   적용: document.documentElement.dataset.colorblind = '...'
+   ============================================================ */
+
+[data-colorblind="protanopia"] {
+  --layer-mol-accent: #c8b400;
+  --layer-nuc-accent: #e6a800;
+  --layer-str-accent: #b8b8ff;
+}
+
+[data-colorblind="deuteranopia"] {
+  --layer-mol-accent:   #d4b800;
+  --layer-ncl-accent-b: #e0c040;
+  --layer-nuc-accent:   #e89000;
+}
+
+[data-colorblind="tritanopia"] {
+  --layer-atom-accent: #00b377;
+  --layer-prn-accent:  #c0392b;
+  --layer-lp-accent:   #8e44ad;
+  --layer-inf-accent:  #16a085;
+}
+
+
+/* ============================================================
+   감소 모션 (accessibility.md §2-B)
+   시스템 감지 자동 적용 — 설정 토글보다 우선
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    /* 모션 토큰 오버라이드 */
+    --motion-click-scale:    1.0;       /* 스쿼시 없음 */
+    --motion-purchase-scale: 1.0;
+    --motion-layer-bg-fade:  0ms;       /* 즉시 전환 */
+    --motion-layer-gauge-burst: 0ms;
+    --motion-layer-accent-shift: 0ms;
+    --motion-phase-desaturate: 0ms;
+    --motion-phase-flash-normal-opacity: 0;   /* 플래시 제거 */
+    --motion-phase-flash-first-opacity:  0;
+    --motion-bigcrunch-flash-opacity: 0;
+    --motion-codex-reveal:   0ms;       /* 즉시 reveal */
+    --motion-phase-qf-counter: 0ms;
+    --motion-ambient-pulse:  0ms;       /* 정적 글로우 */
+    --motion-ambient-tab-pulse: 0ms;
+  }
+  /* 파티클: 속도 10% 이하 또는 정지 — graphics-programmer: $reducedMotion 스토어 참조 */
+  /* 전설 카드 맥동: 정적 테두리로 대체 */
+  .card-legendary { animation: none; }
+}
+
+
+/* ============================================================
+   런타임 층 전환 유틸 (game-programmer 참조)
+   JS: document.documentElement.style.setProperty('--layer-accent', '#7c4dff')
+   또는 data-layer 속성으로 일괄 교체
+   ============================================================ */
+
+[data-layer="mol"] {
+  --layer-accent: var(--layer-mol-accent);
+  --layer-glow:   var(--layer-mol-glow);
+  --layer-bg:     var(--layer-mol-bg);
+}
+[data-layer="atom"] {
+  --layer-accent: var(--layer-atom-accent);
+  --layer-glow:   var(--layer-atom-glow);
+  --layer-bg:     var(--layer-atom-bg);
+}
+[data-layer="nuc"] {
+  --layer-accent: var(--layer-nuc-accent);
+  --layer-glow:   var(--layer-nuc-glow);
+  --layer-bg:     var(--layer-nuc-bg);
+}
+[data-layer="ncl"] {
+  --layer-accent: var(--layer-ncl-accent-r);   /* 삼원색: R을 기본, G/B는 별도 참조 */
+  --layer-glow:   var(--layer-ncl-glow);
+  --layer-bg:     var(--layer-ncl-bg);
+}
+[data-layer="qrk"] {
+  --layer-accent: var(--layer-qrk-accent);
+  --layer-glow:   var(--layer-qrk-glow);
+  --layer-bg:     var(--layer-qrk-bg);
+}
+[data-layer="prn"] {
+  --layer-accent: var(--layer-prn-accent);
+  --layer-glow:   var(--layer-prn-glow);
+  --layer-bg:     var(--layer-prn-bg);
+}
+[data-layer="str"] {
+  --layer-accent: var(--layer-str-accent);
+  --layer-glow:   var(--layer-str-glow);
+  --layer-bg:     var(--layer-str-bg);
+}
+[data-layer="lp"] {
+  --layer-accent: var(--layer-lp-accent);
+  --layer-glow:   var(--layer-lp-glow);
+  --layer-bg:     var(--layer-lp-bg);
+}
+[data-layer="fm"] {
+  --layer-accent: var(--layer-fm-accent);
+  --layer-glow:   var(--layer-fm-glow);
+  --layer-bg:     var(--layer-fm-bg);
+}
+[data-layer="inf"] {
+  --layer-accent: var(--layer-inf-accent);
+  --layer-glow:   var(--layer-inf-glow);
+  --layer-bg:     var(--layer-inf-bg);
+}
+[data-layer="plk"] {
+  --layer-accent: var(--layer-plk-accent);
+  --layer-glow:   var(--layer-plk-glow);
+  --layer-bg:     var(--layer-plk-bg);
+}

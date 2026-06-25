@@ -2,6 +2,12 @@
 .claude/
 .omc/
 
+# Node / Vite 빌드 산출물
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
 # Python 빌드 산출물 (design/sim)
 __pycache__/
 *.py[cod]
