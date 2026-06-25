@@ -194,5 +194,6 @@
 ## 16. 관련 설계 문서
 - 설계: `systems.md`(메커니즘·층·상전이) · `economy.md`(수식·시뮬·페이싱) · `codex.md`(입자 도감) · `research-tree.md`(연구 노드) · `narrative.md`(세계관·보이스) · `ux.md`(화면·FTUE)
 - 후속 경제 패스(R3): `followup-systems.md`(연구 시너지 C안·D보존·재하강 차별화) · `followup-codex-ramp.md`(도감 곡선 B·베켄슈타인 K) · `followup-bigcrunch-framing.md`(빅 크런치 시작점 프레이밍 + ux) · `economy.md` §7 v0.3
-- 검증/결정: `director-review.md`(필러 검토·FAIL-1 중재·CONCERN-NEW·**§8 R3 통합 심판**) · `qa-report.md`·`qa-report-v2.md`(독립 검증)
+- **프로덕션·기술·출시(신규)**: `scope-mvp.md`(MVP 컷·4단계 게이트) · `roadmap.md`(4정거장 제작 순서) · `tech-architecture.md`(세이브·BigNumber·NW.js 패키징) · `art-direction.md`(비주얼 디렉션) · `audio-design.md`(사운드) · `launch-plan.md`(Steam 출시·가격·EA) · `risk-register.md`(리스크 점검) · `asset-list.md`(에셋 트래커)
+- 검증/결정: `director-review.md`(필러 검토·FAIL-1 중재·CONCERN-NEW·**§8 R3 통합 심판**) · `qa-report.md`·`qa-report-v2.md`·`qa-report-v3.md`(독립 검증)
 - 리서치 4건: `research/` · 시뮬 코드: `sim/`(python, `campaign6.py`·`bigcrunch.py`·`final_verify.py`·`synergy_codex_integ.py`·`redescent_diff.py`·`bekenstein_k.py` 등)

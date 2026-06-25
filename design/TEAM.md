@@ -2,7 +2,7 @@
 
 `C:\game` 프로젝트의 전용 AI 개발 팀. 모든 구성원은 `design/GDD.md`를 단일 진실 소스로 읽는다.
 
-## 에이전트 (`.claude/agents/`) — 10명
+## 에이전트 (`.claude/agents/`) — 14명
 
 ### 설계 라인
 | 에이전트 | 역할 | 모델 | 언제 호출 |
@@ -21,6 +21,16 @@
 | `content-designer` | 입자 도감·연구 데이터 | sonnet | 콘텐츠 데이터 |
 | `qa-balancer` | 밸런스 검증·플레이테스트 | sonnet | 검증 패스(작성자와 분리) |
 | `reference-researcher` | 외부 레퍼런스 리서치 | sonnet | GitHub/문서 조사 |
+
+### 비주얼·사운드 라인 (신설)
+| 에이전트 | 역할 | 모델 | 언제 호출 |
+|---|---|---|---|
+| `art-director` | 비주얼 아이덴티티·층별 무드·VFX 방향·주스·후킹샷 | sonnet | 미감·아트 디렉션 결정 |
+| `graphics-programmer` | 렌더 구현(Canvas2D/WebGL 파티클·스케일줌·60fps) | sonnet | 비주얼/VFX 코드(로직 아님) |
+| `visual-qa` | 스크린샷 시각 검증·비주얼 회귀·환경 매트릭스·주스 감사 | sonnet | 빌드 시각 품질 검증(작성자와 분리) |
+| `audio-designer` | 층별 앰비언트·SFX·음악·청취 피로 관리 | sonnet | 사운드 디자인 결정 |
+
+> 비주얼 파이프라인은 설계→구현→검증과 동형: **art-director(비전) → graphics-programmer(구현) → visual-qa(검증)**. audio-designer는 art-director의 청각 짝.
 
 ## 스킬 (`.claude/skills/`) — 7개
 | 스킬 | 기능 |
