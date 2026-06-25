@@ -150,6 +150,13 @@
   --motion-codex-reveal:      800ms;
   --motion-legendary-flash:   1000ms;
 
+  /* 오비탈 공명 (원자층 L2, systems §2-A / DESIGN §5) */
+  --motion-resonance-open:    300ms;   /* 슬롯 열림 페이드/스케일 인 */
+  --motion-resonance-pulse:   1200ms;  /* 열린 슬롯 글로우 맥동(클릭 유도) */
+  --motion-resonance-hit:     200ms;   /* 클릭 성공 글로우 버스트 */
+  --motion-resonance-scale:   0.92;    /* 슬롯 클릭 스쿼시 */
+  --motion-resonance-miss:    150ms;   /* 슬롯 만료 페이드아웃 */
+
   /* 층 전환 (알려진 물리) */
   --motion-layer-bg-fade:     300ms;
   --motion-layer-gauge-burst: 200ms;
@@ -236,6 +243,10 @@
     --motion-phase-qf-counter: 0ms;
     --motion-ambient-pulse:  0ms;       /* 정적 글로우 */
     --motion-ambient-tab-pulse: 0ms;
+    /* 오비탈 공명: 맥동·스쿼시 제거(정보는 남기되 모션만 감쇠, accessibility §2-B) */
+    --motion-resonance-pulse: 0ms;      /* 정적 글로우 — 깜빡임 없음 */
+    --motion-resonance-scale: 1.0;      /* 스쿼시 없음 */
+    --motion-resonance-hit:   0ms;
   }
   /* 파티클: 속도 10% 이하 또는 정지 — graphics-programmer: $reducedMotion 스토어 참조 */
   /* 전설 카드 맥동: 정적 테두리로 대체 */

@@ -16,6 +16,7 @@
   import ChainTable from './ui/ChainTable.svelte';
   import LayerCard from './ui/LayerCard.svelte';
   import CodexView from './ui/CodexView.svelte';
+  import ResonanceWidget from './ui/ResonanceWidget.svelte';
   import Toast from './ui/Toast.svelte';
 
   let snap: GameSnapshot | null = null;
@@ -63,11 +64,21 @@
   onDestroy(() => {
     unsub?.();
     for (const u of busUnsubs) u();
+    if (compressPulseTimer) clearTimeout(compressPulseTimer);
     game?.dispose();
   });
 
+  // 수동 압축 주스(DESIGN §5): 클릭 시 글로우 버스트 1회(+2px/200ms). scale는 button:active로.
+  let compressPulse = false;
+  let compressPulseTimer: ReturnType<typeof setTimeout> | null = null;
   function onCompress() {
     game?.manualCompress();
+    compressPulse = true;
+    if (compressPulseTimer) clearTimeout(compressPulseTimer);
+    compressPulseTimer = setTimeout(() => (compressPulse = false), 200);
+  }
+  function onResonanceClick() {
+    game?.clickResonance();
   }
   function onBuy(tier: number, mode: BuyMode) {
     game?.buy(tier, mode);
@@ -122,6 +133,9 @@
       <!-- 현재 층 카드(우측 패널 역할 — 모바일 단일 컬럼에선 게이지 아래) -->
       <LayerCard layer={snap.layer} showMechanism={snap.ftue.showMechanismSlot} />
 
+      <!-- 메커니즘 위젯(원자층 L2 오비탈 공명, M1.4). active=false면 위젯 자체가 숨음. -->
+      <ResonanceWidget resonance={snap.resonance} onClick={onResonanceClick} />
+
       <!-- 자원(전부 Decimal, format으로 표시) -->
       <section class="resources">
         <div class="res res-depth">
@@ -136,6 +150,14 @@
           <span class="res-val">{formatNumber(snap.E)}</span>
           {#if snap.rateC.gt(0)}<span class="res-rate">+{formatNumber(snap.rateC, 2)}/s</span>{/if}
         </div>
+        {#if snap.ftue.showResourceD}
+          <div class="res res-data">
+            <span class="res-icon">▣</span>
+            <span class="res-name">발견 데이터 D</span>
+            <span class="res-val">{formatNumber(snap.D)}</span>
+            <span class="res-rate dim">공명 산출</span>
+          </div>
+        {/if}
         {#if snap.QF.gt(0)}
           <div class="res res-qf">
             <span class="res-icon">◆</span>
@@ -152,7 +174,7 @@
       </section>
 
       <section class="actions">
-        <button class="btn-compress" on:click={onCompress}>압축</button>
+        <button class="btn-compress" class:pulse={compressPulse} on:click={onCompress}>압축</button>
         <button class="btn-save" on:click={onSave}>저장</button>
       </section>
 
@@ -337,6 +359,9 @@
   .res-energy .res-icon {
     color: var(--energy);
   }
+  .res-data .res-icon {
+    color: var(--data);
+  }
   .res-qf .res-icon {
     color: var(--qf);
   }
@@ -367,6 +392,14 @@
     color: var(--layer-accent);
     min-width: 96px;
     min-height: 44px;
+    /* 클릭 글로우 버스트(DESIGN §5: +2px/200ms). pulse 클래스가 켜질 때만. */
+    box-shadow: 0 0 0 transparent;
+    transition:
+      transform var(--motion-click-duration) ease-out,
+      box-shadow var(--motion-click-glow) ease-out;
+  }
+  .btn-compress.pulse {
+    box-shadow: 0 0 8px var(--layer-glow, var(--col-glow-core));
   }
 
   .ftue-hint {

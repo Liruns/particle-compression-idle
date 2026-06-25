@@ -14,7 +14,7 @@
  *  ·위상 겹침(프리온)·진동 하모닉스(끈)·스핀 네트워크(루프)·불확정 요동(거품)
  *  ·홀로그래픽(정보)·픽셀 붕괴(플랑크).
  *
- * TODO(M1.4): 오비탈 공명(첫 능동 손맛, 원자층). TODO(M1.6): 위상 겹침(프리온).
+ * M1.4 구현: 오비탈 공명(첫 능동 손맛, 원자층 — orbital.ts). TODO(M1.6): 위상 겹침(프리온).
  */
 
 /** 모든 층 메커니즘이 구현하는 공통 계약(§1.1·§3.4). */
@@ -29,4 +29,10 @@ export interface LayerMechanic {
   getIdleBaselineMultiplier(): number;
 }
 
-export {}; // 구체 메커니즘 모듈은 후속 마일스톤에서 이 인터페이스로 추가.
+// --- 구체 메커니즘 (마일스톤별 추가) ----------------------------------------
+export {
+  OrbitalResonance,
+  type SlotPhase,
+  type OrbitalUpdateResult,
+  type OrbitalClickResult,
+} from './orbital';

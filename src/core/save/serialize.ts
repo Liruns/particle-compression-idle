@@ -17,6 +17,7 @@ import {
   createInitialState,
   CHAIN_TIERS,
 } from '../state';
+import { OrbitalResonance } from '../layers/mechanics';
 
 /**
  * 디스크 페이로드 형태. GameState와 같은 모양이되, 모든 Decimal 필드가 string.
@@ -57,6 +58,13 @@ export interface SaveData {
   codex?: {
     discovered: string[];
   };
+  /**
+   * M1.4 추가. 층별 메커니즘 직렬화 상태(§1.1 R7 — 메커니즘이 .serialize()로 평문화).
+   * 구버전(없음) → deserialize에서 새 인스턴스 기본값. 각 메커니즘 형태는 모듈이 책임(불투명).
+   */
+  mechanics?: {
+    orbital?: unknown;
+  };
   settings: SettingsState;
   /** validate가 채운 누락 필드 흔적 등 후속 확장 자리. */
   [extra: string]: unknown;
@@ -88,6 +96,8 @@ export function serializeState(s: GameState): SaveData {
     layers: { currentIndex: s.layers.currentIndex },
     // Set → 정렬된 배열(결정적 직렬화 — 동일 상태 → 동일 봉투 → 체크섬 안정).
     codex: { discovered: [...s.codex.discovered].sort() },
+    // 메커니즘은 각자 .serialize()로 평문화(§1.1 R7 — save는 형태를 모름, 불투명 값 그대로).
+    mechanics: { orbital: s.mechanics.orbital.serialize() },
     settings: { ...s.settings },
   };
 }
@@ -133,6 +143,10 @@ export function deserializeState(data: SaveData): GameState {
     codex: {
       // 발견 ID 배열 → Set. 문자열 아닌 값은 무시(§1.3 방어).
       discovered: normalizeDiscovered(data.codex?.discovered),
+    },
+    mechanics: {
+      // 새 인스턴스 + 저장 상태 복원(§1.3 — deserialize가 누락/손상을 기본값으로 방어).
+      orbital: restoreOrbital(data.mechanics?.orbital),
     },
     settings: {
       offlinePrecise: data.settings?.offlinePrecise ?? init.settings.offlinePrecise,
@@ -183,4 +197,14 @@ function normalizeDiscovered(arr: unknown): Set<string> {
     if (typeof v === 'string' && v.length > 0) set.add(v);
   }
   return set;
+}
+
+/**
+ * 오비탈 공명 인스턴스 복원(§1.1 R7·§1.3). 새 인스턴스를 만들고 저장 상태를 주입한다.
+ * 구버전(undefined)·손상 값은 메커니즘 deserialize가 기본값으로 흡수(자기완결 방어).
+ */
+function restoreOrbital(data: unknown): OrbitalResonance {
+  const m = new OrbitalResonance();
+  m.deserialize(data);
+  return m;
 }

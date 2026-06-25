@@ -16,6 +16,7 @@
 
 import { Decimal, D, ZERO } from '../bignum';
 import { SEED_T1_BOUGHT } from '../chain/engine';
+import { OrbitalResonance } from '../layers/mechanics';
 
 // --- 네임스페이스 타입 (§1.1 스키마 표) ---------------------------------------
 
@@ -94,6 +95,18 @@ export interface CodexState {
   discovered: Set<string>;
 }
 
+/**
+ * mechanics: 층별 메커니즘 모듈의 **살아있는 인스턴스**(tech-arch §1.1·§4.4 자기완결).
+ *  Decimal 필드와 같은 규칙: 메모리에선 live 객체, 저장 시 save 모듈이 .serialize()로 평문화.
+ *  M1.4: 오비탈 공명(원자층 L2). 후속 층 메커니즘은 여기 필드로 추가(위상 겹침 등).
+ *  메커니즘 상태는 상전이/재하강 시 리셋(§5-2 "층별 메커니즘 상태 = 리셋")이나, 알려진 물리
+ *  층 메커니즘은 런 내 상시 동작 — M1.4 범위에선 새 게임/리셋에서만 새 인스턴스.
+ */
+export interface MechanicsState {
+  /** 오비탈 공명(원자층). 항상 존재(원자층 미진입 시엔 game.ts가 update 스킵). */
+  orbital: OrbitalResonance;
+}
+
 /** settings: 게임 진행과 분리. 마이그레이션 영향 최소(§1.1). */
 export interface SettingsState {
   /** 오프라인 정밀모드 on/off(§3.1 미니 시뮬). */
@@ -115,8 +128,8 @@ export interface GameState {
   prestige: PrestigeState;
   layers: LayersState; // M1.3: 알려진 물리 5층 진입 추적
   codex: CodexState; // M1.3: 발견 입자 ID 집합(영구 보존)
+  mechanics: MechanicsState; // M1.4: 층별 메커니즘 살아있는 인스턴스(오비탈 공명)
   settings: SettingsState;
-  // TODO(M1.6+): 메커니즘 상태(오비탈 공명·위상 겹침 등 §1.1 LayerMechanic.serialize)
   // TODO(M1.7+): research  — 구매 노드 ID 집합(영구 보존)
   // TODO(M1.7+): stats     — 누적 통계(정확 카운터 = native 정수), D_total 텔레메트리(R8)
 }
@@ -165,6 +178,9 @@ export function createInitialState(now: number = Date.now()): GameState {
     },
     codex: {
       discovered: new Set<string>(),
+    },
+    mechanics: {
+      orbital: new OrbitalResonance(),
     },
     settings: {
       offlinePrecise: false,

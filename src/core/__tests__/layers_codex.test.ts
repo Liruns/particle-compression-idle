@@ -333,6 +333,7 @@ describe('FTUE 점진 공개 — deriveFtue (ux.md §3)', () => {
     discoveredCount: 0,
     layerIndex: 1,
     hasPrestiged: false,
+    hasDiscoveryData: false,
   };
 
   it('초기(click): 체인·도감 탭 숨김', () => {

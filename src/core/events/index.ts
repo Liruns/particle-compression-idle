@@ -31,6 +31,12 @@ export interface GameEvents {
   buy_failed: { tier: number };
   /** 수동 압축 클릭(ui-flow §2). */
   manual_compress: Record<string, never>;
+  /** 오비탈 공명 슬롯 열림(원자층, systems §2-A) — UI 깜빡임·사운드. */
+  resonance_slot_open: Record<string, never>;
+  /** 오비탈 공명 클릭 결과(성공=×1.5+D / 실패=놓침). UI 주스·로그. */
+  resonance_click: { success: boolean };
+  /** 방치 자동 공명 발화(놓친 슬롯이 낮은 효율로 자동 처리, systems §2-A) — 로그. */
+  resonance_auto: Record<string, never>;
 }
 
 export type EventName = keyof GameEvents;

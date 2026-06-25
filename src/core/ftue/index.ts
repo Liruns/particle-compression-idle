@@ -7,8 +7,11 @@
  * M1.3 범위(roadmap §1-B): 압축 클릭 → T1 자동화 → 체인 확장 → 첫 도감 발견 → 다음 층.
  *   탭(압축/도감)은 진행에 따라 등장. 연구 탭은 D 획득(M1.7) 게이트 — M1.3에선 항상 잠금.
  *
+ * M1.4 추가: 원자층 오비탈 공명 → 첫 D 획득 시 **자원 D 행 노출**(ui-flow §2-C "D 첫 획득 후").
+ *   연구 탭은 여전히 M1.7 게이트(D는 모이되 소비처는 후속). showResourceD만 D>0에서 켜진다.
+ *
  * 입력은 "진실 상태에서 파생 가능한 신호"만(저장 안 함, 매 스냅샷 재계산):
- *   - 체인 보유(첫 구매 여부), 발견 입자 수, 현재 dec/층.
+ *   - 체인 보유(첫 구매 여부), 발견 입자 수, 현재 dec/층, D 보유 여부.
  */
 
 /** FTUE 단계(표시 순서). 단조 증가(되돌아가지 않음). */
@@ -26,9 +29,9 @@ export interface FtueState {
   showChain: boolean;
   /** 도감 탭 표시(첫 발견 후 — 게임 시작 직후 물 분자부터). */
   showCodexTab: boolean;
-  /** 연구 탭 표시(D 획득 후 — M1.7. M1.3은 항상 false). */
+  /** 연구 탭 표시(D 소비 — M1.7. M1.4도 false: D는 모이되 소비처는 후속). */
   showResearchTab: boolean;
-  /** 자원 D 행 표시(M1.7 — M1.3 false). */
+  /** 자원 D 행 표시(D 첫 획득 후 — M1.4 오비탈 공명, ui-flow §2-C). */
   showResourceD: boolean;
   /** 자원 QF 행 표시(첫 상전이 후 — M1.5. M1.3 false). */
   showResourceQF: boolean;
@@ -50,6 +53,8 @@ export interface FtueInput {
   layerIndex: number;
   /** 첫 상전이 완료(M1.5). M1.3은 항상 false. */
   hasPrestiged: boolean;
+  /** D(발견 데이터) 보유 여부(>0). M1.4 오비탈 공명 첫 획득 시 자원 D 행 노출. */
+  hasDiscoveryData: boolean;
 }
 
 /**
@@ -63,6 +68,7 @@ export function deriveFtue(input: FtueInput): FtueState {
     discoveredCount,
     layerIndex,
     hasPrestiged,
+    hasDiscoveryData,
   } = input;
 
   // 단계 결정(높은 단계부터 — 한 번 도달하면 표시 요소는 누적 유지).
@@ -102,9 +108,9 @@ export function deriveFtue(input: FtueInput): FtueState {
     stage,
     showChain,
     showCodexTab,
-    showResearchTab: false, // M1.7
-    showResourceD: false, // M1.7
-    showResourceQF: hasPrestiged, // M1.5 (M1.3 항상 false)
+    showResearchTab: false, // M1.7 (D 소비처)
+    showResourceD: hasDiscoveryData, // M1.4 — D 첫 획득 후(오비탈 공명)
+    showResourceQF: hasPrestiged, // M1.5 (M1.3/M1.4 항상 false)
     showMechanismSlot,
     hint,
   };
