@@ -17,7 +17,7 @@ import {
   createInitialState,
   CHAIN_TIERS,
 } from '../state';
-import { OrbitalResonance } from '../layers/mechanics';
+import { OrbitalResonance, PhaseOverlap, Harmonics } from '../layers/mechanics';
 
 /**
  * 디스크 페이로드 형태. GameState와 같은 모양이되, 모든 Decimal 필드가 string.
@@ -64,6 +64,10 @@ export interface SaveData {
    */
   mechanics?: {
     orbital?: unknown;
+    /** M1.6 추가. 위상 겹침(프리온 L6) 직렬화 상태. 구버전 없음 → 새 인스턴스 기본값. */
+    phase?: unknown;
+    /** M1.6 추가. 진동 하모닉스(끈 L7) 직렬화 상태. 구버전 없음 → 새 인스턴스 기본값. */
+    harmonics?: unknown;
   };
   settings: SettingsState;
   /** validate가 채운 누락 필드 흔적 등 후속 확장 자리. */
@@ -97,7 +101,11 @@ export function serializeState(s: GameState): SaveData {
     // Set → 정렬된 배열(결정적 직렬화 — 동일 상태 → 동일 봉투 → 체크섬 안정).
     codex: { discovered: [...s.codex.discovered].sort() },
     // 메커니즘은 각자 .serialize()로 평문화(§1.1 R7 — save는 형태를 모름, 불투명 값 그대로).
-    mechanics: { orbital: s.mechanics.orbital.serialize() },
+    mechanics: {
+      orbital: s.mechanics.orbital.serialize(),
+      phase: s.mechanics.phase.serialize(),
+      harmonics: s.mechanics.harmonics.serialize(),
+    },
     settings: { ...s.settings },
   };
 }
@@ -147,6 +155,8 @@ export function deserializeState(data: SaveData): GameState {
     mechanics: {
       // 새 인스턴스 + 저장 상태 복원(§1.3 — deserialize가 누락/손상을 기본값으로 방어).
       orbital: restoreOrbital(data.mechanics?.orbital),
+      phase: restorePhase(data.mechanics?.phase),
+      harmonics: restoreHarmonics(data.mechanics?.harmonics),
     },
     settings: {
       offlinePrecise: data.settings?.offlinePrecise ?? init.settings.offlinePrecise,
@@ -205,6 +215,20 @@ function normalizeDiscovered(arr: unknown): Set<string> {
  */
 function restoreOrbital(data: unknown): OrbitalResonance {
   const m = new OrbitalResonance();
+  m.deserialize(data);
+  return m;
+}
+
+/** 위상 겹침 인스턴스 복원(§1.1 R7·§1.3, M1.6). 구버전(undefined)·손상은 deserialize가 흡수. */
+function restorePhase(data: unknown): PhaseOverlap {
+  const m = new PhaseOverlap();
+  m.deserialize(data);
+  return m;
+}
+
+/** 진동 하모닉스 인스턴스 복원(§1.1 R7·§1.3, M1.6). 구버전(undefined)·손상은 deserialize가 흡수. */
+function restoreHarmonics(data: unknown): Harmonics {
+  const m = new Harmonics();
   m.deserialize(data);
   return m;
 }

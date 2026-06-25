@@ -17,8 +17,11 @@
   import LayerCard from './ui/LayerCard.svelte';
   import CodexView from './ui/CodexView.svelte';
   import ResonanceWidget from './ui/ResonanceWidget.svelte';
+  import PhaseWidget from './ui/PhaseWidget.svelte';
+  import HarmonicsWidget from './ui/HarmonicsWidget.svelte';
   import PrestigeView from './ui/PrestigeView.svelte';
   import Toast from './ui/Toast.svelte';
+  import type { PhaseState } from './core/layers/mechanics';
 
   let snap: GameSnapshot | null = null;
   let game: Game | null = null;
@@ -87,6 +90,13 @@
   }
   function onResonanceClick() {
     game?.clickResonance();
+  }
+  // 위상 겹침(프리온층, M1.6): 상태 고정(E 소모) / 해제(무료).
+  function onPhasePin(state: PhaseState) {
+    game?.pinPhase(state);
+  }
+  function onPhaseUnpin() {
+    game?.unpinPhase();
   }
   function onBuy(tier: number, mode: BuyMode) {
     game?.buy(tier, mode);
@@ -163,8 +173,13 @@
       <!-- 현재 층 카드(우측 패널 역할 — 모바일 단일 컬럼에선 게이지 아래) -->
       <LayerCard layer={snap.layer} showMechanism={snap.ftue.showMechanismSlot} />
 
-      <!-- 메커니즘 위젯(원자층 L2 오비탈 공명, M1.4). active=false면 위젯 자체가 숨음. -->
+      <!-- 메커니즘 위젯(층마다 다름, ui-flow §2-E). active=false면 위젯 자체가 숨음. -->
+      <!-- 원자~쿼크: 오비탈 공명(M1.4). -->
       <ResonanceWidget resonance={snap.resonance} onClick={onResonanceClick} />
+      <!-- 프리온층: 위상 겹침(M1.6 — 미지 첫 메커니즘). -->
+      <PhaseWidget phase={snap.phase} onPin={onPhasePin} onUnpin={onPhaseUnpin} />
+      <!-- 끈층: 진동 하모닉스(M1.6). -->
+      <HarmonicsWidget harmonics={snap.harmonics} />
 
       <!-- 자원(전부 Decimal, format으로 표시) -->
       <section class="resources">

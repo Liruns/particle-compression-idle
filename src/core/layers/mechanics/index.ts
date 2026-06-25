@@ -14,7 +14,8 @@
  *  ·위상 겹침(프리온)·진동 하모닉스(끈)·스핀 네트워크(루프)·불확정 요동(거품)
  *  ·홀로그래픽(정보)·픽셀 붕괴(플랑크).
  *
- * M1.4 구현: 오비탈 공명(첫 능동 손맛, 원자층 — orbital.ts). TODO(M1.6): 위상 겹침(프리온).
+ * M1.4 구현: 오비탈 공명(첫 능동 손맛, 원자층 — orbital.ts).
+ * M1.6 구현: 위상 겹침(프리온층, 미지 첫 메커니즘 — phase.ts) + 진동 하모닉스(끈층 — harmonics.ts).
  */
 
 /** 모든 층 메커니즘이 구현하는 공통 계약(§1.1·§3.4). */
@@ -36,3 +37,12 @@ export {
   type OrbitalUpdateResult,
   type OrbitalClickResult,
 } from './orbital';
+export {
+  PhaseOverlap,
+  type PhaseState,
+  type PhaseUpdateResult,
+} from './phase';
+export {
+  Harmonics,
+  type HarmonicsUpdateResult,
+} from './harmonics';

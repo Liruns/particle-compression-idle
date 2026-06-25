@@ -96,24 +96,26 @@ describe('층 데이터 무결성 — data-spec §4 / systems §1-2', () => {
 });
 
 // --- 입자 데이터 무결성 -----------------------------------------------------
-describe('입자 데이터 무결성 — codex §2-6 / data-spec §2', () => {
-  it('57 알려진 물리 입자(분자8/원자13/핵10/핵자9/쿼크17)', () => {
-    expect(PARTICLES.length).toBe(57);
+describe('입자 데이터 무결성 — codex §2-8 / data-spec §2', () => {
+  it('70 입자: 알려진 물리 57(분자8/원자13/핵10/핵자9/쿼크17) + 미지 13(프리온7/끈6)', () => {
+    expect(PARTICLES.length).toBe(70);
     expect(particlesByLayer(1).length).toBe(8);
     expect(particlesByLayer(2).length).toBe(13);
     expect(particlesByLayer(3).length).toBe(10);
     expect(particlesByLayer(4).length).toBe(9);
     expect(particlesByLayer(5).length).toBe(17);
+    expect(particlesByLayer(6).length).toBe(7); // 프리온(M1.6)
+    expect(particlesByLayer(7).length).toBe(6); // 끈(M1.6)
   });
 
   it('id 전체 고유', () => {
-    expect(new Set(PARTICLES.map((p) => p.id)).size).toBe(57);
+    expect(new Set(PARTICLES.map((p) => p.id)).size).toBe(70);
   });
 
-  it('모든 입자 layer ∈ 1..5 (알려진 물리)', () => {
+  it('모든 입자 layer ∈ 1..7 (알려진 물리 1~5 + 미지 프리온6·끈7)', () => {
     for (const p of PARTICLES) {
       expect(p.layer).toBeGreaterThanOrEqual(1);
-      expect(p.layer).toBeLessThanOrEqual(5);
+      expect(p.layer).toBeLessThanOrEqual(7);
     }
   });
 
@@ -124,24 +126,32 @@ describe('입자 데이터 무결성 — codex §2-6 / data-spec §2', () => {
     }
   });
 
-  it('LEGENDARY 완성 보너스 = 4개(L2~L5, L1은 없음)', () => {
+  it('LEGENDARY 완성 보너스 = 6개(L2~L7, L1은 없음)', () => {
     const leg = PARTICLES.filter((p) => p.rarity === 'LEGENDARY');
-    expect(leg.length).toBe(4);
-    expect(leg.map((p) => p.layer).sort()).toEqual([2, 3, 4, 5]);
+    expect(leg.length).toBe(6);
+    expect(leg.map((p) => p.layer).sort((a, b) => a - b)).toEqual([2, 3, 4, 5, 6, 7]);
   });
 
-  it('discoverable 입자 = 53 (57 − 4 LEGENDARY)', () => {
-    expect(PARTICLES.filter((p) => p.discoverable).length).toBe(53);
+  it('discoverable 입자 = 64 (70 − 6 LEGENDARY)', () => {
+    expect(PARTICLES.filter((p) => p.discoverable).length).toBe(64);
   });
 
-  it('unlockDec가 층 대역 안(층 enterDec 이상)', () => {
+  it('알려진 물리(L1~L5) unlockDec가 층 대역 안(층 enterDec 이상)', () => {
     for (const p of PARTICLES) {
+      if (p.layer > 5) continue; // 미지는 메커니즘 게이트(mechGate) — dec 대역 무관.
       const def = KNOWN_LAYERS.find((l) => l.index === p.layer)!;
       expect(p.unlockDec).toBeGreaterThanOrEqual(def.enterDec);
     }
   });
 
-  it('층 내 unlockDec 비감소(점진 발견 — 한 층=한 새로움)', () => {
+  it('미지 입자(L6 프리온·L7 끈)는 mechGate 보유 (M1.6 메커니즘 발견)', () => {
+    for (const p of PARTICLES) {
+      if (p.layer < 6) continue;
+      expect(p.mechGate).toBeDefined();
+    }
+  });
+
+  it('알려진 물리 층 내 unlockDec 비감소(점진 발견 — 한 층=한 새로움)', () => {
     for (const l of KNOWN_LAYERS) {
       const list = particlesByLayer(l.index);
       for (let i = 1; i < list.length; i++) {
@@ -309,10 +319,12 @@ describe('완성도 — codexCompletion / 홀로그래픽 (economy §7.1)', () =
   });
 
   it('홀로그래픽 곡선 B: 1 + min(0.35·c², 0.35), 상한 ×1.35', () => {
-    // 53/76 ≈ 0.697 → 0.35·0.697² ≈ 0.170 → ×1.170 (알려진 물리 전부 발견 시).
-    const allKnown = new Set(PARTICLES.filter((p) => p.discoverable).map((p) => p.id));
+    // 현재 정의된 discoverable 전부 발견 시 완성도 = (discoverable 수)/76.
+    //   M1.6 기준 64/76 ≈ 0.842 → 0.35·0.842² ≈ 0.248 → ×1.248. (분모 76은 최종 고정.)
+    const allDiscoverable = PARTICLES.filter((p) => p.discoverable);
+    const allKnown = new Set(allDiscoverable.map((p) => p.id));
     const c = codexCompletion(allKnown);
-    expect(c).toBeCloseTo(53 / 76, 5);
+    expect(c).toBeCloseTo(allDiscoverable.length / 76, 5);
     const mult = holographicMultiplier(allKnown);
     expect(mult).toBeCloseTo(1 + 0.35 * c * c, 6);
     expect(mult).toBeLessThanOrEqual(1.35); // 상한 불변(economy §7.2 가드레일)

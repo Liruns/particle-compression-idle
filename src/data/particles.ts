@@ -1,17 +1,20 @@
 /**
- * data/particles — 입자 도감 데이터 (데이터 주도). (codex.md §2-6, data-spec.md §2, narrative.md §3)
+ * data/particles — 입자 도감 데이터 (데이터 주도). (codex.md §2-8, data-spec.md §2, narrative.md §3)
  *
- * M1.3 범위: **알려진 물리 57입자**(분자8 + 원자13 + 핵10 + 핵자9 + 쿼크17). 미지 30입자(L6~L11)는
- *   M1.6+. 전체 87 중 온보딩 57만 여기 정의.
+ * M1.3 범위: **알려진 물리 57입자**(분자8 + 원자13 + 핵10 + 핵자9 + 쿼크17).
+ * M1.6 추가: **미지 프리온 7 + 끈 6 = 13입자**(L6·L7). 첫 두 미지 서브층 도감. 나머지 미지
+ *   17입자(L8~L11)는 후속. 전체 87 중 현재 70 정의.
  *
- * ★ 발견 조건 단순화(M1.3):
- *   codex.md 원문 unlock_condition은 메커니즘 의존(오비탈 공명 N회·게이지 만충 등)이라 M1.4+ 필요.
- *   M1.3은 메커니즘 미구현이므로 **dec 임계값(unlockDec) 기반 발견**으로 대체한다.
- *   - 각 입자는 자기 층의 decade 대역 안에서 unlockDec를 가진다(층 진입 후 점진 발견 → "한 층=한 새로움").
- *   - 원문 unlockCondition은 표시·M1.4 재구현용으로 보존(unlockConditionKo).
- *   - rarity·물리값(mass_eV/charge/spin/scaleM)은 codex 원문 그대로(PDG 정합, data-spec §2-D).
+ * ★ 발견 조건(층별 분기):
+ *   - **알려진 물리(L1~L5)**: dec 임계값(unlockDec) 기반 발견(층 진입 후 점진). codex 모듈이 판정.
+ *   - **미지(L6 프리온·L7 끈)**: 상전이 후 C 리셋으로 dec=0이라 dec 게이트 부적합 →
+ *     **메커니즘 상태 기반 발견**(game.ts가 판정). 프리온 P+/P-/P0 = 위상 상태별 누적 시간 임계
+ *     (systems §2-E), 끈 = 하모닉 공명 횟수 임계(systems §2-F). unlockDec는 "그 층 진입" 표식으로만
+ *     해당 층 enterDec 값을 두되(dec 게이트엔 안 걸림 — discoverable이지만 codex 모듈이 layer>5는 스킵),
+ *     실제 해금은 game.ts 메커니즘 경로가 담당. 발견 임계는 mechGate 필드로 표현.
+ *   - 원문 unlockCondition은 표시·보존(unlockConditionKo). rarity·물리값은 codex 원문 그대로.
  *
- * 출처(임의 변경 금지): codex.md §2(분자)·§3(원자)·§4(핵)·§5(핵자)·§6(쿼크). 물리값 = PDG.
+ * 출처(임의 변경 금지): codex.md §2~§6(알려진 물리)·§7(프리온)·§8(끈). 물리값 = PDG / 미지는 설계 가설.
  *   flavorKo는 codex flavor_brief(narrative §3 보이스) 요약 — 최종 플레이버는 locale 패스(M3).
  */
 
@@ -19,6 +22,19 @@ import { layerById } from './layers';
 
 /** 희귀도 등급(codex.md §1, data-spec §2-A). LEGENDARY = 층 완성 보너스(자동 해금, discoverable=false). */
 export type Rarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
+
+/**
+ * 미지 서브층 메커니즘 발견 게이트(M1.6). game.ts가 메커니즘 상태로 발견을 판정한다.
+ *  - phase: 위상 상태(state)를 누적 seconds초 유지(프리온 L6, systems §2-E).
+ *  - harmonic: 하모닉 공명 resonances회 발생(끈 L7, systems §2-F).
+ *  - decade: 추가 압축으로 dec가 dec값 도달(미지 층 내 후반 입자 — 위상 진공·매듭 등).
+ *  - layerComplete: 해당 층 discoverable 전부 발견 시(LEGENDARY 완성 보너스).
+ */
+export type MechGate =
+  | { kind: 'phase'; state: 'coherent' | 'dispersed' | 'resonant'; seconds: number }
+  | { kind: 'harmonic'; resonances: number }
+  | { kind: 'decade'; dec: number }
+  | { kind: 'layerComplete' };
 
 /** 입자 도감 엔트리(런타임 형태). codex.md §1 스키마 + M1.3 발견 게이트. */
 export interface Particle {
@@ -51,6 +67,14 @@ export interface Particle {
   unlockDec: number;
   /** 홀로그래픽 완성도 분모 포함 여부(LEGENDARY=false, data-spec §2-C). */
   discoverable: boolean;
+  /**
+   * 미지 서브층(L6+) 메커니즘 발견 게이트(M1.6). 알려진 물리(L1~L5)는 undefined(dec 게이트 사용).
+   * 미지 입자는 상전이 후 dec=0이라 dec 게이트 부적합 → 메커니즘 상태로 발견(game.ts가 판정).
+   *  - 프리온(L6): { kind:'phase', state, seconds } — 위상 상태 누적 N초(systems §2-E).
+   *  - 끈(L7):    { kind:'harmonic', resonances } — 하모닉 공명 N회(systems §2-F).
+   *  - 층 완성(LEGENDARY) / decade 기반 입자: { kind:'layerComplete' } 또는 undefined(생략).
+   */
+  mechGate?: MechGate;
   /** codex 원문 발견 조건(표시·M1.4 재구현용 보존). */
   unlockConditionKo: string;
   /** 발견 보너스 종류(자유 서술, 수치는 economy — M1.3 미적용). */
@@ -554,13 +578,154 @@ const QUARK: Particle[] = [
   },
 ];
 
-/** 알려진 물리 57입자(분자8 + 원자13 + 핵10 + 핵자9 + 쿼크17). M1.3 도감 대상. */
+/**
+ * L6 프리온층 (미지, 서사 dec9~12). 7입자(완성보너스 1 포함). codex.md §7.
+ * 발견: **위상 상태 기반**(systems §2-E) — P+/P-/P0는 응집/분산/공명 누적, 삼합체·진공·매듭은
+ *   상태 전환·decade 진척. 상전이 후 dec=0이라 dec 게이트 대신 mechGate로 game.ts가 판정.
+ * unlockDec=19(프리온 진입 = PT1 벽)는 표식만 — 실제 게이트는 mechGate.
+ */
+const PREON: Particle[] = [
+  {
+    id: 'preon_plus', name: 'P⁺ (양위상 프리온)', nameKo: '양위상 프리온', layer: 6,
+    scaleM: '<1e-19', decade: 9, real: false, massEv: null, charge: 0.333, spin: 0.5,
+    rarity: 'COMMON', unlockDec: 19, discoverable: true,
+    mechGate: { kind: 'phase', state: 'coherent', seconds: 10 },
+    unlockConditionKo: '프리온층 진입 + 위상 응집(Coherent) 상태 10회 유지',
+    unlockBonusKo: '응집 상태 체인 배율 증가 (P+는 응집 상태의 산물)',
+    flavorKo: '양의 위상을 가진 최초의 미지 입자. 쿼크가 이것으로 만들어졌다면?',
+  },
+  {
+    id: 'preon_minus', name: 'P⁻ (음위상 프리온)', nameKo: '음위상 프리온', layer: 6,
+    scaleM: '<1e-19', decade: 9, real: false, massEv: null, charge: -0.333, spin: 0.5,
+    rarity: 'COMMON', unlockDec: 19, discoverable: true,
+    mechGate: { kind: 'phase', state: 'dispersed', seconds: 10 },
+    unlockConditionKo: '프리온층 진입 + 위상 분산(Dispersed) 상태 10회 유지',
+    unlockBonusKo: '분산 상태 D 생산 증가 (P-는 분산 상태의 산물)',
+    flavorKo: '음의 위상. 다운 쿼크의 재료. 보이지 않지만 항상 존재했다.',
+  },
+  {
+    id: 'preon_zero', name: 'P⁰ (중립위상 프리온)', nameKo: '중립위상 프리온', layer: 6,
+    scaleM: '<1e-20', decade: 10, real: false, massEv: null, charge: 0, spin: 0,
+    rarity: 'UNCOMMON', unlockDec: 19, discoverable: true,
+    mechGate: { kind: 'phase', state: 'resonant', seconds: 20 },
+    unlockConditionKo: 'P+ · P- 발견 후 공명(Resonant) 상태 20회 유지',
+    unlockBonusKo: '공명 상태 QF 트리클 증가 (P0는 공명 상태의 중재자)',
+    flavorKo: '위상 없는 프리온. 다른 프리온들 사이의 매개자.',
+  },
+  {
+    id: 'coherent_preon', name: '응집 프리온 (P⁺P⁻P⁰ 삼합체)', nameKo: '응집 프리온 삼합체', layer: 6,
+    scaleM: '<1e-19', decade: 10, real: false, massEv: null, charge: 0, spin: 0.5,
+    rarity: 'RARE', unlockDec: 19, discoverable: true,
+    // 세 프리온 모두 발견(P+/P-/P0 임계 충족) 후 응집 추가 누적 — game.ts가 "셋 다 발견 + 응집 누적"으로 판정.
+    mechGate: { kind: 'phase', state: 'coherent', seconds: 40 },
+    unlockConditionKo: '세 프리온 모두 발견 후 위상 상태 전환 100회',
+    unlockBonusKo: '위상 상태 전환 E 소모 감소 (삼합체 이해 = 전환 비용 감소)',
+    flavorKo: '세 프리온이 완전히 겹칠 때, 전하와 스핀이 재탄생한다.',
+  },
+  {
+    id: 'phase_vacuum', name: '위상 진공 (Phase Vacuum)', nameKo: '위상 진공', layer: 6,
+    scaleM: '1e-21', decade: 12, real: false, massEv: '0', charge: 0, spin: 0,
+    rarity: 'RARE', unlockDec: 19, discoverable: true,
+    // 위상 진공은 프리온층을 더 압축해 다음 벽 근접 시(decade 진척) — 프리온층 내 dec 진척으로 판정.
+    mechGate: { kind: 'decade', dec: 20.5 },
+    unlockConditionKo: 'L6 도감 4개 완료 + 더 깊은 압축 (다음 벽 근접)',
+    unlockBonusKo: '끈층 진입 시 진동 에너지 V 초기값 증가 (진공 에너지 저장)',
+    flavorKo: '위상이 모두 사라진 자리. 하지만 진공은 비어있지 않다.',
+  },
+  {
+    id: 'phase_knot', name: '위상 매듭 (Phase Knot)', nameKo: '위상 매듭', layer: 6,
+    scaleM: '1e-21', decade: 12, real: false, massEv: null, charge: 0, spin: 1,
+    rarity: 'EPIC', unlockDec: 19, discoverable: true,
+    mechGate: { kind: 'phase', state: 'resonant', seconds: 60 },
+    unlockConditionKo: '위상 고정 숙련 + L6 도감 5개 완료',
+    unlockBonusKo: '위상 고정 E 비용 대폭 감소 (매듭 = 안정적 고정)',
+    flavorKo: '위상이 꼬여 풀리지 않는다. 위상학적 보호 상태.',
+  },
+  {
+    id: 'l6_completion', name: 'L6 완성 — 프리온 도감', nameKo: '위상 입자 도감 완성', layer: 6,
+    scaleM: '0', decade: 12, real: false, massEv: null, charge: null, spin: null,
+    rarity: 'LEGENDARY', unlockDec: 19, discoverable: false,
+    mechGate: { kind: 'layerComplete' },
+    unlockConditionKo: 'L6 도감 6/6 완성',
+    unlockBonusKo: '끈층 진입 진동 에너지 V 최대 용량 증가 + 하모닉 첫 공명 즉시 발동',
+    flavorKo: '위상의 모든 상태를 기록했다. 이제 모든 것은 진동이다.',
+  },
+];
+
+/**
+ * L7 끈층 (미지, 서사 dec12~15). 6입자(완성보너스 1 포함). codex.md §8.
+ * 발견: **하모닉 공명 횟수 기반**(systems §2-F). 개방/폐쇄끈 = 공명 누적, 타키온·브레인·중력자 =
+ *   더 많은 공명. 상전이 후 dec=0이라 mechGate로 game.ts가 판정. unlockDec=21.5(끈 진입=PT2 벽)는 표식.
+ */
+const STRING: Particle[] = [
+  {
+    id: 'open_string_mode1', name: '개방끈 n=1', nameKo: '개방끈 기본 진동', layer: 7,
+    scaleM: '1e-33', decade: 12, real: false, massEv: '0', charge: 0, spin: 1,
+    rarity: 'COMMON', unlockDec: 21.5, discoverable: true,
+    mechGate: { kind: 'harmonic', resonances: 1 },
+    unlockConditionKo: '끈층 진입 즉시 (첫 하모닉 공명 발생)',
+    unlockBonusKo: '체인 T1 하모닉 공명 빈도 증가',
+    flavorKo: '끈의 가장 낮은 진동. 이 모드에서 광자가 태어난다.',
+  },
+  {
+    id: 'closed_string_mode1', name: '폐쇄끈 n=1', nameKo: '폐쇄끈 기본 진동', layer: 7,
+    scaleM: '1e-33', decade: 12, real: false, massEv: '0', charge: 0, spin: 2,
+    rarity: 'COMMON', unlockDec: 21.5, discoverable: true,
+    mechGate: { kind: 'harmonic', resonances: 3 },
+    unlockConditionKo: '하모닉 공명 3회',
+    unlockBonusKo: 'QF 트리클 증가 (스핀 2 = 중력자 예고 = 영구 힘)',
+    flavorKo: '스핀 2. 이 모드에서 중력자가 나온다. 끈이론이 중력을 품은 이유.',
+  },
+  {
+    id: 'tachyon_string', name: '타키온 모드 (n=0 개방끈)', nameKo: '타키온 끈 모드', layer: 7,
+    scaleM: '1e-33', decade: 13, real: false, massEv: '허수 질량', charge: 0, spin: 0,
+    rarity: 'RARE', unlockDec: 21.5, discoverable: true,
+    mechGate: { kind: 'harmonic', resonances: 8 },
+    unlockConditionKo: '하모닉 조율 숙련 + 공명 8회',
+    unlockBonusKo: '하모닉 간격 단축 (타키온의 불안정성 = 빠른 공명)',
+    flavorKo: '허수 질량. 진공 불안정성의 신호. 실제 끈이론은 이를 제거하지만 — 여기선 활용한다.',
+  },
+  {
+    id: 'd_brane', name: 'D-브레인 (D2)', nameKo: 'D2-브레인', layer: 7,
+    scaleM: '1e-33', decade: 14, real: false, massEv: null, charge: 0, spin: 0,
+    rarity: 'RARE', unlockDec: 21.5, discoverable: true,
+    mechGate: { kind: 'harmonic', resonances: 16 },
+    unlockConditionKo: '개방끈·폐쇄끈 모두 발견 + 하모닉 공명 16회',
+    unlockBonusKo: '스핀 네트워크 노드 비용 소폭 감소 (브레인 = 네트워크 예고)',
+    flavorKo: '개방끈이 끝점을 고정시키는 막. 우리 우주 자체가 이것 위에 있을지 모른다.',
+  },
+  {
+    id: 'graviton_string', name: '중력자 끈 모드', nameKo: '중력자 (끈 모드)', layer: 7,
+    scaleM: '1e-33', decade: 15, real: false, massEv: '0', charge: 0, spin: 2,
+    rarity: 'EPIC', unlockDec: 21.5, discoverable: true,
+    mechGate: { kind: 'harmonic', resonances: 24 },
+    unlockConditionKo: 'L7 도감 4개 완료 + 하모닉 공명 24회',
+    unlockBonusKo: '체인 전 티어 하모닉 공명 배율 소폭 증가 (중력 = 모든 것에 영향)',
+    flavorKo: '아직 발견된 적 없는 입자. 하지만 끈이론은 이것이 존재해야 한다고 말한다.',
+  },
+  {
+    id: 'l7_completion', name: 'L7 완성 — 끈 도감', nameKo: '진동 스펙트럼 완성', layer: 7,
+    scaleM: '0', decade: 15, real: false, massEv: null, charge: null, spin: null,
+    rarity: 'LEGENDARY', unlockDec: 21.5, discoverable: false,
+    mechGate: { kind: 'layerComplete' },
+    unlockConditionKo: 'L7 도감 5/5 완성',
+    unlockBonusKo: '루프층 진입 시 스핀 네트워크 초기 노드 무료 제공',
+    flavorKo: '모든 진동을 들었다. 이제 시공간 자체를 그릴 차례.',
+  },
+];
+
+/**
+ * 입자 도감(M1.6 현재 70입자). 알려진 물리 57(L1~L5) + 미지 13(프리온7 + 끈6).
+ * 후속: 루프5 + 거품5 + 정보4 + 플랑크3 = 17 추가 → 최종 87.
+ */
 export const PARTICLES: readonly Particle[] = [
   ...MOLECULE,
   ...ATOM,
   ...NUCLEUS,
   ...HADRON,
   ...QUARK,
+  ...PREON,
+  ...STRING,
 ];
 
 /** id → 입자. */

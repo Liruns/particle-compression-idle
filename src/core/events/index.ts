@@ -41,6 +41,16 @@ export interface GameEvents {
   resonance_click: { success: boolean };
   /** 방치 자동 공명 발화(놓친 슬롯이 낮은 효율로 자동 처리, systems §2-A) — 로그. */
   resonance_auto: Record<string, never>;
+  /** 위상 상태 자동 순환 전환(프리온층, systems §2-E) — UI 전환 연출·로그. */
+  phase_cycled: { state: 'coherent' | 'dispersed' | 'resonant' };
+  /** 위상 상태 고정 성공(E 소모, systems §2-E) — UI 주스. */
+  phase_pinned: { state: 'coherent' | 'dispersed' | 'resonant' };
+  /** 위상 상태 고정 실패(E 부족) — UI 피드백. */
+  phase_pin_failed: { state: 'coherent' | 'dispersed' | 'resonant' };
+  /** 위상 고정 해제(무료, systems §2-E) — UI. */
+  phase_unpinned: Record<string, never>;
+  /** 하모닉 공명 발생(끈층 — 티어 폭발, systems §2-F) — UI 펄스·로그. */
+  harmonic_resonance: { tier: number };
 }
 
 export type EventName = keyof GameEvents;

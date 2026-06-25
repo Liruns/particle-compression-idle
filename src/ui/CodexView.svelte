@@ -1,14 +1,15 @@
 <script lang="ts">
   /**
-   * CodexView — 도감 화면 (SCR-03, ui-flow §4). M1.3: 알려진 물리 57입자.
-   *  좌: 층별 완성도 사이드. 우: 발견/미발견 입자 카드 그리드(층 섹션별).
+   * CodexView — 도감 화면 (SCR-03, ui-flow §4). M1.3 알려진 물리 57 + M1.6 미지 프리온/끈 13.
+   *  좌: 층별 완성도 사이드(알려진 물리 + 도달한 미지 서브층). 우: 입자 카드 그리드(층 섹션별).
    *  미발견 카드는 마스킹(이름 ██ / ???). 발견 시 이름·플레이버·물리값 노출.
-   *  홀로그래픽 배율은 표시 전용(M1.3 생산 미적용 — 정보층 L10에서만, economy §7.2.3).
+   *  미지 입자는 발견 조건이 메커니즘(위상 상태·하모닉 공명)이라 미발견 힌트가 그 조건을 보여준다.
+   *  홀로그래픽 배율은 표시 전용(생산 미적용 — 정보층 L10에서만, economy §7.2.3).
    */
   import type { GameSnapshot } from '../game';
-  import { KNOWN_LAYERS } from '../core/layers';
+  import { LAYERS } from '../core/layers';
   import { particlesByLayer, type Particle } from '../data/particles';
-  import { holographicMultiplier } from '../core/codex';
+  import { holographicMultiplier, layerCompletion } from '../core/codex';
 
   export let codex: GameSnapshot['codex'];
 
@@ -21,17 +22,49 @@
     LEGENDARY: '전',
   };
 
-  // 현재 선택된 층(사이드 클릭). 기본 = 첫 발견이 있는 층 또는 분자층.
+  // 현재 선택된 층(사이드 클릭). 기본 = 분자층.
   let selectedLayer = 1;
 
   $: discovered = codex.discovered;
-  $: completionByLayer = new Map(codex.layerCompletions.map((c) => [c.layerIndex, c]));
   $: holoMult = holographicMultiplier(discovered);
   $: selectedParticles = particlesByLayer(selectedLayer);
+
+  // 표시할 층: 알려진 물리(L1~L5) + 도달한 미지 서브층(L6+). 미도달 미지층은 숨김(스포일러 방지).
+  $: visibleLayers = LAYERS.filter((l) => l.kind === 'known' || l.index <= codex.maxLayerReached);
+  // 알려진 물리는 codex 스냅샷의 완성 현황, 미지는 즉석 계산(스냅샷은 알려진 물리만 담음).
+  $: completionByLayer = new Map(
+    visibleLayers.map((l) => {
+      const known = codex.layerCompletions.find((c) => c.layerIndex === l.index);
+      return [l.index, known ?? layerCompletion(l.index, discovered)];
+    }),
+  );
 
   function pct(layerIndex: number): number {
     const c = completionByLayer.get(layerIndex);
     return c && c.total > 0 ? Math.round((c.collected / c.total) * 100) : 0;
+  }
+
+  function layerName(layerIndex: number): string {
+    return LAYERS.find((l) => l.index === layerIndex)?.nameKo ?? '';
+  }
+
+  /** 미발견 입자의 힌트: 미지층은 메커니즘 조건, 알려진 물리는 dec 도달. */
+  function lockHint(p: Particle): string {
+    if (p.layer <= 5) return `dec ${p.unlockDec} 도달 시`;
+    const g = p.mechGate;
+    if (!g) return '???';
+    switch (g.kind) {
+      case 'phase': {
+        const ko = g.state === 'coherent' ? '응집' : g.state === 'dispersed' ? '분산' : '공명';
+        return `위상 ${ko} ${g.seconds}초 유지`;
+      }
+      case 'harmonic':
+        return `하모닉 공명 ${g.resonances}회`;
+      case 'decade':
+        return `dec ${g.dec} 도달 시`;
+      case 'layerComplete':
+        return '층 도감 완성 시';
+    }
   }
 </script>
 
@@ -44,14 +77,16 @@
   </header>
 
   <div class="cx-body">
-    <!-- 좌: 층별 완성도 사이드 -->
+    <!-- 좌: 층별 완성도 사이드(알려진 물리 + 도달한 미지 서브층) -->
     <nav class="cx-side" aria-label="층 목록">
-      <span class="cx-side-head">알려진 물리</span>
-      {#each KNOWN_LAYERS as l (l.index)}
+      {#each visibleLayers as l (l.index)}
         {@const c = completionByLayer.get(l.index)}
+        {#if l.index === 1}<span class="cx-side-head">알려진 물리</span>{/if}
+        {#if l.index === 6}<span class="cx-side-head cx-side-unknown">미지 영역</span>{/if}
         <button
           class="cx-layer-btn"
           class:active={selectedLayer === l.index}
+          class:unknown={l.kind === 'unknown'}
           on:click={() => (selectedLayer = l.index)}>
           <span class="cx-layer-dot" style="--dot: var(--layer-{l.slug}-accent)"></span>
           <span class="cx-layer-name">{l.nameKo}</span>
@@ -69,7 +104,7 @@
     <!-- 우: 선택 층 입자 카드 그리드 -->
     <section class="cx-grid-wrap">
       <h3 class="cx-section-title">
-        {KNOWN_LAYERS.find((l) => l.index === selectedLayer)?.nameKo}
+        {layerName(selectedLayer)}
         <span class="dim">— {pct(selectedLayer)}%</span>
       </h3>
       <div class="cx-grid">
@@ -89,7 +124,7 @@
               </div>
             {:else}
               <p class="cx-flavor dim">???</p>
-              <div class="cx-phys dim"><span>dec {p.unlockDec} 도달 시</span></div>
+              <div class="cx-phys dim"><span>{lockHint(p)}</span></div>
             {/if}
           </article>
         {/each}
@@ -150,6 +185,12 @@
     color: var(--foreground-dim);
     font-family: var(--font-label);
     margin-bottom: var(--space-xs);
+  }
+  /* 미지 영역 구분 헤더 — 자주 톤(알려진 물리에서 미지로의 경계 신호). */
+  .cx-side-unknown {
+    margin-top: var(--space-sm);
+    color: var(--layer-prn-accent);
+    opacity: 0.85;
   }
   .cx-layer-btn {
     display: grid;

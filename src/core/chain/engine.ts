@@ -67,16 +67,24 @@ export interface ChainTickResult {
  * **단일 패스 결정성**: 같은 틱 안에서 모든 생산은 *직전 틱의 g* 기준(동시 갱신).
  *   즉 g[k+1]은 이번 틱 증분이 반영되기 *전* 값을 쓴다(sim의 new_g = g[:] 복제와 동일).
  *
+ * 티어별 배율(tierMult, M1.6 진동 하모닉스): 선택. 길이 CHAIN_TIERS, 각 원소는 해당 티어 생산에
+ *   추가로 곱하는 배율(≥1, 미지정/undefined면 전부 1). 끈층 하모닉 공명이 특정 티어만 폭발시키는
+ *   "티어 선택 배율"을 표현한다(전체 곱 mult과 다른 결, systems §2-F). 인덱스 i = T(i+1)의 배율.
+ *   생산식: produced[k] += g[k+1]·mult·tierMult[k+1]·dt,  dC = g[0]·mult·tierMult[0]·dt.
+ *   (각 티어의 *산출*에 그 티어 배율을 곱한다 — T(k+1)이 만드는 분량에 T(k+1)의 공명 배율 적용.)
+ *
  * @param bought   정수 카운트(비용 기준, 생산에는 owned로 반영됨)
  * @param produced 현재 누적 생산분(Decimal[8])
- * @param mult     production_mult (Decimal)
+ * @param mult     production_mult (Decimal) — 전체 곱(QF·위상·공명)
  * @param dt       고정 스텝(초, native number)
+ * @param tierMult 선택: 티어별 추가 배율(길이 8, 하모닉 공명). undefined면 전부 1.
  */
 export function chainTick(
   bought: readonly number[],
   produced: readonly Decimal[],
   mult: Decimal,
   dt: number,
+  tierMult?: readonly number[],
 ): ChainTickResult {
   // g[k] = owned (직전 틱 기준 스냅샷). 인덱스 0..7 = T1..T8.
   const g = composeOwned(bought, produced);
@@ -87,12 +95,17 @@ export function chainTick(
   const nextProduced = produced.slice() as Decimal[];
   for (let k = CHAIN_TIERS - 2; k >= 0; k--) {
     // T(k+1) 인덱스 = k+1. g[k+1]가 T(k+2)에서 받기 전 값이어야 하므로 g(스냅샷) 사용.
-    const inflow = g[k + 1].mul(mdt); // g[k+1]·mult·dt
+    // 산출 티어 = T(k+1)(인덱스 k+1) → 그 티어의 하모닉 배율을 inflow에 곱한다.
+    let inflow = g[k + 1].mul(mdt); // g[k+1]·mult·dt
+    const tm = tierMult ? tierMult[k + 1] : 1;
+    if (tm !== 1 && tm > 0) inflow = inflow.mul(tm);
     if (inflow.gt(0)) nextProduced[k] = nextProduced[k].add(inflow);
   }
 
-  // C·E = T1(g[0]) 생산.
-  const dC = g[0].mul(mdt);
+  // C·E = T1(g[0]) 생산. T1의 하모닉 배율(tierMult[0]) 적용.
+  let dC = g[0].mul(mdt);
+  const tm0 = tierMult ? tierMult[0] : 1;
+  if (tm0 !== 1 && tm0 > 0) dC = dC.mul(tm0);
 
   return { dC, dE: dC, produced: nextProduced };
 }

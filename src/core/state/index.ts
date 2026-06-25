@@ -16,7 +16,7 @@
 
 import { Decimal, D, ZERO } from '../bignum';
 import { SEED_T1_BOUGHT } from '../chain/engine';
-import { OrbitalResonance } from '../layers/mechanics';
+import { OrbitalResonance, PhaseOverlap, Harmonics } from '../layers/mechanics';
 
 // --- 네임스페이스 타입 (§1.1 스키마 표) ---------------------------------------
 
@@ -98,13 +98,17 @@ export interface CodexState {
 /**
  * mechanics: 층별 메커니즘 모듈의 **살아있는 인스턴스**(tech-arch §1.1·§4.4 자기완결).
  *  Decimal 필드와 같은 규칙: 메모리에선 live 객체, 저장 시 save 모듈이 .serialize()로 평문화.
- *  M1.4: 오비탈 공명(원자층 L2). 후속 층 메커니즘은 여기 필드로 추가(위상 겹침 등).
- *  메커니즘 상태는 상전이/재하강 시 리셋(§5-2 "층별 메커니즘 상태 = 리셋")이나, 알려진 물리
- *  층 메커니즘은 런 내 상시 동작 — M1.4 범위에선 새 게임/리셋에서만 새 인스턴스.
+ *  M1.4: 오비탈 공명(원자층 L2). M1.6: 위상 겹침(프리온 L6) + 진동 하모닉스(끈 L7).
+ *  메커니즘 상태는 상전이/재하강 시 리셋(§5-2 "층별 메커니즘 상태 = 리셋"). M1.6은 미지 메커니즘을
+ *  상전이 실행 시 새 인스턴스로 교체(game.ts executePrestige가 진입 층에 맞춰 리셋).
  */
 export interface MechanicsState {
-  /** 오비탈 공명(원자층). 항상 존재(원자층 미진입 시엔 game.ts가 update 스킵). */
+  /** 오비탈 공명(원자층 L2). 항상 존재(원자층 미진입 시엔 game.ts가 update 스킵). */
   orbital: OrbitalResonance;
+  /** 위상 겹침(프리온층 L6, M1.6). 미지 첫 메커니즘 — 프리온층 진입(상전이 1) 후에만 game.ts가 update. */
+  phase: PhaseOverlap;
+  /** 진동 하모닉스(끈층 L7, M1.6). 끈층 진입(상전이 2) 후에만 game.ts가 update. */
+  harmonics: Harmonics;
 }
 
 /** settings: 게임 진행과 분리. 마이그레이션 영향 최소(§1.1). */
@@ -181,6 +185,8 @@ export function createInitialState(now: number = Date.now()): GameState {
     },
     mechanics: {
       orbital: new OrbitalResonance(),
+      phase: new PhaseOverlap(),
+      harmonics: new Harmonics(),
     },
     settings: {
       offlinePrecise: false,

@@ -16,8 +16,9 @@
 
 import { Decimal, D, ZERO, add, sub } from './core/bignum';
 import { getState, setState, createInitialState, CHAIN_TIERS, type GameState } from './core/state';
-import type { SlotPhase } from './core/layers/mechanics';
-import { MANUAL_COMPRESS } from './data/constants';
+import type { SlotPhase, PhaseState } from './core/layers/mechanics';
+import { PhaseOverlap, Harmonics } from './core/layers/mechanics';
+import { MANUAL_COMPRESS, PHASE_OVERLAP } from './data/constants';
 import { GameLoop, Scheduler } from './core/loop';
 import { SaveManager, type LoadResult } from './core/save';
 import {
@@ -51,6 +52,7 @@ import { seedBought } from './core/state';
 import { prestigeBeat, prestigeExecLog } from './data/narrative';
 import {
   evaluateDiscoveries,
+  evaluateMechDiscoveries,
   knownLayerCompletions,
   codexCompletion,
   discoverableCollected,
@@ -109,6 +111,8 @@ export interface CodexSnapshot {
   completion: number;
   /** 알려진 물리 층별 완성 현황(L1~L5). */
   layerCompletions: LayerCompletion[];
+  /** 도달한 최대 층 index(1..11). 도감 뷰가 미지 서브층 섹션 노출 게이트로 사용(M1.6). */
+  maxLayerReached: number;
 }
 
 /**
@@ -124,6 +128,45 @@ export interface ResonanceSnapshot {
   progress: number;
   /** 현재 공명 배율(1.0~1.5). 체인 production에 곱(표시·로그용). */
   multiplier: number;
+}
+
+/**
+ * 위상 겹침 위젯 표시용 스냅샷(ui-flow §2-E, M1.6). 프리온층(L6) 진입 시 활성.
+ *  오비탈 공명과 *다른 결*: 슬롯 타이밍이 아니라 [응집][분산][공명] 상태 토글 + 고정.
+ *  UI는 이 값만 읽어 토글/상태/진행/누적을 그린다(메커니즘 내부는 모름 — 단방향 §4.1).
+ */
+export interface PhaseSnapshot {
+  /** 위젯 활성 여부(프리온층 L6+ 도달 시 true). false면 위젯 숨김. */
+  active: boolean;
+  /** 현재 위상 상태(coherent=응집/dispersed=분산/resonant=공명). */
+  state: PhaseState;
+  /** 고정 여부(true면 자동 순환 정지 — 능동 전문화 중). */
+  pinned: boolean;
+  /** 다음 자동 순환까지 진행도(0~1). 고정 중이면 0. */
+  cycleProgress: number;
+  /** 현재 체인 배율(상태별 — 응집 최대). 표시·로그용. */
+  multiplier: number;
+  /** 상태 고정 1회 E 비용(현재 dC/dt 기반). UI 버튼 비용 표시. */
+  pinCost: Decimal;
+  /** 상태별 누적 유지 시간(초) — 프리온 발견 진행도 표시. */
+  times: { coherent: number; dispersed: number; resonant: number };
+}
+
+/**
+ * 진동 하모닉스 위젯 표시용 스냅샷(ui-flow §2-E, M1.6). 끈층(L7) 진입 시 활성.
+ *  위상/공명과 또 다른 결: V 에너지 바 + 다음 공명 티어 예측(수동 없음 — 자동 진행).
+ */
+export interface HarmonicsSnapshot {
+  /** 위젯 활성 여부(끈층 L7+ 도달 시 true). false면 위젯 숨김. */
+  active: boolean;
+  /** 다음 공명까지 진행도(0~1) — V 에너지 바. */
+  chargeProgress: number;
+  /** 다음에 공명할 티어(1..8) — "공명 스케줄 미리보기". */
+  nextTier: number;
+  /** 누적 공명 횟수(도감 진행). */
+  totalResonances: number;
+  /** 현재 burst 중인 티어들(1..8, 폭발 강조용). 없으면 빈 배열. */
+  burstingTiers: number[];
 }
 
 /**
@@ -174,6 +217,10 @@ export interface GameSnapshot {
   codex: CodexSnapshot;
   /** 오비탈 공명 위젯(M1.4 — 원자층 L2). */
   resonance: ResonanceSnapshot;
+  /** 위상 겹침 위젯(M1.6 — 프리온층 L6). */
+  phase: PhaseSnapshot;
+  /** 진동 하모닉스 위젯(M1.6 — 끈층 L7). */
+  harmonics: HarmonicsSnapshot;
   /** 상전이 상태(M1.5 — 미지 벽 도달 시 점등). */
   prestige: PrestigeSnapshot;
   /** FTUE 점진 공개 상태(M1.3). */
@@ -253,16 +300,28 @@ export class Game {
     // 스케줄러도 같은 시간축으로 구동(백그라운드/오프라인 일관, §6.4).
     this.scheduler.update(dt);
 
-    // 1. 프레스티지 배율(현재 QF만 — holographic/research는 M1.6+).
+    // 1. 프레스티지 배율(현재 QF만 — holographic/research는 후속).
     const baseMult = productionMult(s.resources.QF);
 
     // 1b. 오비탈 공명(원자층 L2+, systems §2-A). 슬롯 전진 + 배율·D 산출.
     //     공명 배율은 체인 production에 곱해진다(§2-A "체인 전체에 곱"). 분자층(L1)에선 비활성.
     const resonanceMult = this.updateResonance(dt);
-    const mult = resonanceMult > 1 ? baseMult.mul(resonanceMult) : baseMult;
 
-    // 2. 8단 체인 생산(역순 단일 패스, engine.py 동형). 공명 배율 반영된 mult로 생산.
-    const { dC, dE, produced } = chainTick(s.chain.bought, s.chain.produced, mult, dt);
+    // 1c. 위상 겹침(프리온층 L6+, systems §2-E, M1.6). 상태 순환 + 배율·D·QF·발견 산출.
+    //     위상 배율도 체인 전체에 곱(오비탈 공명과 동형 합성). 미지 첫 메커니즘.
+    const phaseMult = this.updatePhase(dt);
+
+    // 전체 곱 배율(QF × 공명 × 위상). 1.0 항은 곱 생략(Decimal 연산 절약).
+    let mult = baseMult;
+    if (resonanceMult > 1) mult = mult.mul(resonanceMult);
+    if (phaseMult > 1) mult = mult.mul(phaseMult);
+
+    // 1d. 진동 하모닉스(끈층 L7+, systems §2-F, M1.6). V 누적 + 티어별 공명 배율 산출.
+    //     전체 곱이 아닌 **티어 선택 배율**(특정 티어만 폭발) — chainTick tierMult로 전달.
+    const tierMult = this.updateHarmonics(dt);
+
+    // 2. 8단 체인 생산(역순 단일 패스, engine.py 동형). 전체 배율 mult + 티어별 하모닉 배율.
+    const { dC, dE, produced } = chainTick(s.chain.bought, s.chain.produced, mult, dt, tierMult);
     s.chain.produced = produced;
 
     // 3. 자원 가산(C·E 동일 소스) + lifetime_C 누적(QF 산출 입력, §1.1 단계 2).
@@ -291,9 +350,14 @@ export class Game {
     return s.mechanics.orbital.getMultiplier();
   }
 
-  /** 오비탈 공명 활성 조건: 원자층(L2) 이상 도달(layers.currentIndex ≥ 2). */
+  /**
+   * 오비탈 공명 활성 조건: 원자층(L2)~쿼크층(L5) 구간(2 ≤ currentIndex < 6).
+   *   미지 진입(L6 프리온+) 후엔 비활성 — 위상 겹침이 그 자리를 대체(메커니즘 핸드오프, M1.6).
+   *   → 위젯 표시와 생산 기여가 일치(L6+에선 공명 배율 미적용).
+   */
   private isResonanceActive(): boolean {
-    return getState().layers.currentIndex >= 2;
+    const i = getState().layers.currentIndex;
+    return i >= 2 && i < 6;
   }
 
   /** D(발견 데이터) 가산. 현재 런 + lifetime 동시 누적(§5-2 D_lifetime 100% 보존, R8 입력). */
@@ -302,6 +366,51 @@ export class Game {
     const d = D(amount);
     s.resources.D_current = add(s.resources.D_current, d);
     s.resources.D_lifetime = add(s.resources.D_lifetime, d);
+  }
+
+  /**
+   * 위상 겹침 메커니즘 전진(systems §2-E, M1.6). 프리온층(L6) 진입 이후에만 동작.
+   *  상태 순환 + 상태별 산출(분산=D, 공명=QF)을 자원에 반영하고, 전환 이벤트를 발행한다.
+   *  발견 판정(P+/P-/P0)은 processProgression의 미지 경로에서 누적시간으로 한다(여기선 자원만).
+   * @returns 현재 위상 체인 배율(상태별). 비활성이면 1.0.
+   */
+  private updatePhase(dt: number): number {
+    const s = getState();
+    if (!this.isPhaseActive()) return 1;
+
+    const r = s.mechanics.phase.update(dt);
+    if (r.dGained > 0) this.addDiscovery(r.dGained);
+    if (r.qfGained > 0) {
+      // 공명 상태 QF 트리클(systems §2-E "QF 미적립 지속"). 영구 보존 자원이라 직접 누적.
+      s.resources.QF = add(s.resources.QF, D(r.qfGained));
+    }
+    if (r.cycled) bus.emit('phase_cycled', { state: r.newState });
+    return s.mechanics.phase.getMultiplier();
+  }
+
+  /** 위상 겹침 활성 조건: 프리온층(L6) 이상 도달(layers.currentIndex ≥ 6). */
+  private isPhaseActive(): boolean {
+    return getState().layers.currentIndex >= 6;
+  }
+
+  /**
+   * 진동 하모닉스 메커니즘 전진(systems §2-F, M1.6). 끈층(L7) 진입 이후에만 동작.
+   *  V 누적 + 하모닉 공명(티어 burst)을 전진시키고, 공명 발생 시 이벤트를 발행한다.
+   *  발견 판정(끈 입자)은 processProgression 미지 경로에서 누적 공명수로 한다(여기선 burst만).
+   * @returns 티어별 배율 맵(길이 8). 비활성이면 undefined(chainTick이 전부 1로 처리).
+   */
+  private updateHarmonics(dt: number): number[] | undefined {
+    const s = getState();
+    if (!this.isHarmonicsActive()) return undefined;
+
+    const r = s.mechanics.harmonics.update(dt);
+    if (r.resonated) bus.emit('harmonic_resonance', { tier: r.resonantTier });
+    return s.mechanics.harmonics.getTierMultipliers();
+  }
+
+  /** 진동 하모닉스 활성 조건: 끈층(L7) 이상 도달(layers.currentIndex ≥ 7). */
+  private isHarmonicsActive(): boolean {
+    return getState().layers.currentIndex >= 7;
   }
 
   /**
@@ -322,12 +431,16 @@ export class Game {
       }
     }
 
-    // 도감 발견. 새로 발견된 ID만 집합에 추가 + 개별 이벤트 발행.
+    // 도감 발견(알려진 물리 L1~L5 — dec 게이트). 새로 발견된 ID만 집합에 추가 + 이벤트 발행.
     const newly = evaluateDiscoveries(dec, s.codex.discovered);
     for (const id of newly) {
       s.codex.discovered.add(id);
       bus.emit('codexDiscover', { particleId: id });
     }
+
+    // 미지 서브층 발견(L6 프리온·L7 끈 — 메커니즘 게이트, M1.6). 위상 누적시간·하모닉 공명수로 판정.
+    //   상전이 후 C 리셋(dec=0)이라 dec 게이트 부적합 → 메커니즘 상태가 발견 경로(필러 ④ 미지 첫 결).
+    this.evaluateUnknownDiscoveries(dec);
 
     // 상전이 가능 판정(M1.5). 미지 벽(dec19~26) 도달 + 미실행 상전이가 있으면 점등.
     //   prestige_ready는 가능 상태 진입 순간 1회만(UI 탭 점등·사운드). 멱등 — 매 tick 재발화 안 함.
@@ -350,6 +463,70 @@ export class Game {
       // 벽 미도달(또는 상전이 실행으로 해소) → 가드 해제(다음 벽에서 재발화 가능).
       this.prestigeReadyEmitted = false;
     }
+  }
+
+  /**
+   * 미지 서브층(L6 프리온·L7 끈) 메커니즘 발견 판정(systems §2-E·§2-F, M1.6). tick·오프라인 후 공용.
+   *  현재 진입 미지 층의 메커니즘 상태(위상 누적시간·하모닉 공명수·dec)로 입자를 발견한다.
+   *  알려진 물리(L1~L5)에선 미지 메커니즘이 비활성이라 호출돼도 빈 결과(currentIndex < 6).
+   *  멱등: 이미 발견한 입자는 재발화 안 함(codex 모듈이 집합 비교).
+   * @param dec 현재 dec(미지 층 내 후반 입자 decade 게이트용 — 위상 진공 등).
+   */
+  private evaluateUnknownDiscoveries(dec: number): void {
+    const s = getState();
+    const layerIndex = s.layers.currentIndex;
+    if (layerIndex < 6) return; // 알려진 물리 구간 — 미지 메커니즘 없음.
+
+    const ctx = {
+      phaseTimes: this.isPhaseActive() ? s.mechanics.phase.getStateTimes() : undefined,
+      harmonicResonances: this.isHarmonicsActive()
+        ? s.mechanics.harmonics.getTotalResonances()
+        : undefined,
+      dec,
+    };
+    const newly = evaluateMechDiscoveries(layerIndex, ctx, s.codex.discovered);
+    for (const id of newly) {
+      s.codex.discovered.add(id);
+      bus.emit('codexDiscover', { particleId: id });
+    }
+  }
+
+  /**
+   * 위상 상태 고정(systems §2-E 능동 개입, M1.6). 지정 상태로 E 1회 소모하고 자동 순환을 멈춘다.
+   *  비용 = 현재 dC/dt의 PIN_COST_SECONDS초 분량 E. 부족하면 무시(피드백만). 프리온층 미진입 시 무시.
+   * @param state 고정할 위상 상태.
+   * @returns 고정 성공 여부(UI 주스 분기).
+   */
+  pinPhase(state: PhaseState): boolean {
+    if (!this.isPhaseActive()) return false;
+    const s = getState();
+    const cost = this.phasePinCost();
+    if (s.resources.E.lt(cost)) {
+      bus.emit('phase_pin_failed', { state });
+      return false;
+    }
+    s.resources.E = sub(s.resources.E, cost);
+    s.mechanics.phase.pin(state);
+    bus.emit('phase_pinned', { state });
+    this.notify();
+    return true;
+  }
+
+  /** 위상 고정 해제(무료, systems §2-E). 다시 자동 순환. 프리온층 미진입 시 무시. */
+  unpinPhase(): void {
+    if (!this.isPhaseActive()) return;
+    getState().mechanics.phase.unpin();
+    bus.emit('phase_unpinned', {});
+    this.notify();
+  }
+
+  /** 위상 고정 1회 E 비용(현재 dC/dt 기반 — 체인 강할수록 절대비용↑이나 상대비용 일정). */
+  private phasePinCost(): Decimal {
+    const s = getState();
+    const mult = productionMult(s.resources.QF);
+    const owned = composeOwned(s.chain.bought, s.chain.produced);
+    // dC/dt(=g1·mult)의 PIN_COST_SECONDS초 분량. 체인이 비면(불가능 — 프리온층은 체인 보유) 0.
+    return owned[0].mul(mult).mul(PHASE_OVERLAP.PIN_COST_SECONDS);
   }
 
   /**
@@ -387,9 +564,13 @@ export class Game {
   manualCompress(): void {
     const s = getState();
     const baseMult = productionMult(s.resources.QF);
-    // 현재 활성 공명 배율도 클릭에 반영(공명 중엔 클릭도 더 강함 — systems §2-A 곱 구조 일관).
+    // 현재 활성 메커니즘 배율도 클릭에 반영(메커니즘 중엔 클릭도 더 강함 — 곱 구조 일관).
+    //   원자~쿼크: 오비탈 공명. 프리온+: 위상 겹침. (티어별 하모닉은 클릭 단일 가산엔 미반영.)
     const resonanceMult = this.isResonanceActive() ? s.mechanics.orbital.getMultiplier() : 1;
-    const mult = resonanceMult > 1 ? baseMult.mul(resonanceMult) : baseMult;
+    const phaseMult = this.isPhaseActive() ? s.mechanics.phase.getMultiplier() : 1;
+    let mult = baseMult;
+    if (resonanceMult > 1) mult = mult.mul(resonanceMult);
+    if (phaseMult > 1) mult = mult.mul(phaseMult);
     const owned = composeOwned(s.chain.bought, s.chain.produced);
     // 현재 dC/dt(=g1·mult)의 CLICK_SECONDS초 분량. 체인이 비어도(T1 시드) 소폭 진행.
     const bump = owned[0].mul(mult).mul(MANUAL_COMPRESS.CLICK_SECONDS);
@@ -478,6 +659,13 @@ export class Game {
     // --- 미지 서브층 진입(프리온 등). currentIndex가 dec 파생 층을 덮어쓴다(activeLayer 참조) ---
     s.layers.currentIndex = reset.layerIndex;
 
+    // --- 층별 메커니즘 상태 리셋(systems §5-2 "층별 메커니즘 상태 = 리셋", M1.6) ---
+    //   새 미지 서브층 런은 메커니즘이 깨끗한 상태에서 시작(위상 응집·V=0). 도감 발견(discovered)은
+    //   영구 보존이라 이미 발견한 프리온/끈은 재발견 안 됨(멱등) — 메커니즘 *진행*만 리셋.
+    s.mechanics.phase = new PhaseOverlap();
+    s.mechanics.harmonics = new Harmonics();
+    // 오비탈 공명도 런 메커니즘이나 미지 진입 후엔 비활성(L2 위젯 미표시) — 리셋 불요(상태 무해).
+
     // --- §3.3 오프라인 보너스 1회성 플래그(상전이 직후 첫 오프라인 modifier=1.0) ---
     s.prestige.offlineBonusPending = true;
 
@@ -555,7 +743,8 @@ export class Game {
     });
 
     // 오비탈 공명 위젯 상태(원자층 L2+ 활성). 표시 전용 — 메커니즘 인스턴스 직접 질의.
-    const resonanceActive = s.layers.currentIndex >= 2;
+    //   미지 진입(L6+) 후엔 오비탈 위젯 비표시(active=false) — 미지 메커니즘이 그 자리를 차지.
+    const resonanceActive = s.layers.currentIndex >= 2 && s.layers.currentIndex < 6;
     const orbital = s.mechanics.orbital;
     const resonance: ResonanceSnapshot = {
       active: resonanceActive,
@@ -564,10 +753,38 @@ export class Game {
       multiplier: orbital.getMultiplier(),
     };
 
-    // 표시용 유효 배율: QF항 × 활성 공명 배율(체인에 실제 적용되는 값과 일치).
-    const displayMult = resonanceActive && resonance.multiplier > 1
-      ? mult.mul(resonance.multiplier)
-      : mult;
+    // 위상 겹침 위젯 상태(프리온층 L6+ 활성, M1.6). 표시 전용.
+    const phaseActive = s.layers.currentIndex >= 6;
+    const phaseM = s.mechanics.phase;
+    const phase: PhaseSnapshot = {
+      active: phaseActive,
+      state: phaseM.getState(),
+      pinned: phaseM.isPinned(),
+      cycleProgress: phaseM.getCycleProgress(),
+      multiplier: phaseActive ? phaseM.getMultiplier() : 1,
+      pinCost: phaseActive ? this.phasePinCost() : ZERO,
+      times: phaseM.getStateTimes(),
+    };
+
+    // 진동 하모닉스 위젯 상태(끈층 L7+ 활성, M1.6). 표시 전용.
+    const harmonicsActive = s.layers.currentIndex >= 7;
+    const harm = s.mechanics.harmonics;
+    const tierMults = harm.getTierMultipliers();
+    const harmonics: HarmonicsSnapshot = {
+      active: harmonicsActive,
+      chargeProgress: harm.getChargeProgress(),
+      nextTier: harm.getNextResonantTier(),
+      totalResonances: harm.getTotalResonances(),
+      burstingTiers: harmonicsActive
+        ? tierMults.map((m, i) => (m > 1 ? i + 1 : 0)).filter((t) => t > 0)
+        : [],
+    };
+
+    // 표시용 유효 배율: QF항 × 활성 공명 배율 × 활성 위상 배율(체인에 실제 적용되는 전체 곱과 일치).
+    //   (하모닉 티어 배율은 티어별 — 전체 표시 배율엔 미반영. 체인 테이블 rate가 개별 반영.)
+    let displayMult = mult;
+    if (resonanceActive && resonance.multiplier > 1) displayMult = displayMult.mul(resonance.multiplier);
+    if (phaseActive && phase.multiplier > 1) displayMult = displayMult.mul(phase.multiplier);
 
     // 상전이 스냅샷(M1.5). 미지 벽 도달 시만 점등. 미리보기로 QF 획득량·진입 층 계산.
     const preview = this.currentPreview(dec);
@@ -622,8 +839,11 @@ export class Game {
         denominator: CODEX_DENOMINATOR,
         completion: codexCompletion(discovered),
         layerCompletions: knownLayerCompletions(discovered),
+        maxLayerReached: s.layers.currentIndex,
       },
       resonance,
+      phase,
+      harmonics,
       prestige,
       ftue,
       totalTicks: this.loop.totalTicks,

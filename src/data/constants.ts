@@ -98,3 +98,69 @@ export const MANUAL_COMPRESS = {
   /** 클릭 1회 = 현재 dC/dt의 이 초만큼 즉시 가산(systems §4-2 C_click = 현재 생산의 일부). */
   CLICK_SECONDS: 0.5,
 } as const;
+
+// --- 위상 겹침 (systems.md §2-E, 프리온층 L6 메커니즘 — M1.6) ------------------
+/**
+ * 위상 겹침(Phase Superposition, systems §2-E). 프리온층 진입 시 C가 "위상 C"로 재정의되어
+ *   세 상태(응집/분산/공명)를 오간다. **오비탈 공명과 다른 결**(필러 ④): 타이밍 클릭이 아니라
+ *   "어떤 자원을 우선할지"의 전략적 상태 선택이다. 방치 시 자동 순환(평균 효율), 개입 시 상태
+ *   고정으로 전문화(체인/연구/QF 중 하나에 집중).
+ *
+ * 상태별 출력(systems §2-E 의사코드):
+ *   - 응집(COHERENT): 체인 배율 최대, D 생산 0.            → P+ 발견(양위상)
+ *   - 분산(DISPERSED): 체인 배율 낮음, D 생산 최대.        → P- 발견(음위상)
+ *   - 공명(RESONANT): 중간 배율, QF 미적립(트리클) 지속.   → P0 발견(중립위상)
+ *
+ * 출처(systems §2-E + economy 미해결질문 #3 "응집/분산/공명 배율이 방치·개입 40% 격차 유지"):
+ *   정확 수치 economy 미확정 → 보수적 시드(방치 자동순환 평균 ≈ 1.0 중립, 고정 전문화 시 ±이득).
+ *   data 분리로 튜닝. 배율은 체인 production에 곱(오비탈 공명과 동형 — game.ts가 합성).
+ */
+export const PHASE_OVERLAP = {
+  /** 자동 순환 주기(초). 방치 시 이 간격마다 다음 상태로 전환(가중 랜덤 아닌 결정적 순환 — 결정성 R9). */
+  AUTO_CYCLE_SECONDS: 12,
+  /** 응집 상태 체인 배율(최대 — 체인 몬스터). */
+  COHERENT_MULT: 1.35,
+  /** 분산 상태 체인 배율(낮음 — 대신 D 러시). */
+  DISPERSED_MULT: 1.05,
+  /** 공명 상태 체인 배율(중간 — QF 축적). */
+  RESONANT_MULT: 1.18,
+  /** 분산 상태 초당 D 생산(systems §2-E "D 생산 최대"). 응집/공명은 0. */
+  DISPERSED_D_RATE: 0.5,
+  /** 공명 상태 초당 QF 트리클(systems §2-E "QF 미적립 지속"). 느린 화폐 — 아주 소량. */
+  RESONANT_QF_RATE: 0.002,
+  /**
+   * 상태 고정(pin) 1회 비용 = 현재 dC/dt의 이 초 분량 E 소모(systems §2-E pin_cost_E).
+   * 고정은 한 번 비용을 내면 다음 자동 순환을 막고 선택 상태를 유지. 해제(unpin)는 무료.
+   * (economy 미확정 → 체인 대비 가벼운 시드. 너무 비싸면 개입 동기 소멸·너무 싸면 자동순환 무의미.)
+   */
+  PIN_COST_SECONDS: 2,
+  /** 상태별 프리온 발견 누적 임계(systems §2-E "상태 N회 유지"·codex L6 unlock_condition). */
+  DISCOVER_COHERENT_SECONDS: 10, // P+ : 응집 누적 10초
+  DISCOVER_DISPERSED_SECONDS: 10, // P- : 분산 누적 10초
+  DISCOVER_RESONANT_SECONDS: 20, // P0 : 공명 누적 20초(중재자 — 더 오래)
+} as const;
+
+// --- 진동 하모닉스 (systems.md §2-F, 끈층 L7 메커니즘 — M1.6) ------------------
+/**
+ * 진동 하모닉스(Vibrational Harmonics, systems §2-F). 끈층 진입 후 체인 생산 틱마다 진동
+ *   에너지 V가 누적되고, 특정 V 임계마다 하모닉 공명이 일어나 **체인 특정 티어가 폭발**한다.
+ *   위상 겹침(상태 선택)·오비탈 공명(타이밍 클릭)과 또 다른 결: "다음 공명 티어 예측" 자동 진행.
+ *
+ * 동작(systems §2-F 의사코드):
+ *   V += production_rate(대용 — 활성 시 고정 충전율) · dt
+ *   harmonic_n = floor(V / HARMONIC_INTERVAL);  resonant_tier = (harmonic_n % 8) + 1
+ *   V가 임계 교차 시 → 해당 티어 burst(짧은 배율) + V 잔여 이월. 8티어 순환.
+ *
+ * 출처(systems §2-F + economy 미해결질문 #6 "하모닉 인터벌 — 너무 빠르면 지루·느리면 무관심"):
+ *   정확 수치 economy 미확정 → 보수적 시드. 본 메커니즘은 "수동 없음(자동 충전)"(ui-flow §2-E).
+ */
+export const HARMONICS = {
+  /** 활성 시 초당 V 충전량(production_rate 대용 — 끈층 진입 후 고정 비율, 결정성). */
+  FILL_RATE: 1,
+  /** 하모닉 1단계 간격(V). harmonic_n = floor(V/interval). */
+  HARMONIC_INTERVAL: 8,
+  /** 공명 발생 시 해당 티어 burst 배율(짧게 적용 — 전체 체인엔 합성 시 평탄화). */
+  BURST_MULT: 2,
+  /** burst 지속(초). 이 시간 동안 resonant_tier에 BURST_MULT 적용 후 소멸. */
+  BURST_SECONDS: 3,
+} as const;

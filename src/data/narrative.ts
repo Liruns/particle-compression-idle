@@ -87,6 +87,14 @@ export const PRESTIGE_BEATS: readonly PrestigeBeat[] = [
       '프리온 — 가설로만 존재하던 이름. 로그에 기록한다.',
     ],
   },
+  {
+    prestigeIndex: 2, // 프리온층 → 끈층 (~dec21.5, 비트 6 — narrative §4-2)
+    lines: [
+      '프리온 구조 이하. 서사 스케일 1×10⁻²¹ m.',
+      '입자가 아니다. 진동하는 무언가.',
+      '끈이론이 이것을 예측했다. 끈이론이 맞을 수도 있다.',
+    ],
+  },
 ] as const;
 
 /** prestigeIndex → 상전이 비트(없으면 undefined). */
