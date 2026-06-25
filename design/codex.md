@@ -34,16 +34,20 @@
 
 **홀로그래픽 완성도 연결 (systems §2-I):**
 ```
-codex_completion = collected / 87   (0.0 ~ 1.0)
-holographic_mult += codex_completion × codex_bonus_factor   // [ECONOMY]
+// 87 = 전체 엔트리(UI 도감 목록 표시) / 76 = 수집 대상(LEGENDARY 자동 해금 11개 제외, completion 분모)
+codex_completion = collected_discoverable / 76   (0.0 ~ 1.0)
+holographic_mult += codex_completion² × 0.35   // 곡선 B (제곱) — followup-codex-ramp.md / economy v0.3 §7.1 확정
+// 상한 클램프: min(codex_completion² × 0.35, 0.35)
 ```
 <!-- [지시 3-2 — 도감 완성도 보너스 상한 확정 / R2 하향]
   도감 100% 완성 시 holographic_mult 기여 상한 = +0.35× (즉 최대 ×1.35 기여).
-  codex_bonus_factor의 역산 기준값: codex_bonus_factor = 0.35 / 1.0 = 0.35 (completion=1.0 시 +0.35×).
+  codex_bonus_factor = 0.35 (completion=1.0 시 +0.35×). 상한 불변.
   R2 하향(0.5→0.35): qa-report-v2 CONCERN-NEW-2 — 도감 ×1.5 단독 dec26 −33.3% 단축이
     디렉터 §3.4 "30% 미만" 위반. ×1.35 → −25.9% 충족 (economy.md §7.1 재시뮬 sim/codex_race.py 확정).
-  미세조정 밴드: content 실제 램프 곡선 확정 후 economy가 ×1.25~1.35 내 조정(상한선 = ×1.35).
-  근거: director-review.md §7.2 R2 — "완주 컬렉터가 체감하되 페이싱 비파괴" 구간.
+  [램프 곡선 확정] 곡선 B (제곱) = bonus(c)=0.35×c². 중반(c≈0.65) 유효 H=×1.148, dec26 단축 −12.9%.
+    완주 직전(c=0.9~1.0) 급상승 → 컬렉터 클라이맥스. 근거: followup-codex-ramp.md §1-4 / economy v0.3 §7.1 / 디렉터 §8.2.
+  [분모 확정] 76 (LEGENDARY 11개 제외). 87은 UI 전체 표시용. 근거: followup-codex-ramp.md §3.
+  [베켄슈타인] holographic_mult 상한 경로 분리 완료 → codex +0.35× 예산 무잠식. 아래 L10 엔트리 참조.
 -->
 층별 서브-완성도도 별도 추적 → 층 도감 100% 달성 시 해당 층 1회성 해금 이벤트.
 
@@ -1470,7 +1474,7 @@ holographic_mult += codex_completion × codex_bonus_factor   // [ECONOMY]
     "spin": 1,
     "rarity": "EPIC",
     "unlock_condition": "L10 도감 2개 완료 + 도감 수집률 85%",
-    "unlock_bonus_type": "도감 완성도 보너스 상한 증가 (베켄슈타인 경계 = 더 많은 정보 저장)",
+    "unlock_bonus_type": "빅 크런치 QF 계수 +5% (K: 1.0→1.05) — 베켄슈타인 경계: 표면에 더 많은 정보를 담을수록 붕괴 시 방출되는 양자 거품이 증가",
     "flavor_brief": "블랙홀 엔트로피 = 사건 지평선 넓이 / 4. 정보는 표면에 산다."
   },
   {
@@ -1581,18 +1585,23 @@ holographic_mult += codex_completion × codex_bonus_factor   // [ECONOMY]
 ### 13-3. 홀로그래픽 인코딩 연결
 
 ```
+// 87 = 전체 엔트리(UI 표시) / 76 = 수집 대상(LEGENDARY 자동 해금 11개 제외)
 수집 대상 76개 기준:
-codex_completion = collected_particles / 76   // 0.0 ~ 1.0
+codex_completion = collected_discoverable / 76   // 0.0 ~ 1.0
 
 홀로그래픽 배율 (systems §2-I):
 holographic_mult = 1.0 + log₁₀(D_total + 1) * holo_factor        // [ECONOMY]
-holographic_mult += codex_completion * codex_bonus_factor          // [ECONOMY]
-// [지시 3-2 / R2 하향] 도감 완성도 기여 상한: codex_completion=1.0 시 +0.35× 상한 확정 (구 +0.5×)
-//   codex_bonus_factor 역산 기준 = 0.35 (economy §7.1 / director-review §7.2 R2; ×1.25~1.35 미세조정 밴드)
-//   총 holographic_mult 의 codex 기여분 = min(codex_completion * codex_bonus_factor, 0.35)
+holographic_mult += min(codex_completion² * 0.35, 0.35)           // 곡선 B (제곱) 확정 — economy v0.3 §7.1 / 디렉터 §8.2
+// [램프 곡선 B 확정] bonus(c) = 0.35 × c²
+//   - c=0.65(중반) → +0.148×, dec26 단축 −12.9% (−30% 가드레일 여유 17%p)
+//   - c=1.00(완주) → +0.350×, dec26 단축 −25.9% (상한 ×1.35, factor 0.35 불변)
+//   - 완주 직전 급상승: 컬렉터 클라이맥스 체감 (필러 ① 수집=힘)
+// [분모] collected_discoverable = LEGENDARY 자동 해금 11개 제외한 플레이어 발견 입자 수
+// 근거: followup-codex-ramp.md §1-4·§3 / economy v0.3 §7.1 / director-review §8.2
 
 층별 완성도:
-layer_completion[L] = layer_collected[L] / layer_total[L]
+layer_completion[L] = layer_collected_discoverable[L] / layer_discoverable_total[L]
+// LEGENDARY 자동 해금은 layer_completion 100% 도달 시 발동 (분모에는 포함하지 않음)
 // 층 100% 완성 시 → 해당 층 LEGENDARY 엔트리 해금 + 층별 1회성 이벤트
 ```
 

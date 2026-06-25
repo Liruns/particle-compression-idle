@@ -408,19 +408,27 @@ if fluctuation_timer <= 0:
 
 **동작 (의사코드):**
 ```
-// 홀로그래픽 배율: 경계 면적 ∝ r² → 하지만 우리는 역수로 (작아질수록 r 감소)
-// 정보 밀도가 표면에 집약 → 총 D가 클수록 배율 상승
-holographic_mult = 1.0 + log₁₀(D_total + 1) * holo_factor  // [ECONOMY]
+// holographic_mult 구성 — 두 항의 합, 상한 ≤ ×1.35 (economy §7.1·director §7.2 확정)
+// ① D 항: 총 발견 데이터에 비례하는 기본 배율
+//    holo_factor = 0.008, D_total이 클수록 증가하되 기여 상한 +5.8% (≤+0.058×)
+D_total = D_current_run + D_lifetime      // D_lifetime 100% 보존 (§5-2)
+D_holo_bonus = log₁₀(D_total + 1) * 0.008  // 기여 상한 +5.8%
 
-// D_total = 현재 런 + 이전 런 누적 (상전이 후에도 부분 보존, 연구로 보존률 증가)
-D_total = D_current_run + D_lifetime * preservation_rate     // preservation_rate [ECONOMY]
+// ② codex² 항: 도감 완성도 제곱 형태의 수집 보너스
+//    완성도 1.0(만렙)에서 최대 +0.35× → holographic_mult 총 상한 ×1.35
+//    B_HOLO(research-tree B_HOLO 노드)의 도감 비례 시너지 배율은 이 항에 흡수됨
+//    B_HOLO를 별도 holographic 가산항으로 추가하면 ×1.454 → dec26 −31.2% FAIL
+codex_completion = collected_particles / total_particles  // 0~1
+codex_bonus = codex_completion^2 * 0.35  // 0 → +0.35× (완성도 제곱, 후반 집중 보상)
+
+holographic_mult = 1.0 + D_holo_bonus + codex_bonus  // ≤ 1.0 + 0.058 + 0.35 = ×1.408
+// 실제 상한: D항 + codex항 합산 ≤ +0.35× 유지 (D항이 작으므로 구조적 충족)
+// economy §7.1 검증: holographic_mult ≤ ×1.35, dec26 단축 ≤ −25.9%
 
 production_total *= holographic_mult
-
-// 도감 완성도 보너스 추가
-codex_completion = collected_particles / total_particles      // 0~1
-holographic_mult += codex_completion * codex_bonus_factor     // [ECONOMY]
 ```
+
+> **B_HOLO 흡수 규칙 (director-review §3.4 / economy §7.5):** B_HOLO 노드(research-tree.md)는 holographic_mult에 별도 가산항을 추가하지 않는다. B_HOLO의 효과는 codex²항 계수 강화(즉 위 codex_bonus 곱 증폭)로 표현하며, 전체 holographic_mult ≤ ×1.35 상한 내에서 관리된다. 별도 holographic 가산항 신설 금지.
 
 **기존 시스템 상호작용:**
 - 도감과 연구 트리가 처음으로 **생산 효율에 직접** 연결됨
@@ -471,6 +479,100 @@ if r <= PLANCK_LENGTH:                           // 1.616e-35 m
 - 반복 플레이에서 "이번 런은 어느 서브층을 최적화할 것인가" 메타 전략
 
 **왜 재미있는가:** 도달한 순간 "우주의 가장 작은 것에 닿았다"는 카타르시스. 시공간 자체가 붕괴한다는 과장된 텍스트가 최종 보상의 무게를 준다. 그리고 또 다시 시작.
+
+---
+
+### 2-K. 빅 크런치 재하강 차별화 (반복 런 메타)
+
+**director-review §7.1 후속-A1 확정 구현.** 재하강 루프가 "동일한 6일 사이클 반복"이 아니라 매 회차 다른 결로 체감되게 하는 기계적 차별화 설계.
+
+#### 핵심 레버 1 — 집중 서브층 선택 (1순위)
+
+빅 크런치 후 새 런 시작 시 6개 미지 서브층 중 1개를 **집중 서브층**으로 지정한다.
+
+```
+// 빅 크런치 후 재하강 시작
+on_big_crunch_new_run(run_index):
+    if run_index == 1:
+        return  // 첫 런은 모든 서브층 첫 발견, 선택 없음
+
+    // 집중 서브층 선택 UI (이전 런 선택 기록 표시)
+    player_choice = show_focus_selection(UNKNOWN_LAYERS, get_focused_history())
+    current_run_focus = player_choice
+
+// 서브층 진입 시
+on_enter_sublayer(sublayer, run_index):
+    if sublayer == current_run_focus:
+        unlock_deep_content(sublayer, run_index)   // 심화 입자 2~3종 + D_PHASE 확장 노드
+        // 집중 서브층 체류: 기본 대비 +15% (심화 콘텐츠 소화 시간)
+    else:
+        // 비집중 서브층: QF 부스트로 빠른 재통과 (기존 캠페인 속도)
+
+// 서브층별 심화 콘텐츠 레지스트리 (도감 + D 가지 확장)
+deep_content = {
+    "preon":  ["P_exotic_1", "P_exotic_2", "D_E_deep_1", "D_E_deep_2"],
+    "string": ["S_exotic_1", "S_exotic_2", "D_F_deep_1"],
+    "loop":   ["L_exotic_1", "L_exotic_2", "D_G_deep_1", "D_G_deep_2"],
+    "foam":   ["Q_exotic_1", "D_H_deep_1"],
+    "info":   ["I_exotic_1", "I_exotic_2", "D_I_deep_1"],
+    "planck": ["PL_exotic_1", "PL_exotic_2", "D_I2_deep_1"]
+}
+```
+
+심화 콘텐츠 축적으로 도감 완성도 상승 → holographic_mult codex²항 램프업 → 재하강이 깊어질수록 배율 자연 증가.
+
+**회차별 아치:** 1회차 "발견" / 2~6회차 "탐구(서브층별)" / 7회차+ "최적화(선호 서브층 조합)".
+
+이것이 필러 ④("한 층=한 새로움")를 재하강 루프 안에서 구조적으로 강제한다.
+
+#### 핵심 레버 2 — D_current 보존율 회차 곡선 (2순위)
+
+```
+D_preservation_curve = {
+    1: None,  // 첫 런
+    2: 0.65,  // 재하강 첫 경험 — 진입 장벽 완화
+    3: 0.50,  // 기본 균형 (재투자 + 진행감)
+    4: 0.40,
+    5: 0.40,
+    6: 0.38,
+    7: 0.35   // 7회차+ 하한 유지
+}
+D_lifetime_preservation = 1.00  // 항상 100% 보존 (holographic D항 입력)
+```
+
+2회차 65% → "이미 구매한 노드 일부 즉시 재활성, 연구 재선택 압박 완화". 이후 점감으로 "어떤 노드를 다시 살지" 전략 결정 압박이 점진적으로 증가한다.
+
+#### 보조 레버 — run_speed_assist (개입 플레이어 능동 시간 보조)
+
+```
+// economy §7.5 negative result 반영:
+// 비용 감소는 방치 캘린더를 단축하지 못한다 (오프라인 바운드, 5.77일 고정).
+// 이 레버는 "캘린더 단축 약속"이 아니라
+// 개입 플레이어의 능동 시간(back-to-back)을 보조하는 레버다.
+run_speed_assist = {
+    1: 1.000,   // 기준
+    2: 0.952,   // 능동 런 약 5% 단축 (개입 플레이어만 체감)
+    3: 0.909,
+    4: 0.870,
+    5: 0.833,
+    6: 0.800    // 6회차+ 하한
+}
+// 방치 경로 캘린더: 회차에 관계없이 ~5.77일 (오프라인 cap·modifier가 지배)
+// 개입 경로 능동시간: run_speed_assist 누적 QF와 복합하여 단축
+```
+
+#### 회차별 변주 요약표
+
+| 회차 | 집중 서브층 | D보존율 | run_speed_assist | 방치 캘린더 | "다른 결" 요소 |
+|---|---|---|---|---|---|
+| 1 | (없음, 전체 발견) | — | 1.000 | 5.77일 | 6 서브층 첫 발견·메커니즘 학습 |
+| 2 | 선택 1 (6개 중) | 65% | 0.952 | 5.77일 | 집중 서브층 심화 입자·연구 해금 |
+| 3 | 선택 2 | 50% | 0.909 | 5.77일 | 두 번째 집중 서브층 탐구 |
+| 4~5 | 선택 3~4 | 40% | 0.833 | 5.77일 | 서브층 심화 조합 누적 |
+| 6 | 선택 5 | 38% | 0.800 | 5.77일 | 마지막 서브층 남기기 전략 |
+| 7+ | 자유 선택 | 35% | 0.800 | 5.77일 | 최적 조합 실험 |
+
+> **방치 경로와 개입 경로의 분리:** 방치 캘린더는 오프라인 cap(24h)·modifier(0.65)·체크인 케이던스가 지배하므로 모든 회차에서 ~5.77일로 고정된다. 재하강 차별화는 캘린더 숫자가 아니라 "각 회차의 경험 질(집중 서브층 + D 재투자 전략)"로 구현된다.
 
 ---
 
@@ -635,7 +737,7 @@ resonance_click_mult = 1.5          // 체인 전체에 짧은 배율 (§2-A)
 | 압축 에너지 `E` | 리셋 | 리셋 | 리셋 |
 | 압축 깊이 `C` | 리셋 | 리셋 | 리셋 |
 | 8단 체인 압축기 개수 | 리셋 | 리셋 | 리셋 |
-| 발견 데이터 `D` (현재 런) | 일부 보존 [ECONOMY]% | 일부 보존 [ECONOMY]% | 일부 보존 (연구 "D 보존율" 노드) |
+| 발견 데이터 `D` (현재 런) | 일부 보존 [ECONOMY]% | 일부 보존 [ECONOMY]% | **D_current 보존율 (회차 곡선)**: 2회차 65% / 3회차 50% / 4~5회차 40% / 6회차 38% / 7회차+ 35%. D_lifetime은 항상 100% 보존 (§5-5 참조). |
 | 양자 거품 `QF` | 영구 보존 + 누적 | 영구 보존 + 누적 | 영구 보존 + 누적 |
 | 입자 도감 | 완전 보존 | 완전 보존 | 완전 보존 |
 | 연구 트리 구매 | 완전 보존 | 완전 보존 | 완전 보존 |
