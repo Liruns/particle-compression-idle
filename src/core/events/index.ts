@@ -13,8 +13,12 @@
 
 /** 도메인 이벤트 맵. 후속 마일스톤에서 페이로드 타입 확장. */
 export interface GameEvents {
-  /** 상전이 발생(N회차). */
-  prestige: { count: number };
+  /** 상전이 발생(N회차·진입 서브층·획득 QF). (system-flows §4.1 단계 8) */
+  prestige: { count: number; prestigeIndex: number; layer: number; qfGain: string };
+  /** 상전이 가능 상태 진입(미지 벽 도달, 1회 — UI 탭 점등·사운드). (system-flows §3.3) */
+  prestige_ready: { prestigeIndex: number; previewQF: string };
+  /** 상전이 비트·실행 로그(UI 토스트·상태 로그용, narrative §5-B). */
+  prestige_beat: { prestigeIndex: number; execLine: string; beatLines: string[]; isFirst: boolean };
   /** 빅 크런치(재하강 run 진입). */
   bigCrunch: { runIndex: number };
   /** 입자 발견. */

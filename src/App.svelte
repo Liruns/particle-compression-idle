@@ -17,6 +17,7 @@
   import LayerCard from './ui/LayerCard.svelte';
   import CodexView from './ui/CodexView.svelte';
   import ResonanceWidget from './ui/ResonanceWidget.svelte';
+  import PrestigeView from './ui/PrestigeView.svelte';
   import Toast from './ui/Toast.svelte';
 
   let snap: GameSnapshot | null = null;
@@ -26,7 +27,7 @@
   let toast: Toast;
 
   /** 현재 탭. */
-  type Tab = 'compress' | 'codex';
+  type Tab = 'compress' | 'codex' | 'prestige';
   let tab: Tab = 'compress';
 
   const loadLabel: Record<GameSnapshot['loadKind'], string> = {
@@ -54,6 +55,13 @@
       bus.on('layerEnter', ({ layer }) => {
         const beat = layerEntryBeat(layer);
         if (beat) toast?.push('beat', beat.lines);
+      }),
+    );
+    // 상전이 비트(M1.5): 실행 로그 1줄 + 진입 비트(첫 상전이는 2줄). narrative §5-B.
+    busUnsubs.push(
+      bus.on('prestige_beat', ({ execLine, beatLines, isFirst }) => {
+        const lines = beatLines.length > 0 ? [execLine, ...beatLines] : [execLine];
+        toast?.push(isFirst ? 'legendary' : 'beat', lines);
       }),
     );
 
@@ -86,12 +94,25 @@
   async function onSave() {
     await game?.persist();
   }
+  // 상전이 실행(M1.5): QF 획득·리셋·부스트 + 메인 복귀(새 미지 서브층 런 시작).
+  function onPrestige() {
+    const result = game?.executePrestige();
+    if (result) tab = 'compress'; // 실행 성공 → 압축 메인으로(새 층).
+  }
+  function onPrestigeContinue() {
+    tab = 'compress'; // "압축 계속" — 더 큰 QF 위해 더 압축(상전이 탭 점등 유지).
+  }
 
   // r 게이지 중심 글로우 반경: dec 클수록 확대(3→14px, DESIGN glow.core).
   $: glowRadius = snap ? Math.min(14, 3 + snap.dec * 0.42) : 3;
   // 도감 탭은 첫 발견 후 등장(FTUE). 발견 시 압축 탭에 배지.
   $: showCodexTab = snap?.ftue.showCodexTab ?? false;
   $: codexCount = snap?.codex.collected ?? 0;
+  // 상전이 탭(M1.5): 미지 6벽 도달 시만 점등(알려진 물리 비점등, ui-flow §1-C·GDD §15).
+  $: showPrestigeTab = snap?.prestige.available ?? false;
+  $: prestigeFirst = (snap?.prestige.available && snap?.prestige.isFirst) ?? false;
+  // 상전이 탭이 사라졌는데 그 탭에 머물러 있으면 압축 메인으로 폴백(점등 해소·로드 직후 방어).
+  $: if (!showPrestigeTab && tab === 'prestige') tab = 'compress';
 </script>
 
 <Toast bind:this={toast} />
@@ -112,6 +133,15 @@
       {#if showCodexTab}
         <button class="tab" class:active={tab === 'codex'} on:click={() => (tab = 'codex')}>
           도감{#if codexCount > 0}<span class="tab-badge">{codexCount}</span>{/if}
+        </button>
+      {/if}
+      {#if showPrestigeTab}
+        <button
+          class="tab tab-prestige"
+          class:active={tab === 'prestige'}
+          class:first-glow={prestigeFirst}
+          on:click={() => (tab = 'prestige')}>
+          {prestigeFirst ? '미지 진입' : '상전이'}<span class="pt-dot" aria-hidden="true">●</span>
         </button>
       {/if}
     </nav>
@@ -187,6 +217,11 @@
       {/if}
     {:else if tab === 'codex'}
       <CodexView codex={snap.codex} />
+    {:else if tab === 'prestige'}
+      <PrestigeView
+        prestige={snap.prestige}
+        onPrestige={onPrestige}
+        onContinue={onPrestigeContinue} />
     {/if}
 
     <footer>
@@ -272,6 +307,37 @@
     padding: 0 5px;
     min-width: 16px;
     text-align: center;
+  }
+
+  /* 상전이 탭 점등 도트(ui-flow §1-C): ● QF 녹. 첫 상전이는 글로우 펄스(1.5s, ui-flow §8-B). */
+  .tab-prestige .pt-dot {
+    color: var(--qf);
+    margin-left: 4px;
+    font-size: 0.7em;
+    vertical-align: middle;
+  }
+  .tab-prestige.first-glow {
+    color: var(--qf);
+  }
+  .tab-prestige.first-glow .pt-dot {
+    animation: pt-glow 1.5s ease-in-out infinite;
+  }
+  @keyframes pt-glow {
+    0%,
+    100% {
+      opacity: 0.5;
+      text-shadow: 0 0 2px transparent;
+    }
+    50% {
+      opacity: 1;
+      text-shadow: 0 0 8px var(--qf);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tab-prestige.first-glow .pt-dot {
+      animation: none;
+      opacity: 1;
+    }
   }
 
   /* r 게이지: 중심 글로우(--col-glow-core), dec 커질수록 반경 확대(DESIGN glow.core). */

@@ -14,7 +14,7 @@
  * UI(App.svelte)는 이 모듈이 노출하는 readonly 스냅샷을 구독해 표시만 한다(§4.1 단방향).
  */
 
-import { Decimal, D, add, sub } from './core/bignum';
+import { Decimal, D, ZERO, add, sub } from './core/bignum';
 import { getState, setState, createInitialState, CHAIN_TIERS, type GameState } from './core/state';
 import type { SlotPhase } from './core/layers/mechanics';
 import { MANUAL_COMPRESS } from './data/constants';
@@ -36,8 +36,19 @@ import {
   layersEnteredSince,
   currentLayer,
   isNearKnownBoundary,
+  layerByIndex,
+  LAST_KNOWN_LAYER_INDEX,
   type LayerDefinition,
 } from './core/layers';
+import { formatNumber } from './core/format';
+import {
+  previewPrestige,
+  applyPrestigeReset,
+  nextPrestigeIndex,
+  type PrestigePreview,
+} from './core/prestige';
+import { seedBought } from './core/state';
+import { prestigeBeat, prestigeExecLog } from './data/narrative';
 import {
   evaluateDiscoveries,
   knownLayerCompletions,
@@ -115,6 +126,31 @@ export interface ResonanceSnapshot {
   multiplier: number;
 }
 
+/**
+ * 상전이 표시용 스냅샷(ui-flow §5 상전이 화면, M1.5). 미지 6벽 도달 시만 점등(알려진 물리 비점등).
+ *  UI는 이 값만 읽어 상전이 탭 점등·상전이 화면(QF 획득량·확인 버튼)을 그린다(단방향 §4.1).
+ */
+export interface PrestigeSnapshot {
+  /** 상전이 가능 여부(미지 벽 도달 → 탭 점등 게이트). false면 상전이 탭/화면 숨김. */
+  available: boolean;
+  /** 다음 상전이 prestigeIndex(1=프리온 … 6=플랑크). 0=불가. */
+  prestigeIndex: number;
+  /** 이번 상전이로 받을 QF(예정량, Decimal). UI "+{N} QF 획득" 표시. */
+  qfGain: Decimal;
+  /** 상전이 후 QF 누적 총량(Decimal). */
+  qfTotal: Decimal;
+  /** 상전이 후 적용될 production_mult(부스트, Decimal). UI "다음 런 배율 ×{m}". */
+  nextMult: Decimal;
+  /** 진입할 미지 서브층 한국어 이름(프리온 등). available=false면 빈 문자열. */
+  targetLayerKo: string;
+  /** 진입할 미지 서브층 영문 이름. */
+  targetLayerEn: string;
+  /** 첫 상전이(PT1) 여부 — UI 특별 강조 연출(딥 퍼플, 2줄 내러티브, ui-flow §5-B). */
+  isFirst: boolean;
+  /** 상전이 횟수(N_prestige). */
+  count: number;
+}
+
 /** UI가 읽는 표시용 스냅샷(읽기 전용). Decimal 그대로 — format은 UI에서. */
 export interface GameSnapshot {
   C: Decimal;
@@ -138,6 +174,8 @@ export interface GameSnapshot {
   codex: CodexSnapshot;
   /** 오비탈 공명 위젯(M1.4 — 원자층 L2). */
   resonance: ResonanceSnapshot;
+  /** 상전이 상태(M1.5 — 미지 벽 도달 시 점등). */
+  prestige: PrestigeSnapshot;
   /** FTUE 점진 공개 상태(M1.3). */
   ftue: FtueState;
   totalTicks: number;
@@ -157,6 +195,8 @@ export class Game {
   private readonly scheduler = new Scheduler();
   private listeners = new Set<SnapshotListener>();
   private loadKind: LoadResult['kind'] = 'fresh';
+  /** 상전이 가능 1회 발화 가드(prestige_ready 이벤트 중복 방지). 가능→불가→가능 재발화 허용. */
+  private prestigeReadyEmitted = false;
 
   constructor() {
     this.platform = detectPlatform();
@@ -288,6 +328,28 @@ export class Game {
       s.codex.discovered.add(id);
       bus.emit('codexDiscover', { particleId: id });
     }
+
+    // 상전이 가능 판정(M1.5). 미지 벽(dec19~26) 도달 + 미실행 상전이가 있으면 점등.
+    //   prestige_ready는 가능 상태 진입 순간 1회만(UI 탭 점등·사운드). 멱등 — 매 tick 재발화 안 함.
+    const pIndex = nextPrestigeIndex(dec, s.prestige.count);
+    if (pIndex >= 1) {
+      if (!this.prestigeReadyEmitted) {
+        this.prestigeReadyEmitted = true;
+        const preview = previewPrestige(
+          dec,
+          s.prestige.count,
+          s.resources.lifetime_C,
+          s.prestige.qfClaimed,
+        );
+        bus.emit('prestige_ready', {
+          prestigeIndex: pIndex,
+          previewQF: (preview ? preview.qfGain : ZERO).toString(),
+        });
+      }
+    } else {
+      // 벽 미도달(또는 상전이 실행으로 해소) → 가드 해제(다음 벽에서 재발화 가능).
+      this.prestigeReadyEmitted = false;
+    }
   }
 
   /**
@@ -357,6 +419,93 @@ export class Game {
   }
 
   /**
+   * 현재 활성 층 정의(M1.5). 알려진 물리(L1~L5)는 dec에서 파생, 미지 서브층(L6+)은
+   *   state.layers.currentIndex가 진실(상전이로 진입 — C가 리셋돼 dec=0이라 dec 파생 불가).
+   *   즉 상전이 후엔 currentIndex(=6 프리온 등)가 dec 파생 층을 덮어쓴다.
+   */
+  private activeLayer(dec: number): LayerDefinition {
+    const s = getState();
+    // 미지 진입(상전이 1회 이상 + currentIndex가 알려진 물리 상한 초과) → currentIndex 기준.
+    if (s.layers.currentIndex > LAST_KNOWN_LAYER_INDEX) {
+      return layerByIndex(s.layers.currentIndex) ?? currentLayer(dec);
+    }
+    return currentLayer(dec);
+  }
+
+  /**
+   * 다음 상전이 미리보기(현재 상태 기준). UI 상전이 화면·스냅샷 공용(없으면 null).
+   *   순수 계산 — 상태를 바꾸지 않는다. dec는 현재 C에서 파생.
+   */
+  private currentPreview(dec: number): PrestigePreview | null {
+    const s = getState();
+    return previewPrestige(dec, s.prestige.count, s.resources.lifetime_C, s.prestige.qfClaimed);
+  }
+
+  /**
+   * 상전이 실행(system-flows §4.1, M1.5 첫 상전이 PT1). 플레이어가 상전이 화면 "진입" 클릭 시.
+   *   1. 미리보기로 QF·진입 층 계산(가능하지 않으면 무시 — 이중 클릭/미도달 방어).
+   *   2. 리셋 매트릭스 적용(systems §5-2): E·C·체인 리셋 / lifetime_C·QF·도감·연구·D_lifetime 보존.
+   *   3. QF 확정 → production_mult 부스트 영구 적용(= 1 + 0.25·log₁₀(1+QF)).
+   *   4. 미지 서브층 진입(currentIndex 갱신) + §3.3 오프라인 보너스 플래그 설정.
+   *   5. 이벤트 발행(prestige) + 상전이 비트(narrative) → UI 토스트·로그.
+   *
+   * @returns 실행된 PrestigePreview(성공) 또는 null(불가).
+   */
+  executePrestige(): PrestigePreview | null {
+    const s = getState();
+    const dec = computeDec(s.resources.C);
+    const preview = this.currentPreview(dec);
+    if (!preview) return null; // 미도달/이중 클릭 방어(§4.3 이중 상전이 방지).
+
+    // 리셋 매트릭스 적용(순수 계산 → 결과로 state 교체). lifetime_C·도감·연구·D_lifetime은 보존(미변경).
+    const reset = applyPrestigeReset(preview, s.resources.QF, s.prestige.count, seedBought);
+
+    // --- 리셋: E·C·체인 보유수(systems §5-2) ---
+    s.resources.E = reset.E;
+    s.resources.C = reset.C;
+    s.chain.bought = reset.bought;
+    s.chain.produced = reset.produced;
+
+    // --- D_current: 첫 상전이(run_index 1) = 0 리셋(첫 런 보존율 없음, system-flows §4.1) ---
+    //   회차 곡선 보존(2회차 65% 등)은 빅 크런치 재하강(M3). 여기선 단순 0.
+    s.resources.D_current = ZERO;
+
+    // --- 보존·확정: QF 누적, qfClaimed 확정(production_mult 부스트 영구) ---
+    s.resources.QF = reset.QF;
+    s.prestige.qfClaimed = reset.qfClaimed;
+    s.prestige.count = reset.count;
+
+    // --- 미지 서브층 진입(프리온 등). currentIndex가 dec 파생 층을 덮어쓴다(activeLayer 참조) ---
+    s.layers.currentIndex = reset.layerIndex;
+
+    // --- §3.3 오프라인 보너스 1회성 플래그(상전이 직후 첫 오프라인 modifier=1.0) ---
+    s.prestige.offlineBonusPending = true;
+
+    // 상전이 해소 → prestige_ready 가드 해제(다음 벽 도달 시 재점등 가능).
+    this.prestigeReadyEmitted = false;
+
+    // --- 이벤트·내러티브 발행(system-flows §4.1 단계 8) ---
+    bus.emit('prestige', {
+      count: reset.count,
+      prestigeIndex: preview.prestigeIndex,
+      layer: reset.layerIndex,
+      qfGain: preview.qfGain.toString(),
+    });
+    // 상전이 실행 로그(상태 로그 1줄) + 진입 비트(narrative §5-B).
+    const beat = prestigeBeat(preview.prestigeIndex);
+    const execLine = prestigeExecLog(formatNumber(preview.qfGain, 0), preview.targetLayer.nameKo);
+    bus.emit('prestige_beat', {
+      prestigeIndex: preview.prestigeIndex,
+      execLine,
+      beatLines: beat ? beat.lines : [],
+      isFirst: reset.count === 1,
+    });
+
+    this.notify();
+    return preview;
+  }
+
+  /**
    * 결정적 시간 전진(초). 테스트·오프라인·dev 검증용 — rAF 없이 고정 dt tick을 직접 돌린다.
    * (백그라운드 탭에서 rAF가 스로틀돼도 동일 로직을 재현. system-flows §12.1 결정성.)
    */
@@ -389,7 +538,8 @@ export class Game {
     }
 
     const dec = computeDec(s.resources.C);
-    const def: LayerDefinition = currentLayer(dec);
+    // 활성 층: 알려진 물리는 dec 파생, 미지(상전이 진입)는 currentIndex(프리온 등)가 진실.
+    const def: LayerDefinition = this.activeLayer(dec);
     const discovered = s.codex.discovered;
 
     // T1 첫 구매 가능 여부(FTUE 체인 노출 게이트).
@@ -419,6 +569,33 @@ export class Game {
       ? mult.mul(resonance.multiplier)
       : mult;
 
+    // 상전이 스냅샷(M1.5). 미지 벽 도달 시만 점등. 미리보기로 QF 획득량·진입 층 계산.
+    const preview = this.currentPreview(dec);
+    const prestige: PrestigeSnapshot = preview
+      ? {
+          available: true,
+          prestigeIndex: preview.prestigeIndex,
+          qfGain: preview.qfGain,
+          qfTotal: preview.qfTotal,
+          // 상전이 후 적용될 부스트(QF_total 기준). 현재 표시 배율과 별개 — "다음 런 배율".
+          nextMult: productionMult(preview.qfTotal),
+          targetLayerKo: preview.targetLayer.nameKo,
+          targetLayerEn: preview.targetLayer.nameEn,
+          isFirst: s.prestige.count === 0, // 첫 상전이(아직 0회) → 특별 연출.
+          count: s.prestige.count,
+        }
+      : {
+          available: false,
+          prestigeIndex: 0,
+          qfGain: ZERO,
+          qfTotal: s.prestige.qfClaimed,
+          nextMult: mult,
+          targetLayerKo: '',
+          targetLayerEn: '',
+          isFirst: s.prestige.count === 0,
+          count: s.prestige.count,
+        };
+
     return {
       C: s.resources.C,
       E: s.resources.E,
@@ -447,6 +624,7 @@ export class Game {
         layerCompletions: knownLayerCompletions(discovered),
       },
       resonance,
+      prestige,
       ftue,
       totalTicks: this.loop.totalTicks,
       loadKind: this.loadKind,
@@ -457,6 +635,7 @@ export class Game {
   resetToFresh(): void {
     setState(createInitialState());
     this.loadKind = 'fresh';
+    this.prestigeReadyEmitted = false; // 상전이 가드 초기화(M1.5).
     // dec0에서 물 분자(unlockDec 0) 즉시 발견 → 시작부터 도감 1개(FTUE 도감 탭 등장).
     this.processProgression(computeDec(getState().resources.C));
     this.notify();

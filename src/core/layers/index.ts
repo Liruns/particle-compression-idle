@@ -16,6 +16,14 @@ export type { LayerDefinition };
 export { LAYERS, KNOWN_LAYERS, layerByIndex };
 
 /**
+ * 미지 서브층 prestigeIndex(1..6) → 층 정의. (prestige 진입 층 조회용 — M1.5)
+ *   prestigeIndex 1=프리온(L6) … 6=플랑크(L11). 알려진 물리(prestigeIndex=null)는 제외.
+ */
+export function layerByPrestigeIndex(prestigeIndex: number): LayerDefinition | undefined {
+  return LAYERS.find((l) => l.prestigeIndex === prestigeIndex);
+}
+
+/**
  * 현재 dec에서의 알려진 물리 층 index(1..5).
  *  - dec < 1 → L1(분자).  dec ≥ enterDec인 가장 깊은 알려진 물리 층.
  *  - 알려진 물리 캡: dec9(쿼크) 이상이어도 L5에 머문다(미지 진입 = 상전이, M1.5+).
