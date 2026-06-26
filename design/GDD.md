@@ -1,8 +1,15 @@
 # 미립자 압축 인크리멘탈 — 게임 디자인 문서 (GDD v0.3)
 
-- 작성일: 2026-06-25
+- 작성일: 2026-06-25 · 갱신: 2026-06-26 (우주적 현미경 비주얼/UI 피벗 sync)
 - 상태: 코어 컨셉·엔진·페이싱·**상전이 보상·메타(도감/연구) 구조·층 설계·오프라인·비용곡선·후속 경제 패스(도감 램프곡선·연구 시너지·재하강 차별화·D보존·베켄슈타인) = 검증 완료**(시뮬 실증 + 독립 QA + 디렉터 승인 R3). 프로토타입 구현 + 재하강 심화 콘텐츠 분량 + D_total 텔레메트리 = TBD.
 - **v0.3 (후속 경제 패스 R3 sync)**: §7 비용수식 경고 → 확정 처리. §8 페이싱 표 economy §2.2 정합 확인. §9 재하강 차별화(회전 집중 서브층 + 방치/개입 분리) 추가. §13 백로그에 도감 곡선 B·연구 C안·베켄슈타인 K=1.05·D보존 50% = 확정 이관. 근거: `economy.md` §7 v0.3, `director-review.md` §8.
+
+> ## 🔭 비주얼/UI 피벗 — "우주적 현미경" (2026-06-26)
+> 기존 다크 대시보드가 "AI 느낌"(무난한 선택의 합=무개성)이라는 오너 피드백 → **표현 레이어 전면 피벗.** 비주얼=11층 distinct 세계 + 전환 하강 + 층별 탈채도 발광 + 색온도 아크, UI=다이제틱 공허 게임판(자원=성표 주석, 8단 체인=궤도 껍질, 능동 메커니즘=떠다니는 입자 직접 만지기, 관조↔개입 모델). **단일 브랜드색 `#3ecf8e`·대시보드(3패널·카드·테이블·게이지) 폐기.**
+> - **불변:** 코어 루프·4필러·경제·수식·밸런스·층 구조·상전이·메커니즘 = **한 줄도 안 바뀜.** 바뀌는 것은 *surfacing*(화면에 드러나는 방식)뿐.
+> - **권위 문서:** 통합 방향 = `cosmic-direction.md`(SSOT), 비주얼 상세 = `art-direction-cosmic.md`. 본 GDD의 표현 관련 서술(§15 UX/화면 등)은 그 문서를 가리킨다. `art-direction.md`(v0.1)·`ux.md`/`ui-flow.md`의 대시보드 레이아웃 = SUPERSEDED.
+> - **진행:** 정거장2 진행 중. 이관 1단계(11 세계 렌더) 완료(check 0/test 254), 2단계(공허 게임판 UI) 다음.
+
 - 단일 진실 소스. 상세 설계는 `design/` 하위 문서 참조([§16](#16-관련-설계-문서)).
 
 ---
@@ -183,19 +190,25 @@
 - **발견 아크:** 확인(알려진 물리) → 경이 → 충격 → 침묵 → 붕괴(플랑크). 미지로 갈수록 연구소장의 목소리가 신중·간결해짐.
 - **트리거 분리:** 층 전환 비트(11개, 스케일 진입) ≠ 상전이 메시지(7개, 벽 도달). 쿼크→프리온만 둘이 결합(첫 상전이).
 
-## 15. UX / 화면 (`ux.md`)
-- **탭:** 압축 메인 / 연구 / 도감 / 상전이 / 설정. 메인 = 반경 r 시각화(작아짐 피드백) + 자원 readout + 8단 체인 + 현재 층 메커니즘 위젯.
-- **FTUE(첫 5분):** 압축 클릭 → Tier-1 자동화 → 오비탈 공명 슬롯 → 첫 D/연구 해금 → (이후) 첫 상전이. 텍스트 벽 없이 점진 공개.
-- **상전이 탭 점등:** 미지 6벽 + 빅 크런치에만. 알려진 물리 5층 진입은 비점등(층 카드만 갱신). 첫 상전이(dec19) = 특별 강조 연출.
-- **"작아짐=강해짐" 강화:** r은 작아지는데 숫자·글로우는 커지는 화면 역설.
+## 15. UX / 화면 (`cosmic-direction.md` §3·§4 — 권위. `ux.md`/`ui-flow.md` 정보 로직 유효 / 레이아웃 SUPERSEDED)
+
+> **피벗:** 대시보드(탭·3패널·카드·테이블·게이지) → **다이제틱 공허 게임판.** 아래는 새 모델. 표현 상세 = `cosmic-direction.md`, FTUE·점등·진입조건 *로직* = `ux.md`/`ui-flow.md`(유효).
+
+- **공허가 곧 게임판 (관조 ↔ 개입):** 평소(관조) = 중앙의 하강하는 물질(현재 층 세계) + 공허 가장자리에 뜬 **희미한 성표 주석**(자원 E/C/D/QF — 카드 아님, 테두리·배경 없는 발광 텍스트). 개입 = 장치(연구/도감/상전이)가 어둠 가장자리 노드로 잠들어 있다가 손 뻗으면 *피어남(bloom)*.
+- **8단 체인 = 궤도 껍질:** 스프레드시트 테이블이 아니라 흡수한 입자가 중심 물질을 둘러싼 동심 발광 링으로 쌓임. 구매하면 그 켜가 밝아지고 회전이 빨라진다 = "작아짐=강해짐"의 직접 구현.
+- **능동 메커니즘 = 떠다니는 입자 직접 만지기:** 수동압축(물질을 만져 응축)·오비탈 공명(궤도 전자를 타이밍에 클릭)·위상 겹침·하모닉스 — 슬롯/버튼/토글 폐기, 입자 직접 조작. *메커니즘·효과는 동일, 입력 표면만 다이제틱*(`cosmic-direction.md` §4).
+- **FTUE(첫 5분):** 압축(만지기) → Tier-1 자동화 → 오비탈 공명 → 첫 D/연구 해금 → (이후) 첫 상전이. 텍스트 벽 없이 점진 공개. (순서·점진공개 로직 = `ux.md` §3 유효.)
+- **상전이 점등:** 미지 6벽 + 빅 크런치에만. 알려진 물리 5층 진입은 비점등(층 카드만 갱신). 첫 상전이(dec19) = 색온도 식는 머니샷(`art-direction-cosmic.md` §6). (점등 조건 로직 = `ux.md` §5-1 / `ui-flow.md` §1-C 유효.)
+- **"작아짐=강해짐" 강화:** r은 작아지는데 중심 빛·궤도 껍질은 커지는 화면 역설 + 색온도 아크(따뜻→차가움→무색)로 "11개 다른 세계"(필러 ④)를 색만으로 구현.
 
 ---
 
 ## 16. 관련 설계 문서
-- 설계: `systems.md`(메커니즘·층·상전이) · `economy.md`(수식·시뮬·페이싱) · `codex.md`(입자 도감) · `research-tree.md`(연구 노드) · `narrative.md`(세계관·보이스) · `ux.md`(화면·FTUE)
+- **★ 현 방향 (우주적 현미경 피벗 — 2026-06-26)**: `cosmic-direction.md`(**통합 방향 SSOT** — 비주얼+UX+UI 모델+이관 진행) · `art-direction-cosmic.md`(**비주얼 권위** — 11층 발광색·색온도 아크·서체·금지목록·머니샷). 표현/비주얼 결정은 이 둘이 우선.
+- 설계: `systems.md`(메커니즘·층·상전이) · `economy.md`(수식·시뮬·페이싱) · `codex.md`(입자 도감) · `research-tree.md`(연구 노드) · `narrative.md`(세계관·보이스) · `ux.md`(화면·FTUE — *정보 로직 유효 / 대시보드 레이아웃 SUPERSEDED → cosmic-direction*)
 - 후속 경제 패스(R3): `followup-systems.md`(연구 시너지 C안·D보존·재하강 차별화) · `followup-codex-ramp.md`(도감 곡선 B·베켄슈타인 K) · `followup-bigcrunch-framing.md`(빅 크런치 시작점 프레이밍 + ux) · `economy.md` §7 v0.3
-- **프로덕션·기술·출시(신규)**: `scope-mvp.md`(MVP 컷·4단계 게이트) · `roadmap.md`(4정거장 제작 순서) · `tech-architecture.md`(세이브·BigNumber·NW.js 패키징) · `art-direction.md`(비주얼 디렉션) · `audio-design.md`(사운드) · `launch-plan.md`(Steam 출시·가격·EA) · `risk-register.md`(리스크 점검) · `asset-list.md`(에셋 트래커)
+- **프로덕션·기술·출시(신규)**: `scope-mvp.md`(MVP 컷·4단계 게이트) · `roadmap.md`(4정거장 제작 순서 — v0.2 피벗 반영) · `tech-architecture.md`(세이브·BigNumber·NW.js 패키징) · ~~`art-direction.md`~~ → **`art-direction-cosmic.md`로 피벗**(art-direction.md v0.1 = SUPERSEDED) · `audio-design.md`(사운드) · `launch-plan.md`(Steam 출시·가격·EA) · `risk-register.md`(리스크 점검) · `asset-list.md`(에셋 트래커)
 - **상용·출시·운영(신규)**: `business-legal-checklist.md`(GRAC 등급분류·사업자·W-8BEN·개인정보) · `budget.md`(예산·손익분기) · `reality-check.md`(정직한 공수·헌신) · `localization-plan.md`(한+영 i18n) · `accessibility.md`(색맹·모션·대비) · `analytics-plan.md`(리텐션·퍼널·텔레메트리) · `playtest-plan.md`(실플레이어 검증) · `community-ops.md`(커뮤니티·라이브옵스)
-- **개발·엔지니어링(신규, TDD·구현 스펙·프로세스)**: `tech-spec.md`(기술사양) · `dev-schedule.md`(개발일정·마일스톤) · `glossary.md`(용어집) · `ui-flow.md`(UI·화면흐름 상세) · `data-spec.md`(데이터 사전) · `system-flows.md`(시스템흐름·예외) · `content-pipeline.md`(콘텐츠 파이프라인) · `account-sync-recovery.md`(계정·동기화·복구) · `cicd-plan.md`(CI/CD) · `asset-pipeline.md`(에셋 관리) · `test-strategy.md`(테스트 전략) · `DESIGN.md`(디자인 토큰 — oh-my-design 형식 게임 적응)
+- **개발·엔지니어링(신규, TDD·구현 스펙·프로세스)**: `tech-spec.md`(기술사양) · `dev-schedule.md`(개발일정·마일스톤) · `glossary.md`(용어집) · `ui-flow.md`(UI·화면흐름 상세 — *흐름·상태 로직 유효 / 대시보드 레이아웃 SUPERSEDED → cosmic-direction*) · `data-spec.md`(데이터 사전) · `system-flows.md`(시스템흐름·예외) · `content-pipeline.md`(콘텐츠 파이프라인) · `account-sync-recovery.md`(계정·동기화·복구) · `cicd-plan.md`(CI/CD) · `asset-pipeline.md`(에셋 관리) · `test-strategy.md`(테스트 전략) · `DESIGN.md`(디자인 토큰 — *비색상 토큰 유효 / 색상 팔레트 SUPERSEDED → art-direction-cosmic §2*)
 - 검증/결정: `director-review.md`(필러 검토·FAIL-1 중재·CONCERN-NEW·**§8 R3 통합 심판**) · `qa-report.md`·`qa-report-v2.md`·`qa-report-v3.md`(독립 검증)
 - 리서치 4건: `research/` · 시뮬 코드: `sim/`(python, `campaign6.py`·`bigcrunch.py`·`final_verify.py`·`synergy_codex_integ.py`·`redescent_diff.py`·`bekenstein_k.py` 등)

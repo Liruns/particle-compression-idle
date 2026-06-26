@@ -1,10 +1,26 @@
 # UI 흐름 & 화면 상세 스펙 (ui-flow.md v0.1)
 
+> ## ⚠️ 부분 SUPERSEDED — UI 모델 피벗 (대시보드 → 공허 게임판, 2026-06-26)
+>
+> **권위 UI 모델: [`cosmic-direction.md`](cosmic-direction.md) §3·§4 + [`art-direction-cosmic.md`](art-direction-cosmic.md) §4.** 비주얼: art-direction-cosmic.md(art-direction.md v0.1은 SUPERSEDED).
+>
+> **레이아웃 스펙 = 대체됨 (SUPERSEDED):** 본 문서가 그린 **대시보드 화면 레이아웃**(3패널 배치·자원 카드·체인 테이블·링 게이지·우측 메커니즘 위젯의 *픽셀 배치*)은 표현 레이어로서 교체됐다. 다이제틱 공허 게임판(자원=성표 주석, 체인=궤도 껍질, 능동=입자 만지기, 장치=어둠에서 피어나는 노드)으로 재구현한다.
+>
+> **흐름·상태 로직 = 유효 (잃지 말 것):** 본 문서의 *구현 가치*인 흐름·상태·조건은 그대로 산다 —
+> - **화면 목록·상태 전이 다이어그램**(§1): SCR-01~09, 로드→오프라인→메인→탭→상전이→빅크런치→RUN_START→FOCUS_SELECT 흐름 유효.
+> - **탭 점등 조건 완전표**(§1-C): 미지 6벽(dec19/20.5/22/23.5/25/25.5)+빅크런치(dec26)에만 점등 — 유효.
+> - **각 화면 진입 조건·상태별 표시 로직**(§2~6): *무엇이 언제 보이는가*는 유효, *어떻게 배치되는가*만 공허 모델로.
+> - **FTUE 첫 5분 단계**(§7), **층 진입 전환 흐름**(§8), **빅 크런치→재하강 + 집중 서브층 선택 UI 로직**(§9), **오프라인 복귀**(§10), **점진 공개 규칙·배지**(§11), **플랫폼 차이**(§12), **정거장별 우선순위**(§13) — 로직 유효, 표현만 재해석.
+>
+> **2단계 구현 지침:** 이 문서를 "흐름·조건의 진실"로 쓰되, 화면 *그리기*는 cosmic-direction §3·§4를 따른다. 충돌 시: **언제/무엇 = 이 문서, 어떻게/어디 = cosmic-direction.** 이력 보존을 위해 본문은 삭제하지 않는다.
+
+---
+
 - 작성: ux-designer
-- 기준: ux.md v0.1 / followup-bigcrunch-framing.md UX 섹션 / art-direction.md / GDD.md §15 / scope-mvp.md / accessibility.md
-- 상태: game-programmer 구현용 구현 스펙 — 화면별 레이아웃·상태·흐름 확정
-- 작성일: 2026-06-26
-- 이 문서의 역할: ux.md(고수준 탭·FTUE 원칙)를 *구현 스펙*으로 내려받는다. game-programmer는 이 문서를 직접 참고해 화면을 짠다.
+- 기준: ux.md v0.1 / followup-bigcrunch-framing.md UX 섹션 / ~~art-direction.md~~ **art-direction-cosmic.md** / GDD.md §15 / scope-mvp.md / accessibility.md
+- 상태: ~~game-programmer 구현용 구현 스펙 — 화면별 레이아웃·상태·흐름 확정~~ → **레이아웃 SUPERSEDED(공허 게임판) / 흐름·상태·조건 로직 유효.** (위 배너)
+- 작성일: 2026-06-26 (피벗 배너 추가)
+- 이 문서의 역할: ux.md(고수준 탭·FTUE 원칙)를 *구현 스펙*으로 내려받는다. ~~game-programmer는 이 문서를 직접 참고해 화면을 짠다.~~ → **흐름·조건은 이 문서, 화면 표현은 cosmic-direction §3·§4.**
 
 ---
 
