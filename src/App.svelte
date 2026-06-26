@@ -64,6 +64,12 @@
   /** 현재 층 발광색(QF 성표 = 층색 §3-C). pushRender에서 갱신. */
   let layerRgb = '159,184,154';
 
+  /** 메커니즘 첫 등장 안내(게임판 다이제틱이라 무엇을 할지 1회 안내). 부팅·로드 활성은 발화 안 함. */
+  let mechIntroEnabled = false;
+  let prevResonance = false;
+  let prevPhase = false;
+  let prevHarmonics = false;
+
   onMount(async () => {
     game = new Game();
     unsub = game.subscribe((s) => {
@@ -105,8 +111,31 @@
     );
 
     await game.start();
+    // 부팅·로드 동안 활성된 메커니즘은 안내 발화 안 함 — 시작 후의 실제 진입 전이만 가르친다.
+    if (snap) {
+      prevResonance = snap.resonance.active;
+      prevPhase = snap.phase.active;
+      prevHarmonics = snap.harmonics.active;
+    }
+    mechIntroEnabled = true;
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game;
   });
+
+  /** 메커니즘이 처음 활성될 때(inactive→active 전이) 1회 안내. 부팅/로드 후의 실제 진입만. */
+  function checkMechIntro(s: GameSnapshot): void {
+    if (!mechIntroEnabled) return;
+    if (s.resonance.active && !prevResonance)
+      toast?.push('beat', ['오비탈 공명 — 궤도를 도는 전자가 밝아질 때 만져 공명하라.']);
+    if (s.phase.active && !prevPhase)
+      toast?.push('beat', ['위상 겹침 — 세 상태 노드를 만져 고정한다. 무엇을 우선할지 선택하라.']);
+    if (s.harmonics.active && !prevHarmonics)
+      toast?.push('beat', ['진동 하모닉스 — 충전이 차면 다음 티어 껍질이 공명한다.']);
+    prevResonance = s.resonance.active;
+    prevPhase = s.phase.active;
+    prevHarmonics = s.harmonics.active;
+  }
+  // snap 갱신마다 전이 검사(저렴 — 전이 시에만 토스트).
+  $: if (mechIntroEnabled && snap) checkMechIntro(snap);
 
   onDestroy(() => {
     unsub?.();
@@ -310,11 +339,57 @@
   }
 
   // --- 디바이스 노드(개입 bloom) -----------------------------------------------
+  /** 패널 열기 전 포커스였던 요소(닫을 때 복귀 — 접근성). */
+  let lastFocused: HTMLElement | null = null;
   function openPanel(p: Panel): void {
-    activePanel = activePanel === p ? null : p;
+    if (activePanel === p) {
+      closePanel();
+      return;
+    }
+    lastFocused = (document.activeElement as HTMLElement) ?? null;
+    activePanel = p;
   }
   function closePanel(): void {
     activePanel = null;
+    lastFocused?.focus?.();
+    lastFocused = null;
+  }
+
+  /**
+   * 포커스 트랩 액션(접근성): 열릴 때 패널 내 첫 포커스 가능 요소로 포커스 이동, Tab을 패널 안에 가둠.
+   *  Esc 닫기는 전역 onKeydown이 담당. 닫을 때 트리거 복귀는 closePanel.
+   */
+  function focusTrap(node: HTMLElement) {
+    const focusables = () =>
+      Array.from(
+        node.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
+    (focusables()[0] ?? node).focus();
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Tab') return;
+      const f = focusables();
+      if (f.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = f[0];
+      const last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    node.addEventListener('keydown', onKey);
+    return {
+      destroy() {
+        node.removeEventListener('keydown', onKey);
+      },
+    };
   }
   function onKeydown(e: KeyboardEvent): void {
     if (e.key === 'Escape' && activePanel) closePanel();
@@ -464,7 +539,7 @@
       on:click={closePanel}
       on:keydown={(e) => e.key === 'Enter' && closePanel()}>
     </div>
-    <div class="bloom-panel" role="dialog" aria-modal="true">
+    <div class="bloom-panel" role="dialog" aria-modal="true" tabindex="-1" use:focusTrap>
       <button class="bloom-close" on:click={closePanel} aria-label="닫기">✕</button>
       <div class="bloom-body">
         {#if activePanel === 'research'}
