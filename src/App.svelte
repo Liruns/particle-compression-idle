@@ -83,7 +83,6 @@
 
     if (import.meta.env.DEV) {
       (window as unknown as { forceLayer: (slug: string) => void }).forceLayer = (slug: string) => {
-        document.documentElement.setAttribute('data-layer', slug);
         renderer?.onLayerChange(slug);
         lastSlug = slug;
       };
@@ -151,8 +150,8 @@
   // --- 렌더러 와이어링 ----------------------------------------------------------
   function setupRenderer(): void {
     if (!bgCanvas) return;
-    // 게이지 글로우 캔버스 폐기 → null(세계 위 전경 게임판이 한 캔버스에 합성).
-    renderer = new CanvasRenderer({ bgCanvas, glowCanvas: null, rootEl: document.documentElement });
+    // 단일 풀스크린 캔버스(세계 배경 + 전경 게임판 합성). 구 게이지 글로우 캔버스는 폐기됨.
+    renderer = new CanvasRenderer({ bgCanvas });
     renderer.setReducedMotion($reducedMotion);
     if (snap) {
       lastSlug = snap.layer.slug;
@@ -175,18 +174,8 @@
     if (!renderer) return;
     if (s.layer.slug !== lastSlug) {
       lastSlug = s.layer.slug;
-      if (typeof document !== 'undefined') {
-        document.documentElement.setAttribute('data-layer', s.layer.slug);
-      }
-      renderer.onLayerChange(s.layer.slug);
+      renderer.onLayerChange(s.layer.slug); // 세계·게임판 색은 렌더러가 slug로 직접 구동(data-layer 불요)
     }
-    renderer.setSnapshot({
-      dec: s.dec,
-      rateCPositive: s.rateCPositive,
-      rateCLog10: s.rateCLog10,
-      layer: { slug: s.layer.slug },
-      phaseState: s.phase.active ? s.phase.state : '',
-    });
     renderer.gameBoard.setInput(buildBoardInput(s));
     layerRgb = renderer.layerColorRGB;
     renderer.draw();
@@ -432,7 +421,7 @@
   // 노드가 사라졌는데 그 패널이 열려 있으면 닫음(점등 해소·로드 직후 방어).
   $: if (activePanel === 'prestige' && !showPrestigeNode) activePanel = null;
   $: if (activePanel === 'research' && !showResearchNode) activePanel = null;
-  // QF 성표는 층 발광색을 따른다(§3-C). data-layer는 :root에 이미 반영(pushRender).
+  // QF 성표는 층 발광색을 따른다(§3-C). layerRgb는 pushRender에서 renderer.layerColorRGB로 갱신.
   $: qfStyle = `color: rgba(${layerRgb}, 0.82);`;
 </script>
 

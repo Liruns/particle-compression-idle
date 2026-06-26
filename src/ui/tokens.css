@@ -291,65 +291,6 @@ body {
   .card-legendary { animation: none; }
 }
 
-
-/* ============================================================
-   런타임 층 전환 유틸 (game-programmer 참조)
-   JS: document.documentElement.style.setProperty('--layer-accent', '#7c4dff')
-   또는 data-layer 속성으로 일괄 교체
-   ============================================================ */
-
-[data-layer="mol"] {
-  --layer-accent: var(--layer-mol-accent);
-  --layer-glow:   var(--layer-mol-glow);
-  --layer-bg:     var(--layer-mol-bg);
-}
-[data-layer="atom"] {
-  --layer-accent: var(--layer-atom-accent);
-  --layer-glow:   var(--layer-atom-glow);
-  --layer-bg:     var(--layer-atom-bg);
-}
-[data-layer="nuc"] {
-  --layer-accent: var(--layer-nuc-accent);
-  --layer-glow:   var(--layer-nuc-glow);
-  --layer-bg:     var(--layer-nuc-bg);
-}
-[data-layer="ncl"] {
-  --layer-accent: var(--layer-ncl-accent-r);   /* 삼원색: R을 기본, G/B는 별도 참조 */
-  --layer-glow:   var(--layer-ncl-glow);
-  --layer-bg:     var(--layer-ncl-bg);
-}
-[data-layer="qrk"] {
-  --layer-accent: var(--layer-qrk-accent);
-  --layer-glow:   var(--layer-qrk-glow);
-  --layer-bg:     var(--layer-qrk-bg);
-}
-[data-layer="prn"] {
-  --layer-accent: var(--layer-prn-accent);
-  --layer-glow:   var(--layer-prn-glow);
-  --layer-bg:     var(--layer-prn-bg);
-}
-[data-layer="str"] {
-  --layer-accent: var(--layer-str-accent);
-  --layer-glow:   var(--layer-str-glow);
-  --layer-bg:     var(--layer-str-bg);
-}
-[data-layer="lp"] {
-  --layer-accent: var(--layer-lp-accent);
-  --layer-glow:   var(--layer-lp-glow);
-  --layer-bg:     var(--layer-lp-bg);
-}
-[data-layer="fm"] {
-  --layer-accent: var(--layer-fm-accent);
-  --layer-glow:   var(--layer-fm-glow);
-  --layer-bg:     var(--layer-fm-bg);
-}
-[data-layer="inf"] {
-  --layer-accent: var(--layer-inf-accent);
-  --layer-glow:   var(--layer-inf-glow);
-  --layer-bg:     var(--layer-inf-bg);
-}
-[data-layer="plk"] {
-  --layer-accent: var(--layer-plk-accent);
-  --layer-glow:   var(--layer-plk-glow);
-  --layer-bg:     var(--layer-plk-bg);
-}
+/* 구 런타임 층 전환 유틸([data-layer] → 네온 --layer-accent 동적 교체)은 2단계에서 제거.
+   현재 층 색은 board/world가 캔버스에서 직접 구동(WorldRenderer.currentColorRGB), DOM 팝업은
+   자체 탈채도 cosmic 팔레트를 쓰므로 [data-layer] 동적 토큰은 소비자 없음(데드). */

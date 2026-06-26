@@ -24,5 +24,5 @@ export interface Renderer {
   dispose(): void;
 }
 
-// Canvas2D 렌더 구현체(m2-render-plan v0.2). App.svelte가 인스턴스화·subscribe 콜백에서 draw(V2-4).
-export { CanvasRenderer, type RenderInput } from './CanvasRenderer';
+// Canvas2D 렌더 구현체. App.svelte가 인스턴스화·subscribe 콜백에서 draw(V2-4).
+export { CanvasRenderer } from './CanvasRenderer';
