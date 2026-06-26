@@ -25,6 +25,7 @@
   import HarmonicsWidget from './ui/HarmonicsWidget.svelte';
   import PrestigeView from './ui/PrestigeView.svelte';
   import ResearchView from './ui/ResearchView.svelte';
+  import RightPanelStatus from './ui/RightPanelStatus.svelte';
   import OfflineModal from './ui/OfflineModal.svelte';
   import Toast from './ui/Toast.svelte';
   import Icon from './ui/icons/Icon.svelte';
@@ -46,6 +47,8 @@
   let rmUnsub: (() => void) | null = null;
   let bgResizeObserver: ResizeObserver | null = null;
   let glowResizeObserver: ResizeObserver | null = null;
+  /** window resize 핸들러(반응형 게이지 백버퍼 추적 보강 — ResizeObserver 지연/미전달 대비). */
+  let onWindowResize: (() => void) | null = null;
   /** 현재 렌더러에 붙은 글로우 캔버스(중복 재생성 방지 — 동일 참조면 재구성 안 함). */
   let attachedGlowCanvas: HTMLCanvasElement | null = null;
 
@@ -117,6 +120,7 @@
     rmUnsub?.();
     bgResizeObserver?.disconnect();
     glowResizeObserver?.disconnect();
+    if (onWindowResize) window.removeEventListener('resize', onWindowResize);
     renderer?.dispose();
     game?.dispose();
   });
@@ -143,6 +147,21 @@
       bgResizeObserver?.disconnect();
       bgResizeObserver = new ResizeObserver(() => renderer?.resize());
       bgResizeObserver.observe(bgCanvas);
+      // 글로우 캔버스도 마운트 시점에 이미 바인딩돼 있으면(기본 압축 탭) 여기서 관찰 시작.
+      //   ★P0-3 가드레일1: 게이지가 반응형(clamp/aspect-ratio)으로 커지면 초기 1회 resize()는
+      //    레이아웃 정착 전 작은 값을 잴 수 있다 → 관찰자가 정착 후 백버퍼를 재할당해야 글로우가
+      //    확대된 박스에 맞는다. (attachGlowCanvas는 초기 동일참조면 early-return하므로 여기서 보강.)
+      glowResizeObserver?.disconnect();
+      if (glowCanvas) {
+        glowResizeObserver = new ResizeObserver(() => renderer?.resize());
+        glowResizeObserver.observe(glowCanvas);
+      }
+    }
+    // window resize 보강(반응형 게이지): 뷰포트 변화 시 ResizeObserver 전달이 지연돼도
+    //   백버퍼가 박스를 추적하도록 직접 resize(). 1회 등록(중복 방지).
+    if (typeof window !== 'undefined' && !onWindowResize) {
+      onWindowResize = () => renderer?.resize();
+      window.addEventListener('resize', onWindowResize);
     }
   }
 
@@ -306,73 +325,116 @@
         {/if}
       </nav>
 
-      <!-- 측정 컨텍스트(상태바 우측): 현재 층 · dec. mono 수치. -->
+      <!-- 헤드라인 수치 상주(P0-5, AD/Paperclips 원칙): 어느 탭에 가도 r·층·dec가 보인다.
+           상태바 우측 = 측정 컨텍스트. r 값을 헤드라인급으로, 층·dec를 컨텍스트로. -->
       <span class="ctx">
-        <span class="ctx-layer">{snap.layer.nameKo}</span>
-        <span class="ctx-sep" aria-hidden="true">·</span>
-        <span class="ctx-dec"><span class="ctx-dec-label">dec</span> {snap.dec.toFixed(2)}</span>
+        <span class="ctx-head">
+          <span class="ctx-head-label">r</span>
+          <span class="ctx-head-val">{formatRadius(snap.r)}</span>
+        </span>
+        <span class="ctx-meta">
+          <span class="ctx-layer">{snap.layer.nameKo}</span>
+          <span class="ctx-sep" aria-hidden="true">·</span>
+          <span class="ctx-dec"><span class="ctx-dec-label">dec</span> {snap.dec.toFixed(2)}</span>
+        </span>
       </span>
+
+      <!-- 저장: 상단바 아이콘으로 축소(P0-4 — 우측 패널 하단 콘텐츠에 자리 양보). -->
+      <button class="btn-save-icon" on:click={onSave} title="저장" aria-label="저장">
+        <Icon name="save" size={15} />
+      </button>
     {/if}
   </header>
 
   {#if snap}
     <!-- 반응형 3패널 셸(ux §2-2): LEFT 자원상주 / CENTER 탭콘텐츠 / RIGHT 메커니즘·층. -->
     <div class="shell">
-      <!-- ───── LEFT: 자원 readout(모든 탭 상주, ux §P0-3) ───── -->
+      <!-- ───── LEFT: 자원 원장(모든 탭 상주, P0-1: 카드→원장 행) ─────
+           Kittens/Exponential식 컴팩트 원장 — 카드 테두리·그림자 제거, 얇은 구분선만.
+           행: [아이콘] 기호·이름 … 값 / +생산율. "위젯 4개"가 아니라 "계기 원장 하나". -->
       <aside class="panel-left">
-        <section class="resources" aria-label="자원">
-          <div class="res res-depth">
-            <span class="res-icon"><Icon name="depth" /></span>
-            <span class="res-name">압축 깊이 C</span>
-            <span class="res-val">{formatNumber(snap.C)}</span>
-            {#if snap.rateC.gt(0)}<span class="res-rate">+{formatNumber(snap.rateC, 2)}<span class="unit">/s</span></span>{/if}
+        <section class="ledger" aria-label="자원">
+          <div class="lg-row lg-depth">
+            <span class="lg-icon"><Icon name="depth" size={15} /></span>
+            <span class="lg-name">압축 깊이 <b>C</b></span>
+            <span class="lg-val">{formatNumber(snap.C)}</span>
+            <span class="lg-rate"
+              >{#if snap.rateC.gt(0)}+{formatNumber(snap.rateC, 2)}<span class="u">/s</span>{/if}</span>
           </div>
-          <div class="res res-energy">
-            <span class="res-icon"><Icon name="energy" /></span>
-            <span class="res-name">압축 에너지 E</span>
-            <span class="res-val">{formatNumber(snap.E)}</span>
-            {#if snap.rateC.gt(0)}<span class="res-rate">+{formatNumber(snap.rateC, 2)}<span class="unit">/s</span></span>{/if}
+          <div class="lg-row lg-energy">
+            <span class="lg-icon"><Icon name="energy" size={15} /></span>
+            <span class="lg-name">압축 에너지 <b>E</b></span>
+            <span class="lg-val">{formatNumber(snap.E)}</span>
+            <span class="lg-rate"
+              >{#if snap.rateC.gt(0)}+{formatNumber(snap.rateC, 2)}<span class="u">/s</span>{/if}</span>
           </div>
           {#if snap.ftue.showResourceD}
-            <div class="res res-data">
-              <span class="res-icon"><Icon name="data" /></span>
-              <span class="res-name">발견 데이터 D</span>
-              <span class="res-val">{formatNumber(snap.D)}</span>
-              <span class="res-rate dim">공명 산출</span>
+            <div class="lg-row lg-data">
+              <span class="lg-icon"><Icon name="data" size={15} /></span>
+              <span class="lg-name">발견 데이터 <b>D</b></span>
+              <span class="lg-val">{formatNumber(snap.D)}</span>
+              <span class="lg-rate dim">공명 산출</span>
             </div>
           {/if}
           {#if snap.QF.gt(0)}
-            <div class="res res-qf">
-              <span class="res-icon"><Icon name="qf" /></span>
-              <span class="res-name">양자 거품 QF</span>
-              <span class="res-val">{formatNumber(snap.QF)}</span>
-              <span class="res-rate dim">영구 보존</span>
+            <div class="lg-row lg-qf">
+              <span class="lg-icon"><Icon name="qf" size={15} /></span>
+              <span class="lg-name">양자 거품 <b>QF</b></span>
+              <span class="lg-val">{formatNumber(snap.QF)}</span>
+              <span class="lg-rate dim">영구 보존</span>
             </div>
           {/if}
-          <div class="res res-mult">
-            <span class="res-icon"><Icon name="mult" /></span>
-            <span class="res-name">생산 배율</span>
-            <span class="res-val">{formatNumber(snap.mult, 3)}</span>
+          <!-- 배율: 원장에 자연 연결되는 마무리 행(구분선 위, 강조 톤). -->
+          <div class="lg-row lg-mult">
+            <span class="lg-icon"><Icon name="mult" size={15} /></span>
+            <span class="lg-name">생산 배율</span>
+            <span class="lg-val mult">×{formatNumber(snap.mult, 3)}</span>
+            <span class="lg-rate"></span>
           </div>
         </section>
 
         <footer class="status">
           <span>{loadLabel[snap.loadKind]}</span>
           <span class="dim">· 누적 틱 {snap.totalTicks.toLocaleString()}</span>
-          <p class="whisper">더 작은 것이 있다.</p>
         </footer>
       </aside>
 
       <!-- ───── CENTER: 탭 콘텐츠(압축=게이지·체인 / 그 외=뷰 교체) ───── -->
       <section class="panel-center">
         {#if tab === 'compress'}
-          <!-- r 게이지: "작아짐=강해짐". r은 작아지고 dec/숫자는 커진다. -->
+          <!-- r 게이지: "작아짐=강해짐". r은 작아지고 dec/숫자는 커진다. (P0-3: 포컬로 확대)
+               게이지를 중앙 컬럼 폭의 70~80%까지 키우고, 좌우 2열 미니 리드아웃을 박아 "계기 패널"화.
+               ★가드레일1: 글로우 캔버스는 core-wrap을 100% 채우므로 wrap 확대 시 ResizeObserver→resize()로
+                백버퍼 재할당, rFrame=min(cx,cy)-margin이 자동으로 커진다(렌더러 코드 불변). -->
           <section class="gauge">
-            <!-- 게이지 본체+글로우는 캔버스(m2-render-plan V2-1). 캔버스 준비 전엔 DOM 점 폴백. -->
-            <div class="gauge-core-wrap">
-              <canvas class="gauge-glow" bind:this={glowCanvas} aria-hidden="true"></canvas>
-              <div class="r-core" class:hidden={canvasReady} style="--r-glow: {glowRadius}px"></div>
+            <div class="gauge-stage">
+              <!-- 좌 리드아웃(Exponential식): C 값 / 생산율. -->
+              <div class="readout-col left">
+                <div class="ro">
+                  <span class="ro-lbl">C</span>
+                  <span class="ro-val">{formatNumber(snap.C)}</span>
+                  <span class="ro-sub"
+                    >{#if snap.rateC.gt(0)}+{formatNumber(snap.rateC, 2)}/s{:else}—{/if}</span>
+                </div>
+              </div>
+
+              <!-- 게이지 본체+글로우 캔버스(m2-render-plan V2-1). 준비 전엔 DOM 점 폴백. -->
+              <div class="gauge-core-wrap">
+                <canvas class="gauge-glow" bind:this={glowCanvas} aria-hidden="true"></canvas>
+                <div class="r-core" class:hidden={canvasReady} style="--r-glow: {glowRadius}px"></div>
+              </div>
+
+              <!-- 우 리드아웃: 배율 / dec. -->
+              <div class="readout-col right">
+                <div class="ro">
+                  <span class="ro-lbl">배율</span>
+                  <span class="ro-val">×{formatNumber(snap.mult, 3)}</span>
+                  <span class="ro-sub">dec {snap.dec.toFixed(2)}</span>
+                </div>
+              </div>
             </div>
+
+            <!-- r 값(게이지 직하, 화면 최대 수치 num-display). -->
             <div class="r-readout">
               <span class="r-label">반경 r</span>
               <span class="r-value">{formatRadius(snap.r)}</span>
@@ -417,6 +479,16 @@
           {#if snap.ftue.showChain}
             <ChainTable tiers={snap.tiers} {onBuy} />
           {/if}
+
+          <!-- 모바일에서만: 우측 패널 상태 요약(도감·연구·상전이 힌트)을 체인 아래 인라인.
+               데스크톱은 RIGHT 패널이 담당(.status-inline 숨김 — 중복 방지). -->
+          <div class="status-inline">
+            <RightPanelStatus
+              codex={snap.codex}
+              research={snap.research}
+              prestige={snap.prestige}
+              showCodex={showCodexTab} />
+          </div>
         {:else if tab === 'research'}
           <ResearchView research={snap.research} dCurrent={snap.D} onBuy={onBuyResearch} />
         {:else if tab === 'codex'}
@@ -429,15 +501,21 @@
         {/if}
       </section>
 
-      <!-- ───── RIGHT: 메커니즘 + 층 컨텍스트(데스크톱 상주, 압축 컨텍스트) ───── -->
+      <!-- ───── RIGHT: 메커니즘 + 층 컨텍스트 + 상태 요약(데스크톱 상주) ─────
+           P0-4(D3 해결): 빈 하단을 ui-flow §2-A 콘텐츠로 채움 — 층카드·메커니즘 아래에
+           도감 미니진행·연구 1줄·상전이 힌트·"더 작은 것이 있다." 앵커. 저장은 상단바 아이콘으로 이전. -->
       <aside class="panel-right">
         <LayerCard layer={snap.layer} showMechanism={snap.ftue.showMechanismSlot} />
         <!-- 메커니즘 위젯(층마다 다름, ui-flow §2-E). active=false면 위젯 자체가 숨음. -->
         <ResonanceWidget resonance={snap.resonance} onClick={onResonanceClick} />
         <PhaseWidget phase={snap.phase} onPin={onPhasePin} onUnpin={onPhaseUnpin} />
         <HarmonicsWidget harmonics={snap.harmonics} />
-        <!-- 저장(설정 탭 미구현 — 우측 패널 하단 상주). -->
-        <button class="btn-save" on:click={onSave}><Icon name="save" size={14} /> 저장</button>
+        <!-- 하단 콘텐츠 — 빈 공간 해소(D3). -->
+        <RightPanelStatus
+          codex={snap.codex}
+          research={snap.research}
+          prestige={snap.prestige}
+          showCodex={showCodexTab} />
       </aside>
     </div>
   {:else}
@@ -498,13 +576,36 @@
     color: var(--foreground-sub);
     white-space: nowrap;
   }
-  /* 측정 컨텍스트(우측): 층 라벨 + dec mono 수치. */
+  /* 헤드라인 수치 상주(P0-5): r 값(헤드라인급) 위 + 층·dec(컨텍스트) 아래, 우측 정렬 2단. */
   .ctx {
     margin-left: auto;
     display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    white-space: nowrap;
+    line-height: 1.15;
+  }
+  .ctx-head {
+    display: flex;
     align-items: baseline;
     gap: var(--space-xs);
-    white-space: nowrap;
+  }
+  .ctx-head-label {
+    font-size: var(--text-label-xs);
+    color: var(--foreground-sub);
+    letter-spacing: 0.08em;
+  }
+  .ctx-head-val {
+    font-family: var(--font-numeric);
+    font-size: var(--text-num-lg);
+    font-weight: 500;
+    color: var(--primary);
+  }
+  .ctx-meta {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
   }
   .ctx-layer {
     font-size: var(--text-label-sm);
@@ -519,12 +620,36 @@
   .ctx-dec {
     font-family: var(--font-numeric);
     font-size: var(--text-num-md);
-    color: var(--foreground);
+    color: var(--foreground-sub);
   }
   .ctx-dec-label {
     font-size: var(--text-label-xs);
     color: var(--foreground-sub);
     letter-spacing: 0.08em;
+  }
+  /* 저장 아이콘 버튼(상단바, P0-4). 작은 정사각 — 콘텐츠는 우측 패널로. */
+  .btn-save-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin-left: var(--space-sm);
+    color: var(--foreground-sub);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--rounded-md);
+    cursor: pointer;
+    transition:
+      color var(--motion-fade-cross) ease-out,
+      border-color var(--motion-fade-cross) ease-out;
+  }
+  .btn-save-icon:hover {
+    color: var(--foreground);
+    border-color: var(--foreground-sub);
+  }
+  .btn-save-icon:active {
+    transform: scale(var(--motion-click-scale));
   }
 
   /* ───── 탭바 ───── */
@@ -628,9 +753,9 @@
     gap: var(--space-md);
     min-width: 0;
   }
-  /* 패널 직속 자식이 고정폭 트랙(200/240px)을 넘지 않게 — flex min-width:auto 오버플로 차단. */
+  /* 패널 직속 자식이 고정폭 트랙(200/240px)을 넘지 않게 — flex min-width:auto 오버플로 차단.
+     (panel-right 자식은 전부 Svelte 컴포넌트(자체 width:100%/max-width 보유) → 별도 가드 불필요.) */
   .panel-left > *,
-  .panel-right > *,
   .panel-center > * {
     min-width: 0;
     max-width: 100%;
@@ -643,6 +768,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-md);
+    width: 100%;
+  }
+  /* 모바일: 우측 패널 상태 요약을 압축 본문에 인라인(데스크톱은 RIGHT가 담당, 아래서 숨김). */
+  .status-inline {
+    display: block;
     width: 100%;
   }
 
@@ -660,7 +790,7 @@
       flex-wrap: wrap;
       align-items: flex-start;
     }
-    .panel-left .resources {
+    .panel-left .ledger {
       flex: 1;
       min-width: 240px;
     }
@@ -672,6 +802,10 @@
     }
     /* 메커니즘은 RIGHT로 — 압축 본문 인라인 숨김(중복 방지). */
     .mech-inline {
+      display: none;
+    }
+    /* 상태 요약 인라인도 숨김 — RIGHT 패널이 담당(중복 방지). */
+    .status-inline {
       display: none;
     }
   }
@@ -690,8 +824,8 @@
       flex-wrap: nowrap; /* mid-mode wrap 해제 — column+wrap+고정높이면 status가 2번째 컬럼으로 새는 버그 */
       align-items: stretch;
     }
-    /* 데스크톱: 자원은 자연 높이로 상단 정렬(mid-mode flex:1 그로우 해제 — 카드가 세로로 안 퍼지게). */
-    .panel-left .resources {
+    /* 데스크톱: 자원 원장은 자연 높이로 상단 정렬(mid-mode flex:1 그로우 해제). */
+    .panel-left .ledger {
       min-width: 0;
       flex: 0 0 auto;
     }
@@ -703,20 +837,35 @@
     }
   }
 
-  /* ───── r 게이지 ───── */
+  /* ───── r 게이지(P0-3: 포컬로 확대) ───── */
   .gauge {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--space-sm);
-    padding: var(--space-md) var(--space-md) var(--space-sm);
+    padding: var(--space-md) var(--space-sm) var(--space-sm);
     width: 100%;
   }
-  /* 게이지 캔버스 래퍼: 본체+글로우 캔버스가 점유하는 정사각 영역. */
+  /* 게이지 무대: 좌 리드아웃 · 큰 게이지 · 우 리드아웃 한 행. 게이지가 가용 폭 대부분 점유. */
+  .gauge-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+    width: 100%;
+  }
+  /* 게이지 캔버스 래퍼: 본체+글로우 캔버스가 점유하는 정사각 영역.
+     ★P0-3: 고정 132px → 무대 폭의 ~72%(중앙 컬럼 가용폭 70~80%), 정사각, 상·하한 클램프.
+     ★가드레일1: 글로우 캔버스는 inset:0/100%로 이 박스를 가득 채우므로, 박스가 커지면
+      ResizeObserver→CanvasRenderer.resize()가 백버퍼를 새 크기로 재할당하고
+      rFrame=min(cx,cy)-margin이 자동 확대된다(렌더러 코드 불변 — 글로우·동심원·dec호 동반 확대). */
   .gauge-core-wrap {
     position: relative;
-    width: 132px;
-    height: 132px;
+    flex: 0 0 auto;
+    /* 게이지 직경 = 무대(≈중앙 컬럼) 가용폭의 ~50%(응집 우선 — 게이지+압축+체인을 한 화면에).
+       하한 180(모바일 가독), 상한 300(체인을 폴드 안으로). aspect-ratio로 정사각 유지. */
+    width: clamp(180px, 50%, 300px);
+    aspect-ratio: 1 / 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -728,6 +877,49 @@
     height: 100%;
     display: block;
     pointer-events: none;
+  }
+  /* 좌우 미니 리드아웃(Exponential식 계기 패널). 게이지 양옆, 좁게. */
+  .readout-col {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+  .readout-col.left {
+    justify-content: flex-end;
+    text-align: right;
+  }
+  .readout-col.right {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .ro {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+  .ro-lbl {
+    font-family: var(--font-label);
+    font-size: var(--text-label-xs);
+    color: var(--foreground-sub);
+    letter-spacing: 0.06em;
+  }
+  .ro-val {
+    font-family: var(--font-numeric);
+    font-size: var(--text-num-lg);
+    font-weight: 500;
+    color: var(--foreground);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ro-sub {
+    font-family: var(--font-numeric);
+    font-size: var(--text-label-xs);
+    color: var(--foreground-sub);
+    white-space: nowrap;
   }
   .r-core {
     width: 16px;
@@ -812,84 +1004,98 @@
     font-size: var(--text-num-md);
   }
 
-  /* ───── 자원 readout ───── */
-  .resources {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: var(--space-sm);
+  /* ───── 자원 원장(P0-1: 카드→원장 행) ─────
+     Kittens/Exponential식 컴팩트 원장 — 카드 박스/그림자 제거, 행 사이 얇은 구분선만.
+     하나의 컨테이너(좌측 accent 띠로 현재 층 컨텍스트)에 행을 촘촘히. "계기 원장 하나". */
+  .ledger {
+    display: flex;
+    flex-direction: column;
     width: 100%;
-  }
-  /* 자원 카드 — 좌측 accent 띠(visual §4-B: 현재 층 컨텍스트). inset 하이라이트로 깊이.
-     좁은 LEFT 패널(200px)에서 한글 라벨이 세로로 깨지지 않게: 아이콘(좌, 행 병합) + [이름/값/율] 세로 스택.
-     이름=작게 위, 값=크게(num-xl) 아래 — 계측 readout 위계(값이 라벨을 압도). */
-  .res {
-    display: grid;
-    grid-template-columns: 22px minmax(0, 1fr);
-    grid-template-areas:
-      'icon name'
-      'icon val'
-      'icon rate';
-    align-items: center;
-    column-gap: var(--space-sm);
-    row-gap: 1px;
-    padding: var(--space-sm) var(--space-base);
-    background: var(--canvas-layer);
+    background: color-mix(in srgb, var(--canvas-layer) 70%, transparent);
     border: 1px solid var(--border);
     border-left: 2px solid color-mix(in srgb, var(--layer-accent) 35%, var(--border));
     border-radius: var(--rounded-md);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    padding: 2px var(--space-sm);
   }
-  .res-icon {
+  /* 원장 행: [아이콘] 이름(가변) … 값(우정렬) / +율. 얇은 구분선(마지막 제외). */
+  .lg-row {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'icon name val'
+      'icon name rate';
+    align-items: center;
+    column-gap: var(--space-sm);
+    row-gap: 0;
+    padding: var(--space-xs) 2px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+  .lg-row:last-child {
+    border-bottom: none;
+  }
+  .lg-icon {
     grid-area: icon;
     display: flex;
     align-items: center;
     justify-content: center;
   }
-  /* 자원 이름 — label-sm 저채도(값에 양보). 넘치면 말줄임(세로 깨짐 방지). */
-  .res-name {
+  /* 이름 — 작게 저채도. 기호(b)는 강조. 넘치면 말줄임. */
+  .lg-name {
     grid-area: name;
+    font-family: var(--font-label);
     font-size: var(--text-label-sm);
     color: var(--foreground-sub);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    align-self: center;
   }
-  /* 자원 값 — num-xl/500(visual §2-B: 값이 라벨을 압도). tnum. */
-  .res-val {
+  .lg-name b {
+    color: var(--foreground);
+    font-weight: 600;
+  }
+  /* 값 — 우측, num-lg(원장 밀도에 맞춰 xl→lg). 값이 이름을 압도하되 컴팩트. tnum. */
+  .lg-val {
     grid-area: val;
+    justify-self: end;
     font-family: var(--font-numeric);
-    font-size: var(--text-num-xl);
+    font-size: var(--text-num-lg);
     font-weight: 500;
     color: var(--foreground);
-    line-height: 1.15;
+    line-height: 1.1;
   }
-  .res-rate {
+  .lg-val.mult {
+    color: var(--layer-accent);
+  }
+  /* 생산율 — 값 아래 우측, 작게. 0이면 비어 레이아웃 유지. */
+  .lg-rate {
     grid-area: rate;
+    justify-self: end;
     font-family: var(--font-numeric);
-    font-size: var(--text-label-sm);
-    color: var(--foreground-sub);
-  }
-  /* 단위 — 값에서 분리·저채도(visual §2-C: 데이터시트 톤). */
-  .res-rate .unit {
-    color: var(--foreground-dim);
     font-size: var(--text-label-xs);
+    color: var(--foreground-sub);
+    min-height: 12px;
+    line-height: 1;
   }
-  .res-rate.dim {
+  .lg-rate .u {
     color: var(--foreground-dim);
   }
-  .res-depth .res-icon {
+  .lg-rate.dim {
+    color: var(--foreground-dim);
+  }
+  .lg-depth .lg-icon {
     color: var(--depth);
   }
-  .res-energy .res-icon {
+  .lg-energy .lg-icon {
     color: var(--energy);
   }
-  .res-data .res-icon {
+  .lg-data .lg-icon {
     color: var(--data);
   }
-  .res-qf .res-icon {
+  .lg-qf .lg-icon {
     color: var(--qf);
   }
-  .res-mult .res-icon {
+  .lg-mult .lg-icon {
     color: var(--foreground-sub);
   }
 
@@ -900,12 +1106,9 @@
     width: 100%;
     justify-content: center;
   }
-  .btn-compress,
-  .btn-save {
+  .btn-compress {
     font-family: var(--font-label);
-    font-size: var(--text-label-md);
     font-weight: 500;
-    color: var(--foreground);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--rounded-md);
@@ -915,13 +1118,6 @@
     align-items: center;
     justify-content: center;
     gap: var(--space-xs);
-    transition: transform var(--motion-click-duration) ease-out;
-  }
-  .btn-compress:active,
-  .btn-save:active {
-    transform: scale(var(--motion-click-scale));
-  }
-  .btn-compress {
     border-color: var(--layer-accent);
     color: var(--layer-accent);
     min-width: 160px;
@@ -933,14 +1129,11 @@
       transform var(--motion-click-duration) ease-out,
       box-shadow var(--motion-click-glow) ease-out;
   }
+  .btn-compress:active {
+    transform: scale(var(--motion-click-scale));
+  }
   .btn-compress.pulse {
     box-shadow: 0 0 8px var(--layer-glow, var(--col-glow-core));
-  }
-  /* 저장 — RIGHT 패널 하단, ≥44px(ux §P0-5). */
-  .btn-save {
-    min-height: 44px;
-    color: var(--foreground-sub);
-    width: 100%;
   }
 
   .ftue-hint {
@@ -962,12 +1155,6 @@
   }
   .dim {
     color: var(--foreground-dim);
-  }
-  .whisper {
-    margin-top: var(--space-md);
-    opacity: 0.45;
-    font-size: var(--text-narr-sm);
-    color: var(--foreground-sub);
   }
   .booting {
     color: var(--foreground-sub);
@@ -1007,9 +1194,21 @@
     .shell {
       padding-bottom: calc(48px + var(--space-lg));
     }
-    /* 상태바: 탭이 빠졌으므로 로고 + 컨텍스트만(2분할). */
+    /* 상태바: 탭이 빠졌으므로 로고 + 컨텍스트 + 저장 아이콘. */
     .topbar {
       justify-content: space-between;
+    }
+    /* 좁은 화면에서 로고가 헤드라인 수치 자리를 뺏지 않게 축소(헤드라인 r 우선). */
+    .logo {
+      font-size: var(--text-label-sm);
+    }
+    /* 게이지 좌우 미니 리드아웃은 모바일에서 숨김(폭 부족 — C는 좌측 원장, dec는 게이지 직하에 이미 있음).
+       게이지는 단일 컬럼 폭을 더 써서 포컬 유지(study P0-3, 모바일 단일 컬럼에서도 큰 게이지). */
+    .readout-col {
+      display: none;
+    }
+    .gauge-core-wrap {
+      width: clamp(170px, 70vw, 300px);
     }
   }
 </style>
