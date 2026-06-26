@@ -15,17 +15,17 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@fontsource/ibm-plex-mono": "^5.2.7",
-    "@fontsource/ibm-plex-sans": "^5.2.8",
-    "@fontsource/ibm-plex-sans-kr": "^5.2.8",
-    "@fontsource/inter": "^5.2.8",
-    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/gothic-a1": "^5.2.8",
+    "@fontsource/newsreader": "^5.2.10",
+    "@fontsource/public-sans": "^5.2.7",
+    "@fontsource/spline-sans-mono": "^5.2.8",
     "break_eternity.js": "^2.1.0",
     "lz-string": "^1.5.0"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^3.1.2",
     "@tsconfig/svelte": "^5.0.4",
+    "playwright-core": "^1.61.1",
     "svelte": "^4.2.19",
     "svelte-check": "^3.8.6",
     "typescript": "^5.5.4",

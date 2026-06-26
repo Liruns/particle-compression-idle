@@ -104,39 +104,26 @@ export interface World {
 // ─── 11층 세계 — 프로토타입(검증·고요 캘리브레이션) 그대로 이식 ───
 // 각 세계는 자기 상태(cells/rings/…)를 init에서 만들고 draw에서 읽는다(프레임당 할당 0 지향).
 
-// L1 분자 — 유기 세포/막. sage. 세포 부유 + 막 가닥 연결 + 느린 호흡/분열.
+// L1 분자 — 옅은 유기 조직 헤이즈(만질 세포의 "양분 무대"). sage.
+//   ★2단계 정합(prototypes/cosmic-particle-game.html worlds[0]): 만질 수 있는 세포는 BoardRenderer가
+//    전경으로 그린다. 그래서 이 세계 *배경*은 가득 찬 세포·막이 아니라 **뒤로 물러난 옅은 헤이즈**여야
+//    전경 세포가 또렷이 도드라진다(구 cosmic-layers 버전은 배경 세포가 전경과 겹쳐 혼탁 → 헤이즈로 후퇴).
 class MoleculeWorld implements World {
   slug = 'mol';
   name = '분자층 — Molecular';
   void = '#0a0e0c';
   col = '159,184,154';
-  private cells: {
-    a: number;
-    d: number;
-    sz: number;
-    ph: number;
-    sp: number;
-    nuc: number;
-    nx: number;
-    ny: number;
-    div: number;
-    dsp: number;
-  }[] = [];
+  private haze: { a: number; d: number; sz: number; ph: number; sp: number }[] = [];
   init(): void {
     const r = makeRng(7);
-    this.cells = [];
-    for (let i = 0; i < 14; i++)
-      this.cells.push({
+    this.haze = [];
+    for (let i = 0; i < 7; i++)
+      this.haze.push({
         a: r() * TAU,
-        d: 0.08 + r() * 0.46,
-        sz: 34 + r() * 54,
+        d: 0.12 + r() * 0.5,
+        sz: 120 + r() * 180,
         ph: r() * TAU,
-        sp: 0.1 + r() * 0.16,
-        nuc: 0.4 + r() * 0.5,
-        nx: (r() - 0.5) * 0.4,
-        ny: (r() - 0.5) * 0.4,
-        div: r() * TAU,
-        dsp: 0.04 + r() * 0.05,
+        sp: 0.03 + r() * 0.05,
       });
   }
   draw(
@@ -150,50 +137,12 @@ class MoleculeWorld implements World {
     H: number,
   ): void {
     const R = Math.min(W, H) * 0.5;
-    const P = this.cells.map((c) => {
-      const rad = c.d * R * sc;
-      return {
-        x: cx + Math.cos(c.a + Math.sin(t * c.sp + c.ph) * 0.07) * rad,
-        y: cy + Math.sin(c.a + Math.cos(t * c.sp + c.ph) * 0.07) * rad,
-        c,
-      };
-    });
-    // 막 가닥 — 가까운 세포끼리 부드러운 발광 연결(조직처럼).
-    for (let i = 0; i < P.length; i++) {
-      for (let j = i + 1; j < P.length; j++) {
-        const dx = P[j].x - P[i].x,
-          dy = P[j].y - P[i].y;
-        const dist = Math.hypot(dx, dy);
-        const reach = (P[i].c.sz + P[j].c.sz) * sc * 1.05;
-        if (dist < reach) {
-          const close = 1 - dist / reach;
-          const sway = Math.sin(t * 0.3 + i * 1.3 + j * 0.7) * 6 * sc;
-          const mx = (P[i].x + P[j].x) / 2 - (dy / dist) * sway,
-            my = (P[i].y + P[j].y) / 2 + (dx / dist) * sway;
-          lineGlow(
-            ctx,
-            [P[i].x, P[i].y, mx, my, P[j].x, P[j].y],
-            this.col,
-            0.1 * close * al,
-            1.6,
-          );
-        }
-      }
-    }
-    for (const p of P) {
-      const c = p.c;
-      const br = 0.5 + 0.24 * Math.sin(t * 0.35 + c.ph);
-      const grow = 1 + 0.05 * Math.sin(t * c.dsp + c.div);
-      glow(ctx, p.x, p.y, c.sz * sc * grow, this.col, br * 0.62 * al);
-      glow(ctx, p.x, p.y, c.sz * 0.62 * sc, this.col, br * 0.2 * al);
-      glow(
-        ctx,
-        p.x + c.nx * c.sz * sc,
-        p.y + c.ny * c.sz * sc,
-        c.sz * 0.34 * sc * c.nuc,
-        '214,232,208',
-        br * 0.55 * al,
-      );
+    for (const h of this.haze) {
+      const rad = h.d * R * sc;
+      const x = cx + Math.cos(h.a + Math.sin(t * h.sp + h.ph) * 0.1) * rad;
+      const y = cy + Math.sin(h.a + Math.cos(t * h.sp + h.ph) * 0.1) * rad;
+      const br = 0.5 + 0.3 * Math.sin(t * 0.22 + h.ph);
+      glow(ctx, x, y, h.sz * sc, this.col, 0.035 * br * al);
     }
   }
 }

@@ -87,19 +87,21 @@ export function deriveFtue(input: FtueInput): FtueState {
   const showMechanismSlot = layerIndex >= 2;
 
   // 힌트(ux.md §3-1 단계별 1줄). 강요 아님 — 정보 제공.
+  //   ★카피는 공허 게임판 패러다임 정합(2단계): 버튼 폐기 → 떠다니는 물질을 만지고, 궤도 껍질을 누른다.
   let hint: string | null = null;
   switch (stage) {
     case 'click':
-      hint = '물질이 있다. 압축하라.';
+      hint = '떠다니는 물질을 만져 압축하라.';
       break;
     case 'firstTier':
-      hint = 'Tier-1 압축기 구매 가능. 자동 압축을 시작한다.';
+      hint = '궤도 껍질을 눌러 압축기를 결속 — 자동 압축이 시작된다.';
       break;
     case 'automating':
       hint = '압축기가 스스로 작동한다. 더 작아진다.';
       break;
     case 'codex':
-      hint = '입자가 도감에 기록됐다.';
+      // 발견 자체는 토스트가 알림 — 힌트는 분자층 내내 보이므로 다음 행동을 안내(만지기→껍질 결속).
+      hint = '물질을 만져 압축하고, 궤도 껍질을 눌러 결속하라.';
       break;
     case 'layering':
       hint = null; // 층 진입 비트가 내러티브를 담당(중복 방지).

@@ -62,58 +62,67 @@
 </div>
 
 <style>
+  /* 공허 토스트(§3-A 카드 폐기): 테두리·배경 없는 발광 텍스트를 상단 중앙에 — 자원 성표(우상)·
+     결속모드(좌상)와 충돌 없게. 위계는 빛(색)으로(§3-C): 발견=흐린 보라·비트=물러난 흰·전설=옅은 금. */
   .toast-stack {
     position: fixed;
-    top: var(--space-md);
-    right: var(--space-md);
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
-    z-index: 50;
+    align-items: center;
+    gap: 6px;
+    /* z-8: 게임판(0)·주석(2) 위, 단 bloom 백드롭(9)·팝업(10) 아래 — 팝업 열리면 토스트가 그 뒤로 가림. */
+    z-index: 8;
     pointer-events: none;
-    max-width: 320px;
+    max-width: 72vw;
+    text-align: center;
+  }
+  /* 좁은 화면: 상단 주석 띠(결속·자원 성표)와 겹치지 않게 아래로 내리고 폭 확보. */
+  @media (max-width: 600px) {
+    .toast-stack {
+      top: 86px;
+      max-width: 92vw;
+    }
+    .toast-line {
+      font-size: 11px;
+    }
   }
   .toast {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-left: 2px solid var(--layer-accent);
-    border-radius: var(--rounded-md);
-    padding: var(--space-sm) var(--space-base);
+    padding: 2px 12px;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    text-shadow:
+      0 0 14px rgba(0, 0, 0, 0.95),
+      0 0 4px rgba(0, 0, 0, 0.9);
     animation: toast-in var(--motion-toast-slide) ease-out;
   }
   .toast-line {
     font-family: var(--font-narrative);
     font-size: var(--text-narr-sm);
-    color: var(--foreground);
+    color: rgba(202, 214, 222, 0.82);
+    letter-spacing: 0.02em;
     line-height: 1.5;
   }
-  .toast-discover {
-    border-left-color: var(--data);
-  }
   .toast-discover .toast-line {
-    color: var(--foreground-sub);
+    color: rgba(154, 143, 192, 0.78); /* 흐린 보라(발견 데이터) */
   }
-  .toast-beat {
-    border-left-color: var(--layer-accent);
-  }
-  .toast-legendary {
-    border-left-color: var(--legendary);
+  .toast-beat .toast-line {
+    color: rgba(210, 222, 230, 0.85);
   }
   .toast-legendary .toast-line {
-    color: var(--legendary);
+    color: rgba(216, 196, 137, 0.92); /* 옅은 금(전설) */
   }
 
   @keyframes toast-in {
     from {
-      transform: translateX(12px);
+      transform: translateY(-6px);
       opacity: 0;
     }
     to {
-      transform: translateX(0);
+      transform: translateY(0);
       opacity: 1;
     }
   }

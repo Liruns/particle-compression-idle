@@ -10,7 +10,8 @@
 > **정거장1(프로토타입) 졸업 → 정거장2(수직 슬라이스) 진행 중.**
 > - **피벗 발생:** 기존 다크 대시보드가 오너에게 "AI 느낌"(무난한 선택의 합=무개성)으로 읽힘 → **"우주적 현미경"으로 전면 피벗.** 프로토타입(`prototypes/cosmic-layers.html`·`cosmic-particle-game.html`)으로 방향 확정. 통합 SSOT = `cosmic-direction.md`, 비주얼 권위 = `art-direction-cosmic.md`. **로직·경제·밸런스는 한 줄도 불변.**
 > - **이관 1단계 ✅ 완료:** 렌더 레이어를 11 우주 세계로 교체(`src/render/layer-worlds.ts`·`world-renderer.ts`), 게임 현재 층으로 구동, **그린(check 0 / test 254)**. 로직·`App.svelte` 불변.
-> - **이관 2단계 ▶ 다음:** 대시보드 UI → **다이제틱 공허 게임판 + 입자 상호작용**(자원=성표 주석, 체인=궤도 껍질, 능동=입자 만지기). 상세 = `cosmic-direction.md` §3·§4.
+> - **이관 2단계 ✅ 완료:** 대시보드 UI → **다이제틱 공허 게임판 + 입자 상호작용**(`src/render/board.ts` `BoardRenderer` + `App.svelte` 재구성). 자원=성표 주석(DOM), 체인=궤도 껍질, 능동=세포 만지기→`manualCompress()`, 껍질 클릭→`buy()`. 디바이스=가장자리 bloom 노드. **그린(check 0 / test 254)**, `game.ts`·`data/`·`core/` 0줄 변경. 상세 = `cosmic-direction.md` §3·§4·§7-B.
+> - **이관 3단계 ▶ 다음:** 능동 메커니즘 완전 다이제틱화(전자 클릭·위상 겹침·필라멘트) + 사운드·보이스·게임필 정합(정거장2 졸업).
 
 ---
 
