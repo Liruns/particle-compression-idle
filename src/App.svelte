@@ -166,9 +166,20 @@
 
   /** snapshot → BoardInput(읽기전용 파생). Decimal→number/string 환산은 여기 경계에서만(V2-8). */
   function buildBoardInput(s: GameSnapshot): BoardInput {
-    // 체인 미공개(FTUE)면 껍질 없음 — 관조(코어+세포)만.
+    // 오비탈 공명(원자~쿼크층) — 슬롯 열림 타이밍이 곧 전자 클릭(§4 표 2행).
+    const resonance = {
+      active: s.resonance.active,
+      open: s.resonance.active && s.resonance.phase === 'open',
+      progress: s.resonance.progress,
+    };
+    // 체인 미공개(FTUE)면 껍질 없음 — 관조(코어+세포) + 공명만.
     if (!s.ftue.showChain) {
-      return { shells: [], decadeProgress: s.layer.decadeProgress, energyLabel: formatNumber(s.E, 2) };
+      return {
+        shells: [],
+        decadeProgress: s.layer.decadeProgress,
+        energyLabel: formatNumber(s.E, 2),
+        resonance,
+      };
     }
     // 최적(가장 싼 다음 구매) 티어 — 부름 강조.
     let bestTier = -1;
@@ -199,7 +210,12 @@
           : '미가동',
       });
     }
-    return { shells, decadeProgress: s.layer.decadeProgress, energyLabel: formatNumber(s.E, 2) };
+    return {
+      shells,
+      decadeProgress: s.layer.decadeProgress,
+      energyLabel: formatNumber(s.E, 2),
+      resonance,
+    };
   }
 
   // --- 포인터 상호작용(공허에 손 뻗기) ------------------------------------------
@@ -216,6 +232,7 @@
     const hit = renderer.gameBoard.activate();
     if (hit.kind === 'cell') doCompress();
     else if (hit.kind === 'shell') doBind(hit.tier);
+    else if (hit.kind === 'resonance') doResonance();
   }
   function onPointerMove(e: PointerEvent): void {
     if (!renderer) return;
@@ -248,6 +265,12 @@
     if (!game) return;
     const count = game.buy(tier, buyMode);
     if (count > 0) renderer?.gameBoard.onBind(tier, count);
+  }
+  /** 공명 전자 클릭 = 오비탈 공명(실제 게임, §4). 성공/실패를 전자에 피드백. */
+  function doResonance(): void {
+    if (!game) return;
+    const ok = game.clickResonance();
+    renderer?.gameBoard.onResonance(ok);
   }
 
   // --- 디바이스 노드(개입 bloom) -----------------------------------------------
@@ -727,5 +750,55 @@
     justify-content: center;
     color: rgba(150, 166, 174, 0.6);
     font-family: var(--font-narrative, 'IBM Plex Sans KR', sans-serif);
+  }
+
+  /* 좁은 화면(모바일/세로): 주석 크라우딩 완화 — 폰트·여백 축소, 속삭임 숨김(공허 우선). */
+  @media (max-width: 600px) {
+    .buymode {
+      left: 12px;
+      top: 10px;
+      font-size: 11px;
+    }
+    .resources {
+      right: 12px;
+      top: 10px;
+      gap: 6px;
+    }
+    .res .r-val {
+      font-size: 13px;
+    }
+    .res .r-rate {
+      min-width: 40px;
+    }
+    .vitals {
+      left: 14px;
+      bottom: 60px; /* 하단 독과 겹치지 않게 위로 */
+    }
+    .vitals .v-r {
+      font-size: 13px;
+    }
+    .whisper {
+      right: 14px;
+      bottom: 58px;
+      max-width: 52vw;
+    }
+    .whisper .murmur {
+      display: none; /* 좁은 화면에선 속삭임 생략 — 힌트만 */
+    }
+    .dock {
+      bottom: 12px;
+      gap: 2px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 96vw;
+    }
+    .node {
+      padding: 6px 9px;
+      font-size: 11px;
+    }
+    .bloom-panel {
+      width: 94vw;
+      padding: 14px;
+    }
   }
 </style>

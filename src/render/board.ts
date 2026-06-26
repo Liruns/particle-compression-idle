@@ -41,6 +41,16 @@ export interface BoardShell {
   rateLabel: string;
 }
 
+/**
+ * 오비탈 공명 다이제틱 입력(§4 표 2행). 슬롯/카운트다운 링 → "궤도를 도는 전자를 공명 타이밍에 클릭".
+ *  active=원자~쿼크층(L2~5), open=슬롯 열림(클릭 유효), progress=현재 phase 진행 0..1.
+ */
+export interface BoardResonance {
+  active: boolean;
+  open: boolean;
+  progress: number;
+}
+
 /** 게임판 한 프레임 입력(읽기전용 파생). */
 export interface BoardInput {
   /** 해금된 껍질만(저→고 티어 순). 빈 배열이면 껍질 미표시(FTUE 체인 전). */
@@ -49,12 +59,15 @@ export interface BoardInput {
   decadeProgress: number;
   /** E 잔량 라벨(껍질 호버 시 부족 사유 표시용). 사전 포맷. */
   energyLabel: string;
+  /** 오비탈 공명 상태(원자층+). 비활성이면 active=false — 전자 미표시. */
+  resonance: BoardResonance;
 }
 
 /** 히트테스트 결과 — App이 game 호출을 분기. */
 export type BoardHit =
   | { kind: 'cell' }
   | { kind: 'shell'; tier: number }
+  | { kind: 'resonance' }
   | { kind: 'none' };
 
 /** 자원 발광색(§3-C 탈채도, 단일 악센트 해체). E 금 / 화이트 양자대용은 미사용. */
@@ -146,7 +159,12 @@ function makeRng(seed: number): () => number {
 }
 
 export class BoardRenderer {
-  private input: BoardInput = { shells: [], decadeProgress: 0, energyLabel: '0' };
+  private input: BoardInput = {
+    shells: [],
+    decadeProgress: 0,
+    energyLabel: '0',
+    resonance: { active: false, open: false, progress: 0 },
+  };
   private reducedMotion = false;
   /** 현재 층 발광색('r,g,b') — WorldRenderer가 매 프레임 공급(전환 보간 포함). 코어·자유빛이 따른다. */
   private layerColor = '159,184,154';
@@ -176,6 +194,9 @@ export class BoardRenderer {
   private pointerY = -1;
   private hoverCell = -1;
   private hoverShellTier = 0; // 1-기반, 0=없음
+  private hoverResonance = false; // 공명 전자 위(클릭 유효: open일 때만)
+  private resonancePulse = 0; // 공명 성공 잔광(0..1)
+  private resonanceMissPulse = 0; // 빗맞춤(닫힌 슬롯 클릭) 옅은 신호
 
   constructor() {
     this.seedCells();
@@ -265,10 +286,18 @@ export class BoardRenderer {
     return r0 + (r1 - r0) * Math.pow(u, 0.92);
   }
 
-  /** 마우스 아래 무엇? 세포 우선(능동), 없으면 껍질(엔진). */
+  /** 공명 전자의 현재 화면 좌표(외곽 궤도를 도는 전자, §4 표 2행). */
+  private resonancePos(): { x: number; y: number; r: number } {
+    const rad = this.minDim * 0.3; // 중간 궤도(잘 보이는 전용 전자). open일 때만 히트 → 껍질 클릭과 비충돌.
+    const ang = this.reducedMotion ? -Math.PI * 0.5 : -Math.PI * 0.5 + this.nowSec * 0.5;
+    return { x: this.cx + Math.cos(ang) * rad, y: this.cy + Math.sin(ang) * rad, r: rad };
+  }
+
+  /** 마우스 아래 무엇? 세포 우선(능동) → 공명 전자(타이밍) → 껍질(엔진). */
   private updateHover(): void {
     this.hoverCell = -1;
     this.hoverShellTier = 0;
+    this.hoverResonance = false;
     if (this.pointerX < 0) return;
     // 1) 세포(가장 가까운 float, 반경 내).
     let bestC = -1;
@@ -288,7 +317,15 @@ export class BoardRenderer {
       this.hoverCell = bestC;
       return;
     }
-    // 2) 껍질(가장 가까운 궤도, 좁은 밴드). 해금된 티어만.
+    // 2) 공명 전자 — 열린 슬롯일 때만 히트(닫히면 껍질 클릭을 막지 않음). 근처를 너그럽게(타이밍 손맛).
+    if (this.input.resonance.active && this.input.resonance.open) {
+      const e = this.resonancePos();
+      if (Math.hypot(this.pointerX - e.x, this.pointerY - e.y) < this.minDim * 0.08) {
+        this.hoverResonance = true;
+        return;
+      }
+    }
+    // 3) 껍질(가장 가까운 궤도, 좁은 밴드). 해금된 티어만.
     const dist = Math.hypot(this.pointerX - this.cx, this.pointerY - this.cy);
     let bestTier = 0;
     let bestSD = 1e9;
@@ -311,6 +348,10 @@ export class BoardRenderer {
     if (this.hoverCell >= 0) {
       this.beginCapture(this.hoverCell);
       return { kind: 'cell' };
+    }
+    if (this.hoverResonance) {
+      // open이면 공명(성공), closed면 빗맞춤 신호만 — game 호출은 App이 분기.
+      return { kind: 'resonance' };
     }
     if (this.hoverShellTier > 0) return { kind: 'shell', tier: this.hoverShellTier };
     return { kind: 'none' };
@@ -360,6 +401,23 @@ export class BoardRenderer {
   /** 흡수 보상 떠오르는 수치(App이 manualCompress 후 실제 획득량으로 호출). 중심에서. */
   spawnCenterText(str: string, colorRgb: string): void {
     this.floatTexts.push({ x: this.cx, y: this.cy - 14, str, col: colorRgb, t: 0, dur: 1.1 });
+  }
+
+  /** 공명 클릭 결과 피드백(App이 clickResonance 결과로 호출). 성공=잔광+잔광 파편+"공명". */
+  onResonance(success: boolean): void {
+    const e = this.resonancePos();
+    if (success) {
+      this.resonancePulse = 1;
+      this.spawnAbsorbSparks(e.x, e.y, this.atomColor());
+      this.floatTexts.push({ x: e.x, y: e.y - 12, str: '공명', col: '205,233,238', t: 0, dur: 1.0 });
+    } else {
+      this.resonanceMissPulse = 1;
+    }
+  }
+
+  /** 공명 전자 색(원자층 teal 계열 — 세계색과 무관하게 전자다움 유지). */
+  private atomColor(): string {
+    return '160,210,222';
   }
 
   // ── 발광 헬퍼(lighter 합성 전제). ──
@@ -438,6 +496,8 @@ export class BoardRenderer {
     this.drawCells(ctx, d);
     // 5) 흡수 잔광.
     this.drawSparks(ctx, d);
+    // 5b) 공명 전자(활성 시) — 궤도를 도는 전자, open이면 클릭 가능(§4 표 2행).
+    if (this.input.resonance.active) this.drawResonance(ctx, nowSec, d);
     // 6) dec 진행 호(다음 세계 하강 게이트).
     this.drawDecArc(ctx);
     // 7) 호버 툴팁(세포/껍질) — 공허에 뜬 텍스트.
@@ -666,12 +726,70 @@ export class BoardRenderer {
     }
   }
 
-  /** dec 진행 호 — 외곽 둘레 빛의 채움(다음 세계 하강이 가까워진다). */
+  /**
+   * 공명 전자(§4 표 2행). 외곽 궤도를 도는 전자 + 그 궤도의 옅은 자취.
+   *  closed=카운트다운 호가 전자 둘레에 차오름(다음 열림 예고), open=전자가 환히 펄스(클릭 신호).
+   *  성공 잔광(resonancePulse)·빗맞춤(resonanceMissPulse)은 여기서 감쇠.
+   */
+  private drawResonance(ctx: CanvasRenderingContext2D, now: number, dt: number): void {
+    const e = this.resonancePos();
+    const r = this.input.resonance;
+    const decay = Math.pow(0.88, dt * 60);
+    this.resonancePulse *= decay;
+    this.resonanceMissPulse *= decay;
+    if (this.resonancePulse < 0.001) this.resonancePulse = 0;
+    if (this.resonanceMissPulse < 0.001) this.resonanceMissPulse = 0;
+    const col = this.atomColor();
+
+    // 궤도 자취(아주 옅은 원) — 전자가 어디를 도는지 암시.
+    ctx.beginPath();
+    ctx.arc(this.cx, this.cy, e.r, 0, TAU);
+    ctx.strokeStyle = `rgba(${col},${0.045 + this.resonancePulse * 0.05})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    if (r.open) {
+      // 열림 — 환히 펄스(클릭 타이밍). hover면 더 밝게(잡을 수 있다).
+      const beat = this.reducedMotion ? 1 : 0.6 + 0.4 * Math.sin(now * 6);
+      const hov = this.hoverResonance ? 1 : 0;
+      const a = 0.7 + 0.3 * beat;
+      this.glow(ctx, e.x, e.y, 22 + hov * 8, col, (0.55 + 0.25 * hov) * a + this.resonancePulse * 0.4);
+      this.glow(ctx, e.x, e.y, 5, '225,244,247', a);
+      // 열림 링 — "여기를 눌러" 신호.
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, 13 + (this.reducedMotion ? 0 : 3 * Math.sin(now * 6)), 0, TAU);
+      ctx.strokeStyle = `rgba(225,244,247,${0.4 * a})`;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    } else {
+      // 닫힘 — 옅은 전자 + 둘레 카운트다운 호(다음 열림까지 progress).
+      this.glow(ctx, e.x, e.y, 11, col, 0.32);
+      this.glow(ctx, e.x, e.y, 3, '225,244,247', 0.42);
+      const p = clamp(r.progress, 0, 1);
+      if (p > 0.001) {
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, 10, -Math.PI / 2, -Math.PI / 2 + p * TAU);
+        ctx.strokeStyle = `rgba(${col},0.4)`;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+    }
+    if (this.resonanceMissPulse > 0.01) {
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, 16, 0, TAU);
+      ctx.strokeStyle = `rgba(150,168,178,${0.3 * this.resonanceMissPulse})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+
+  /** dec 진행 호 — 외곽 둘레 빛의 채움(다음 세계 하강이 가까워진다). 임박하면 하강 힌트. */
   private drawDecArc(ctx: CanvasRenderingContext2D): void {
     const frac = clamp(this.input.decadeProgress, 0, 1);
     if (frac <= 0.001) return;
     const col = this.layerColor;
-    const r = this.shellRadius(8) + this.minDim * 0.05;
+    const r = this.shellRadius(8) + this.minDim * 0.06;
     ctx.save();
     ctx.translate(this.cx, this.cy);
     ctx.beginPath();
@@ -681,6 +799,20 @@ export class BoardRenderer {
     ctx.lineCap = 'round';
     ctx.stroke();
     ctx.restore();
+    // 임박 — 더 깊은 곳이 열린다(프로토타입 이식). 호 하단에 조용히 떠오름.
+    if (frac > 0.8) {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = "11px 'IBM Plex Sans KR', sans-serif";
+      ctx.fillStyle = `rgba(${col},${((frac - 0.8) / 0.2) * 0.5})`;
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 10;
+      ctx.fillText('더 깊은 곳이 열린다', this.cx, this.cy + r + 22);
+      ctx.restore();
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = 'lighter';
+    }
   }
 
   // ── 호버 툴팁(source-over 텍스트 — 공허에 직접, 테두리 0). 그린 뒤 lighter 복원. ──
