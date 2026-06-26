@@ -1,11 +1,9 @@
 <script lang="ts">
   /**
-   * PrestigeView — 상전이 화면 (SCR-04, ui-flow §5). M1.5 첫 상전이 PT1.
-   *  미지 벽 도달 시만 진입(prestige.available). QF 획득량 + 리셋/보존 매트릭스 + 확인 버튼.
-   *  첫 상전이(isFirst)는 특별 강조 — 딥 퍼플 헤더 + "양자 거품 첫 획득" + 2줄 내러티브(§5-B).
-   *
-   *  단방향(§4.1): prestige 스냅샷만 읽고, 실행은 onPrestige 콜백으로 위임(부모가 game 호출).
-   *  리셋/보존 매트릭스(systems §5-2): E·C·체인=리셋 / D=일부 / QF·도감·연구·D누적=보존.
+   * PrestigeView — 상전이 (ui-flow §5). 우주적 현미경 재구성(2단계): 카드 매트릭스+딥퍼플 카드 →
+   *  **문턱의 의식**. 패널 크롬 제거(bloom-panel이 컨테이너) · QF 획득=발광 중심 수치 · 리셋/보존=
+   *  테두리 없는 두 갈래 원장(R/K=색 텍스트, 뱃지 박스 폐기) · 첫 상전이=옅은 자보라 발광(머니샷 §5-B).
+   *  단방향(§4.1): prestige 스냅샷만 읽고 실행은 onPrestige 위임. 리셋/보존 매트릭스 정보 불변.
    */
   import type { PrestigeSnapshot } from '../game';
   import { formatNumber } from '../core/format';
@@ -16,122 +14,100 @@
   /** "압축 계속"(상전이 화면을 닫고 메인으로 — 더 큰 QF를 위해 더 압축). */
   export let onContinue: () => void;
 
-  // 리셋/보존 매트릭스(systems §5-2). badge: R=리셋 / P=일부 / K=보존.
-  type Cell = { label: string; badge: 'R' | 'P' | 'K'; badgeText: string };
-  const matrix: Cell[] = [
-    { label: '압축 에너지 E', badge: 'R', badgeText: '리셋' },
-    { label: '압축 깊이 C', badge: 'R', badgeText: '리셋' },
-    { label: '압축기 체인', badge: 'R', badgeText: '리셋' },
-    { label: '발견 데이터 D', badge: 'R', badgeText: '리셋' },
-    { label: '양자 거품 QF', badge: 'K', badgeText: '보존' },
-    { label: '입자 도감', badge: 'K', badgeText: '보존' },
-    { label: '연구 트리', badge: 'K', badgeText: '보존' },
-    { label: '발견 누적', badge: 'K', badgeText: '보존' },
-  ];
+  // 리셋/보존(systems §5-2). 두 갈래 원장으로 분리.
+  const resetItems = ['압축 에너지 E', '압축 깊이 C', '압축기 체인', '발견 데이터 D'];
+  const keepItems = ['양자 거품 QF', '입자 도감', '연구 트리', '발견 누적'];
 </script>
 
 {#if prestige.available}
   <section class="prestige" class:first={prestige.isFirst}>
-    <!-- 헤더: 첫 상전이는 "미지 영역 진입" 강조 -->
     <header class="pt-head">
-      {#if prestige.isFirst}
-        <span class="pt-title">미지 영역 진입 — 쿼크층 → {prestige.targetLayerKo}</span>
-      {:else}
-        <span class="pt-title">상전이 가능 — {prestige.targetLayerKo} 진입</span>
-      {/if}
+      <span class="pt-eyebrow">{prestige.isFirst ? '알려진 물리의 마지막 문턱' : '상전이'}</span>
+      <span class="pt-title">
+        {#if prestige.isFirst}쿼크층 → {prestige.targetLayerKo}{:else}{prestige.targetLayerKo} 진입{/if}
+      </span>
     </header>
 
-    <!-- QF 획득 블록: 첫 상전이는 "양자 거품 첫 획득" 강조 -->
+    <!-- QF 획득 — 발광 중심 수치(카드 박스 폐기). -->
     <div class="pt-qf">
-      {#if prestige.isFirst}
-        <span class="pt-qf-label">양자 거품 첫 획득</span>
-      {:else}
-        <span class="pt-qf-label">양자 거품 획득</span>
-      {/if}
-      <span class="pt-qf-gain">+{formatNumber(prestige.qfGain, 0)} QF</span>
-      <span class="pt-qf-mult">다음 런 생산 배율 ×{formatNumber(prestige.nextMult, 3)}</span>
+      <span class="pt-qf-label">{prestige.isFirst ? '양자 거품 첫 획득' : '양자 거품 획득'}</span>
+      <span class="pt-qf-gain">+{formatNumber(prestige.qfGain, 0)}<span class="pt-qf-unit"> QF</span></span>
+      <span class="pt-qf-mult">다음 런 생산 ×{formatNumber(prestige.nextMult, 3)}</span>
     </div>
 
-    <!-- 리셋/보존 매트릭스(systems §5-2) -->
-    <div class="pt-matrix" role="table" aria-label="리셋·보존">
-      {#each matrix as cell}
-        <div class="pt-cell" role="row">
-          <span class="pt-cell-label">{cell.label}</span>
-          <span class="pt-badge badge-{cell.badge}">{cell.badgeText}</span>
-        </div>
-      {/each}
+    <!-- 리셋 / 보존 — 두 갈래 원장(테두리 없는 색 텍스트). -->
+    <div class="pt-ledger">
+      <div class="pt-col pt-reset">
+        <span class="pt-col-head">리셋</span>
+        {#each resetItems as it}<span class="pt-item">{it}</span>{/each}
+      </div>
+      <div class="pt-divider" aria-hidden="true"></div>
+      <div class="pt-col pt-keep">
+        <span class="pt-col-head">보존</span>
+        {#each keepItems as it}<span class="pt-item">{it}</span>{/each}
+      </div>
     </div>
 
-    <!-- 내러티브: 첫 상전이만 2줄(ui-flow §5-B) -->
     {#if prestige.isFirst}
       <p class="pt-narrative">
         알려진 물리의 경계를 넘는다.<br />여기서부터 지도는 없다.
       </p>
     {/if}
 
-    <!-- 액션: 압축 계속 / 진입 -->
     <div class="pt-actions">
-      <button class="pt-btn pt-continue" on:click={onContinue}>압축 계속</button>
-      <button class="pt-btn pt-go" on:click={onPrestige}>
-        {prestige.isFirst ? '미지 영역으로' : '다음 층으로'}
-      </button>
+      <button class="pt-continue" on:click={onContinue}>압축 계속</button>
+      <button class="pt-go" on:click={onPrestige}
+        >{prestige.isFirst ? '미지 영역으로 →' : '다음 층으로 →'}</button>
     </div>
   </section>
 {:else}
   <section class="prestige locked">
-    <p class="pt-locked">
-      상전이 조건 미충족. 미지 영역의 벽(dec 19)까지 압축을 계속한다.
-    </p>
+    <p class="pt-locked">상전이 조건 미충족. 미지 영역의 벽(dec 19)까지 압축을 계속한다.</p>
   </section>
 {/if}
 
 <style>
-  /* 상전이는 "모달감"으로 중앙 정렬(ux 매핑: CENTER 중앙). 하드코딩 460 해방 → 큰 캡 + auto 마진. */
+  /* 컨테이너 크롬 0 — bloom-panel이 프레임. 문턱의 의식처럼 중앙 정렬·여백. */
   .prestige {
     width: 100%;
-    max-width: 520px;
-    margin: 0 auto;
-    background: var(--canvas-layer);
-    border: 1px solid var(--border);
-    border-radius: var(--rounded-md);
-    padding: var(--space-base);
     display: flex;
     flex-direction: column;
-    gap: var(--space-base);
-  }
-  /* 첫 상전이: 딥 퍼플 레이어(ui-flow §5-B, #7c4dff opacity 0.15). */
-  .prestige.first {
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, #7c4dff 15%, var(--canvas-layer)),
-      var(--canvas-layer) 60%
-    );
-    border-color: color-mix(in srgb, #7c4dff 40%, var(--border));
+    align-items: center;
+    gap: 16px;
+    text-align: center;
   }
 
   .pt-head {
-    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .pt-eyebrow {
+    font-family: var(--font-narrative);
+    font-size: var(--text-label-sm);
+    letter-spacing: 0.04em;
+    color: var(--foreground-dim);
   }
   .pt-title {
     font-family: var(--font-label);
     font-size: var(--text-label-lg);
     color: var(--layer-accent);
-    font-weight: 500;
+  }
+  .prestige.first .pt-eyebrow {
+    color: color-mix(in srgb, var(--layer-prn-accent) 70%, var(--foreground-dim));
   }
   .prestige.first .pt-title {
-    color: #b39dff;
+    color: #b6a8ec;
+    text-shadow: 0 0 18px color-mix(in srgb, var(--layer-prn-accent) 45%, transparent);
   }
 
-  /* QF 획득 블록 */
+  /* QF 획득 — 발광 중심 수치(어둠 위에 떠오름). */
   .pt-qf {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: var(--space-xs);
-    padding: var(--space-md);
-    background: var(--surface);
-    border-radius: var(--rounded-md);
-    border: 1px solid var(--border);
+    gap: 4px;
+    padding: 8px 0;
   }
   .pt-qf-label {
     font-family: var(--font-narrative);
@@ -140,9 +116,15 @@
   }
   .pt-qf-gain {
     font-family: var(--font-numeric);
-    font-size: var(--text-num-lg);
-    color: var(--qf);
+    font-size: 34px;
     font-weight: 500;
+    line-height: 1.05;
+    color: var(--qf);
+    text-shadow: 0 0 22px color-mix(in srgb, var(--qf) 40%, transparent);
+  }
+  .pt-qf-unit {
+    font-size: 16px;
+    color: color-mix(in srgb, var(--qf) 75%, var(--foreground-dim));
   }
   .pt-qf-mult {
     font-family: var(--font-numeric);
@@ -150,95 +132,113 @@
     color: var(--foreground-sub);
   }
 
-  /* 리셋/보존 매트릭스 */
-  .pt-matrix {
+  /* 리셋/보존 — 두 갈래 원장. 색 텍스트(뱃지 박스 폐기), 가운데 가는 분리선. */
+  .pt-ledger {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-xs);
+    grid-template-columns: 1fr 1px 1fr;
+    gap: 0 18px;
+    width: 100%;
+    max-width: 380px;
+    padding: 12px 0;
+    border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   }
-  .pt-cell {
+  .pt-col {
     display: flex;
+    flex-direction: column;
+    gap: 5px;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--space-xs);
-    padding: var(--space-xs) var(--space-sm);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--rounded-sm);
   }
-  .pt-cell-label {
+  .pt-col-head {
+    font-family: var(--font-label);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    margin-bottom: 3px;
+  }
+  .pt-reset .pt-col-head {
+    color: var(--col-reset);
+  }
+  .pt-keep .pt-col-head {
+    color: var(--col-keep);
+  }
+  .pt-item {
     font-family: var(--font-label);
     font-size: var(--text-label-sm);
     color: var(--foreground-sub);
   }
-  .pt-badge {
-    font-family: var(--font-label);
-    font-size: var(--text-label-sm);
-    border-radius: var(--rounded-sm);
-    padding: 1px 6px;
-    white-space: nowrap;
+  .pt-reset .pt-item {
+    color: color-mix(in srgb, var(--col-reset) 30%, var(--foreground-sub));
   }
-  /* 뱃지 색(ui-flow §5-A): R=리셋(붉음) / P=부분(호박) / K=보존(녹). */
-  .badge-R {
-    color: var(--col-reset, #c0392b);
-    border: 1px solid var(--col-reset, #c0392b);
+  .pt-keep .pt-item {
+    color: color-mix(in srgb, var(--col-keep) 32%, var(--foreground-sub));
   }
-  .badge-P {
-    color: var(--col-partial, #e67e22);
-    border: 1px solid var(--col-partial, #e67e22);
-  }
-  .badge-K {
-    color: var(--col-keep, #27ae60);
-    border: 1px solid var(--col-keep, #27ae60);
+  .pt-divider {
+    background: color-mix(in srgb, var(--border) 70%, transparent);
   }
 
   .pt-narrative {
     margin: 0;
-    text-align: center;
     font-family: var(--font-narrative);
     font-size: var(--text-narr-md, var(--text-narr-sm));
-    line-height: 1.6;
+    line-height: 1.7;
     color: var(--foreground-sub);
+  }
+  .prestige.first .pt-narrative {
+    color: color-mix(in srgb, var(--layer-prn-accent) 25%, var(--foreground-sub));
   }
 
   .pt-actions {
     display: flex;
-    gap: var(--space-base);
-    justify-content: center;
+    gap: 18px;
+    align-items: center;
+    margin-top: 2px;
   }
-  .pt-btn {
+  /* 압축 계속 = 물러남(조용한 텍스트). 진입 = 발광 알약(QF 톤, 의식의 무게). */
+  .pt-continue {
     font-family: var(--font-label);
     font-size: var(--text-label-md);
-    border-radius: var(--rounded-md);
-    padding: 12px 20px;
-    min-height: 44px;
-    cursor: pointer;
-    transition: transform var(--motion-click-duration) ease-out;
-  }
-  .pt-btn:active {
-    transform: scale(var(--motion-click-scale));
-  }
-  .pt-continue {
     color: var(--foreground-sub);
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: none;
+    border: none;
+    padding: 10px 8px;
+    cursor: pointer;
+    transition: color 0.2s ease;
+  }
+  .pt-continue:hover {
+    color: var(--foreground);
   }
   .pt-go {
+    font-family: var(--font-label);
+    font-size: var(--text-label-md);
     color: var(--qf);
-    background: var(--surface);
-    border: 1px solid var(--qf);
-    flex: 1;
+    background: color-mix(in srgb, var(--qf) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--qf) 45%, transparent);
+    border-radius: 999px;
+    padding: 11px 22px;
+    min-height: 44px;
+    cursor: pointer;
+    transition:
+      box-shadow 0.25s ease,
+      background 0.25s ease;
   }
   .pt-go:hover {
-    box-shadow: 0 0 8px color-mix(in srgb, var(--qf) 40%, transparent);
+    background: color-mix(in srgb, var(--qf) 14%, transparent);
+    box-shadow: 0 0 18px color-mix(in srgb, var(--qf) 35%, transparent);
+  }
+  .pt-go:active {
+    transform: scale(var(--motion-click-scale, 0.97));
+  }
+  .prestige.first .pt-go {
+    color: #c2b4f4;
+    border-color: color-mix(in srgb, var(--layer-prn-accent) 55%, transparent);
+    background: color-mix(in srgb, var(--layer-prn-accent) 12%, transparent);
+  }
+  .prestige.first .pt-go:hover {
+    box-shadow: 0 0 22px color-mix(in srgb, var(--layer-prn-accent) 45%, transparent);
   }
 
-  .prestige.locked {
-    align-items: center;
-  }
   .pt-locked {
     margin: 0;
-    text-align: center;
     font-family: var(--font-narrative);
     font-size: var(--text-narr-sm);
     color: var(--foreground-sub);

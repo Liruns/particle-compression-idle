@@ -1,24 +1,19 @@
 <script lang="ts">
   /**
-   * OfflineModal — 오프라인 복귀 모달 (SCR-06, ui-flow §10). M1.7.
-   *  로드 시 elapsed>60s면 표시. 자리비움 시간·유효 온라인 환산(×modifier)·획득 자원(E/C/D).
-   *  카운트업 없음 — 최종 증가량 즉시 표시(§10-B). Escape/확인으로 닫기(부모가 dismiss).
-   *
-   *  단방향(§4.1): offline 스냅샷만 읽고, 닫기는 onDismiss 콜백 위임.
+   * OfflineModal — 오프라인 복귀 (ui-flow §10). 우주적 현미경 재구성(2단계): 카드+라인아이콘 →
+   *  **복귀 로그**. 테두리 없는 획득 행(자원=색 글자 글리프, generic 아이콘 F4 폐기) · 효율 게이지 →
+   *  헤더 한 줄로 강등 · 탈채도 공허 팔레트. 단방향(§4.1): offline 스냅샷만 읽고 닫기는 onDismiss 위임.
    */
   import type { OfflineSnapshot } from '../game';
   import { formatNumber, formatDuration } from '../core/format';
-  import Icon from './icons/Icon.svelte';
 
   export let offline: OfflineSnapshot;
   /** 확인(모달 닫기) 위임 — 부모가 game.dismissOffline 호출. */
   export let onDismiss: () => void;
 
-  // 효율 퍼센트(modifier 0.65→65% / 1.0→100% 상전이 직후).
   $: effPct = Math.round(offline.modifier * 100);
   $: isPrestigeBonus = offline.modifier >= 1;
 
-  // Escape로 닫기(ui-flow §10-B).
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') onDismiss();
   }
@@ -27,41 +22,37 @@
 <svelte:window on:keydown={onKey} />
 
 <div class="om-backdrop">
-  <!-- 배경 클릭으로 닫기: 접근성 위해 투명 버튼(모달 뒤 전체 덮음). -->
   <button class="om-scrim" aria-label="닫기" on:click={onDismiss}></button>
   <section class="om-modal" role="dialog" aria-modal="true" aria-label="오프라인 복귀">
     <header class="om-head">
       <span class="om-title">오프라인 압축 진행</span>
       <span class="om-elapsed">{formatDuration(offline.rawSeconds)} 동안 압축이 진행됐습니다.</span>
-      <span class="om-eff dim">
-        유효 온라인 환산: {formatDuration(offline.effectiveSeconds)} (×{offline.modifier.toFixed(2)})
-      </span>
+      <span class="om-eff"
+        >유효 환산 {formatDuration(offline.effectiveSeconds)} · 효율 <span class="om-eff-pct"
+          >{effPct}%</span
+        > (×{offline.modifier.toFixed(2)})</span>
     </header>
 
-    <div class="om-eff-bar">
-      <span class="om-eff-label">오프라인 효율</span>
-      <span class="om-eff-pct">{effPct}%</span>
-    </div>
-
-    <div class="om-gains">
-      <div class="om-gain">
-        <span class="om-g-icon res-energy"><Icon name="energy" /></span>
-        <span class="om-g-name">압축 에너지 E</span>
+    <!-- 획득 = 테두리 없는 로그 행. 자원 = 색 글자 글리프(E 금·C 청·D 보라). -->
+    <ul class="om-gains" role="list">
+      <li class="om-gain">
+        <span class="om-sym res-energy">E</span>
+        <span class="om-g-name">압축 에너지</span>
         <span class="om-g-val">+{formatNumber(offline.dE)}</span>
-      </div>
-      <div class="om-gain">
-        <span class="om-g-icon res-depth"><Icon name="depth" /></span>
-        <span class="om-g-name">압축 깊이 C</span>
+      </li>
+      <li class="om-gain">
+        <span class="om-sym res-depth">C</span>
+        <span class="om-g-name">압축 깊이</span>
         <span class="om-g-val">+{formatNumber(offline.dC)}</span>
-      </div>
+      </li>
       {#if offline.dD.gt(0)}
-        <div class="om-gain">
-          <span class="om-g-icon res-data"><Icon name="data" /></span>
-          <span class="om-g-name">발견 데이터 D</span>
+        <li class="om-gain">
+          <span class="om-sym res-data">D</span>
+          <span class="om-g-name">발견 데이터</span>
           <span class="om-g-val">+{formatNumber(offline.dD)}</span>
-        </div>
+        </li>
       {/if}
-    </div>
+    </ul>
 
     {#if isPrestigeBonus}
       <p class="om-note bonus">복귀 보너스 활성 — 생산 효율 100%.</p>
@@ -85,50 +76,45 @@
     z-index: 50;
     padding: var(--space-md);
   }
-  /* 전체 덮는 투명 클릭 영역(배경 클릭 = 닫기). 모달은 z-index로 위에. */
   .om-scrim {
     position: absolute;
     inset: 0;
     border: none;
     padding: 0;
-    background: color-mix(in srgb, #000 65%, transparent);
+    background: color-mix(in srgb, #020407 66%, transparent);
+    backdrop-filter: blur(3px);
     cursor: default;
   }
+  /* 컨테이너 — 카드 테두리 폐기, 부드러운 공허 패널. 탈채도 토큰 remap(§7-C#2). */
   .om-modal {
     position: relative;
     z-index: 1;
     width: 100%;
-    max-width: 380px;
-    background: var(--canvas-layer);
-    border: 1px solid var(--border);
-    border-radius: var(--rounded-md);
-    padding: var(--space-lg);
+    max-width: 360px;
+    background: color-mix(in srgb, #0a1014 92%, transparent);
+    border-radius: 14px;
+    padding: 22px;
     display: flex;
     flex-direction: column;
-    gap: var(--space-base);
-    box-shadow: 0 8px 32px color-mix(in srgb, #000 50%, transparent);
-    /* 공허 팔레트 오버라이드(§7-C#2 — .bloom-panel과 동일 정책): 구 네온 토큰을 탈채도 cosmic로 remap. */
+    gap: 14px;
+    box-shadow: 0 0 60px rgba(0, 0, 0, 0.7);
     --canvas-layer: #0b1016;
     --surface: #121a22;
     --border: #1c2733;
     --foreground: #e2eef4;
     --foreground-sub: #8ba0ad;
     --foreground-dim: #4b5d69;
-    --primary: #a6b8cc;
     --qf: #a8c4b6;
-    --layer-accent: #a6b8cc;
     --energy: #d9b86a;
     --depth: #7a9fc0;
     --data: #9a8fc0;
-    --col-keep: #7faf96;
-    --col-partial: #c4a06a;
   }
   .om-head {
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs);
-    padding-bottom: var(--space-sm);
-    border-bottom: 1px solid var(--border);
+    gap: 3px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   }
   .om-title {
     font-family: var(--font-label);
@@ -143,49 +129,35 @@
   .om-eff {
     font-family: var(--font-numeric);
     font-size: var(--text-label-sm);
-  }
-  .dim {
     color: var(--foreground-dim);
   }
-
-  .om-eff-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-xs) var(--space-sm);
-    background: var(--surface);
-    border-radius: var(--rounded-sm);
-  }
-  .om-eff-label {
-    font-family: var(--font-label);
-    font-size: var(--text-label-sm);
-    color: var(--foreground-sub);
-  }
   .om-eff-pct {
-    font-family: var(--font-numeric);
-    font-size: var(--text-num-md);
     color: var(--qf);
   }
 
+  /* 획득 로그 행 — 테두리 0. [글자] 이름 … 값. */
   .om-gains {
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-sm);
   }
   .om-gain {
     display: grid;
-    grid-template-columns: 24px 1fr auto;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-sm) var(--space-base);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--rounded-sm);
+    grid-template-columns: 18px 1fr auto;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 2px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 35%, transparent);
   }
-  .om-g-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .om-gain:last-child {
+    border-bottom: none;
+  }
+  .om-sym {
+    font-family: var(--font-numeric);
+    font-size: var(--text-label-md);
+    font-weight: 500;
   }
   .res-energy {
     color: var(--energy);
@@ -213,26 +185,33 @@
     font-size: var(--text-narr-sm);
     color: var(--foreground-sub);
     opacity: 0.85;
-    text-align: center;
   }
   .om-note.bonus {
     color: var(--qf);
     opacity: 1;
   }
 
+  /* 확인 = 조용한 발광 알약(QF 톤). */
   .om-confirm {
+    align-self: stretch;
     font-family: var(--font-label);
     font-size: var(--text-label-md);
-    color: var(--layer-accent);
-    background: var(--surface);
-    border: 1px solid var(--layer-accent);
-    border-radius: var(--rounded-md);
-    padding: 12px 24px;
-    min-height: 44px;
+    color: var(--qf);
+    background: color-mix(in srgb, var(--qf) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--qf) 40%, transparent);
+    border-radius: 999px;
+    padding: 10px;
+    min-height: 42px;
     cursor: pointer;
-    transition: transform var(--motion-click-duration) ease-out;
+    transition:
+      box-shadow 0.25s ease,
+      background 0.25s ease;
+  }
+  .om-confirm:hover {
+    background: color-mix(in srgb, var(--qf) 14%, transparent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--qf) 30%, transparent);
   }
   .om-confirm:active {
-    transform: scale(var(--motion-click-scale));
+    transform: scale(var(--motion-click-scale, 0.97));
   }
 </style>
