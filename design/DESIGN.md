@@ -947,18 +947,26 @@ tokens:
   --layer-bg:     var(--layer-mol-bg);
 
   /* --- 타이포그래피 --- */
-  --font-numeric:   'JetBrains Mono', 'IBM Plex Mono', monospace;
-  --font-label:     'Inter', 'IBM Plex Sans', sans-serif;
-  --font-narrative: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  /* 한글 fallback 추가(visual-overhaul §2-A): IBM Plex Sans KR self-host(@fontsource). */
+  --font-numeric:   'JetBrains Mono', 'IBM Plex Mono', 'IBM Plex Sans KR', monospace;
+  --font-label:     'Inter', 'IBM Plex Sans KR', 'IBM Plex Sans', sans-serif;
+  --font-narrative: 'IBM Plex Mono', 'JetBrains Mono', 'IBM Plex Sans KR', monospace;
 
-  --text-num-xl:    20px;
+  /* 타입스케일 위계(visual-overhaul §2-B): r·자원값을 키우고 라벨을 낮춰 대비. */
+  --text-num-display: 34px;   /* r 값(게이지 주인공) */
+  --text-num-xl:    24px;     /* 자원 현재값(C/E) — 20→24 */
   --text-num-lg:    16px;
   --text-num-md:    13px;
   --text-label-lg:  15px;
   --text-label-md:  13px;
   --text-label-sm:  11px;
+  --text-label-xs:  10px;     /* overline/유닛 캡션 */
   --text-narr-md:   12px;
   --text-narr-sm:   11px;
+
+  /* --- 반응형 브레이크포인트(ux-overhaul §2-1) --- */
+  --bp-narrow: 720px;
+  --bp-wide:   1080px;
 
   /* --- 스페이싱 --- */
   --space-xs:    4px;

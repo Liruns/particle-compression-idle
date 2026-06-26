@@ -8,6 +8,7 @@
    */
   import type { TierSnapshot, BuyMode } from '../game';
   import { formatNumber } from '../core/format';
+  import Icon from './icons/Icon.svelte';
 
   export let tiers: TierSnapshot[] = [];
   /** 구매 위임. (tier 1-기반, mode) */
@@ -64,7 +65,8 @@
       {#each tiers as t (t.tier)}
         <tr class:locked={!t.unlocked}>
           <td class="c-tier">
-            T{t.tier}{#if t.tier === bestTier}<span class="best" title="최적 구매 티어">▶</span>{/if}
+            T{t.tier}{#if t.tier === bestTier}<span class="best" title="최적 구매 티어"
+                ><Icon name="best" size={13} label="최적 구매 티어" /></span>{/if}
           </td>
           <td class="c-rate">
             {#if t.owned.gt(0)}+{formatNumber(t.rate, 2)}{:else}—{/if}
@@ -91,11 +93,12 @@
 </div>
 
 <style>
+  /* 폭은 부모 그리드 셀이 결정(ux §P0-1: max-width 해방). 좌측 accent 띠로 현재 층 컨텍스트(visual §4-B). */
   .chain {
     width: 100%;
-    max-width: 460px;
     background: var(--canvas-layer);
     border: 1px solid var(--border);
+    border-left: 2px solid color-mix(in srgb, var(--layer-accent) 40%, var(--border));
     border-radius: var(--rounded-md);
     padding: var(--space-base);
   }
@@ -112,16 +115,19 @@
   }
   .modes {
     display: flex;
-    gap: var(--space-xs);
+    gap: var(--space-sm); /* 터치 간격 확대(ux §P0-5) */
   }
+  /* 대량구매 모드 버튼 — min-height 32px(AA 24 충족 + 권장, ux §P0-5). */
   .mode-btn {
     font-family: var(--font-label);
-    font-size: var(--text-label-sm);
+    font-size: var(--text-label-md);
+    font-weight: 500;
     color: var(--foreground-sub);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--rounded-sm);
-    padding: 3px 8px;
+    padding: 4px 10px;
+    min-height: 32px;
     cursor: pointer;
   }
   .mode-btn.active {
@@ -157,12 +163,15 @@
     text-align: left;
     color: var(--foreground-sub);
   }
+  /* 잠금 행 0.25→0.4(visual §4-B): 잠금=정보0이 아니라 "예고". 비용·티어는 보이게. */
   tr.locked {
-    opacity: 0.25;
+    opacity: 0.4;
   }
   .best {
     color: var(--primary);
     margin-left: 4px;
+    display: inline-flex;
+    vertical-align: middle;
   }
   .c-cost.poor {
     color: var(--col-reset);
@@ -171,15 +180,17 @@
     color: var(--depth);
   }
 
+  /* 구매 버튼 — min-height 44px(터치 권장, ux §P0-5: 8행 빽빽 오터치 방지). */
   .buy {
     font-family: var(--font-label);
-    font-size: var(--text-label-sm);
+    font-size: var(--text-label-md);
+    font-weight: 500;
     color: var(--foreground);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--rounded-sm);
-    padding: 4px 10px;
-    min-height: 28px;
+    padding: 6px 14px;
+    min-height: 44px;
     cursor: pointer;
   }
   .buy:not(.dim):hover {

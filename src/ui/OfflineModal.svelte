@@ -8,6 +8,7 @@
    */
   import type { OfflineSnapshot } from '../game';
   import { formatNumber, formatDuration } from '../core/format';
+  import Icon from './icons/Icon.svelte';
 
   export let offline: OfflineSnapshot;
   /** 확인(모달 닫기) 위임 — 부모가 game.dismissOffline 호출. */
@@ -44,18 +45,18 @@
 
     <div class="om-gains">
       <div class="om-gain">
-        <span class="om-g-icon res-energy">⚡</span>
+        <span class="om-g-icon res-energy"><Icon name="energy" /></span>
         <span class="om-g-name">압축 에너지 E</span>
         <span class="om-g-val">+{formatNumber(offline.dE)}</span>
       </div>
       <div class="om-gain">
-        <span class="om-g-icon res-depth">◎</span>
+        <span class="om-g-icon res-depth"><Icon name="depth" /></span>
         <span class="om-g-name">압축 깊이 C</span>
         <span class="om-g-val">+{formatNumber(offline.dC)}</span>
       </div>
       {#if offline.dD.gt(0)}
         <div class="om-gain">
-          <span class="om-g-icon res-data">▣</span>
+          <span class="om-g-icon res-data"><Icon name="data" /></span>
           <span class="om-g-name">발견 데이터 D</span>
           <span class="om-g-val">+{formatNumber(offline.dD)}</span>
         </div>
@@ -167,8 +168,9 @@
     border-radius: var(--rounded-sm);
   }
   .om-g-icon {
-    text-align: center;
-    font-size: var(--text-num-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .res-energy {
     color: var(--energy);

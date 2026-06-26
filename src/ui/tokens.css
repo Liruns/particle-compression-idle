@@ -99,18 +99,28 @@
   --layer-bg:     var(--layer-mol-bg);
 
   /* --- 타이포그래피 --- */
-  --font-numeric:   'JetBrains Mono', 'IBM Plex Mono', monospace;
-  --font-label:     'Inter', 'IBM Plex Sans', sans-serif;
-  --font-narrative: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  /* 한글 fallback 추가(visual §2-A): Inter/Plex Mono엔 한글 글리프 없어 OS fallback으로 빠지던 문제 해결.
+     IBM Plex Sans KR을 모든 패밀리의 한글 폴백으로(수치도 한글 단위 동반 시). 수치 본체는 Latin이므로 mono 유지. */
+  --font-numeric:   'JetBrains Mono', 'IBM Plex Mono', 'IBM Plex Sans KR', monospace;
+  --font-label:     'Inter', 'IBM Plex Sans KR', 'IBM Plex Sans', sans-serif;
+  --font-narrative: 'IBM Plex Mono', 'JetBrains Mono', 'IBM Plex Sans KR', monospace;
 
-  --text-num-xl:    20px;
+  /* 타입스케일 위계(visual §2-B): 측정 주인공(r·자원값)을 키우고 라벨을 더 낮춰 대비를 만든다. */
+  --text-num-display: 34px;   /* r 값(게이지 주인공) — 화면에서 가장 큰 수치 */
+  --text-num-xl:    24px;     /* 자원 현재값(C/E), 헤더 수치 (20→24) */
   --text-num-lg:    16px;
   --text-num-md:    13px;
   --text-label-lg:  15px;
   --text-label-md:  13px;
   --text-label-sm:  11px;
+  --text-label-xs:  10px;     /* overline/유닛 캡션(자간 0.08em, 계측 라벨 톤) */
   --text-narr-md:   12px;
   --text-narr-sm:   11px;
+
+  /* --- 반응형 브레이크포인트(ux §2-1) --- */
+  /*  < 720 모바일 단일 컬럼 / 720–1079 2컬럼 / >= 1080 데스크톱 3패널. 셸 그리드가 참조. */
+  --bp-narrow: 720px;
+  --bp-wide:   1080px;
 
   /* --- 스페이싱 --- */
   --space-xs:    4px;
@@ -194,6 +204,34 @@
   --motion-toast-slide:    300ms;
   --motion-modal-slide:    300ms;
   --motion-error-shake:    150ms;
+}
+
+
+/* ============================================================
+   전역 base 레이어 (visual-overhaul-plan §2-A·P0-2)
+   index.html엔 base 타이포가 전무 — 여기서 공급. OS/브라우저 기본 폰트가 한글 글리프에
+   새어드는 걸 막고(font-family base), 수치 갱신 시 자릿수 출렁임을 제거한다(tnum = 싸구려감 제거 한 줄).
+   ※ tokens.css는 plain CSS(Svelte scoped 아님) — :global() 미사용, 일반 셀렉터.
+   ============================================================ */
+
+/* box-sizing 보더박스 리셋 — 컴포넌트가 width:100% + padding/border를 전제로 작성됨(반응형 그리드
+   고정폭 트랙에서 content-box면 패딩만큼 오버플로). 표준 리셋, 시각 회귀 없음. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-feature-settings: "tnum" 1, "lnum" 1;   /* 자릿수 고정 — 방치 갱신 시 출렁임 0 */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+body {
+  font-family: var(--font-label);
+  line-height: 1.4;
+  color: var(--foreground);
 }
 
 

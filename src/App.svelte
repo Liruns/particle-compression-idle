@@ -1,11 +1,13 @@
 <script lang="ts">
   /**
-   * App.svelte — 메인 셸 (M1.3: 압축 + 도감 탭 + 층 진입 + FTUE 점진 공개). (ui-flow §2·§4·§7)
-   *  - 탭바: 압축 / 도감(첫 발견 후 등장). FTUE에 따라 점진 노출(정보 과부하 관리).
-   *  - data-layer: 현재 층 slug → DESIGN 팔레트 토큰 전환(분자 황록 → … → 쿼크 백색).
-   *  - 층 카드(우측): 현재 층 이름·dec 범위·메커니즘 이름(M1.4 풀 구현).
-   *  - 토스트: 입자 발견 + 층 진입 비트(narrative §4) — 이벤트 버스 구독.
-   *  - 표시 전용(읽기 전용 스냅샷 구독, §4.1 단방향).
+   * App.svelte — 메인 셸 (디자인 오버홀: 반응형 3패널 + 계측기 타이포·아이콘). (ux/visual-overhaul-plan)
+   *  레이아웃: >=1080 3패널(LEFT 자원상주 / CENTER 게이지·체인 / RIGHT 메커니즘·층) / 720–1079 2컬럼 / <720 단일+하단탭바.
+   *  상주/탭 분리(ux §P0-3): 자원·층·메커니즘은 패널 상주, 탭 {#if}는 CENTER 콘텐츠만 교체.
+   *  표시 전용(읽기 전용 스냅샷 구독, §4.1 단방향).
+   *
+   *  ★렌더 레이어 불변(가드레일): (a)배경 fx 캔버스(fixed,z-1) (b)게이지 글로우 캔버스(.gauge 내)
+   *    (c)onMount setupRenderer (d)subscribe 콜백서 pushRender→setSnapshot+draw (e)slug 변화 onLayerChange
+   *    (f)onDestroy dispose (g)$reducedMotion 구독 (h)dev forceLayer — 8개 모두 유지. 레이아웃만 재구조.
    */
   import { onMount, onDestroy } from 'svelte';
   import { Game, installUnloadSave, type GameSnapshot, type BuyMode } from './game';
@@ -25,6 +27,7 @@
   import ResearchView from './ui/ResearchView.svelte';
   import OfflineModal from './ui/OfflineModal.svelte';
   import Toast from './ui/Toast.svelte';
+  import Icon from './ui/icons/Icon.svelte';
   import type { PhaseState } from './core/layers/mechanics';
 
   let snap: GameSnapshot | null = null;
@@ -250,6 +253,15 @@
   $: prestigeFirst = (snap?.prestige.available && snap?.prestige.isFirst) ?? false;
   // 상전이 탭이 사라졌는데 그 탭에 머물러 있으면 압축 메인으로 폴백(점등 해소·로드 직후 방어).
   $: if (!showPrestigeTab && tab === 'prestige') tab = 'compress';
+
+  // decade 진행 바(ux §P1-3): 정규화 진행도·양끝 라벨은 snapshot 읽기전용 파생(game.ts deriveDecadeProgress).
+  //   현재 층 enterDec→다음 층 enterDec 구간(known층 decadeRange 단일점 문제 회피). 로직 불변.
+  $: decProgress = snap?.layer.decadeProgress ?? 0;
+  $: decStart = snap?.layer.decadeBarRange[0] ?? 0;
+  $: decEnd = snap?.layer.decadeBarRange[1] ?? 1;
+  // 진행 바 세그먼트(5칸, 계측 톤). 채워진 칸 수(최소 진행 시 1칸 — "시작했다" 신호).
+  const DEC_SEGMENTS = 5;
+  $: decFilled = decProgress > 0 ? Math.max(1, Math.round(decProgress * DEC_SEGMENTS)) : 0;
 </script>
 
 <Toast bind:this={toast} />
@@ -264,132 +276,170 @@
 {/if}
 
 <main data-layer={snap?.layer.slug ?? 'mol'}>
-  <header>
-    <h1>Micro Idle</h1>
+  <!-- 상단 상태바(visual §4-D / ux §P1-6): 소형 로고 + 탭 + 측정 컨텍스트(층·dec). -->
+  <header class="topbar">
+    <span class="logo">Micro Idle</span>
+
     {#if snap}
-      <span class="layer-tag">{snap.layer.nameKo} · dec {snap.dec.toFixed(2)}</span>
+      <!-- 탭바: 데스크톱 상단 / 모바일 하단 고정(CSS). 압축 / 연구 / 도감 / 상전이(점진 등장). -->
+      <nav class="tabs" aria-label="화면">
+        <button class="tab" class:active={tab === 'compress'} on:click={() => (tab = 'compress')}
+          >압축</button>
+        {#if showResearchTab}
+          <button class="tab" class:active={tab === 'research'} on:click={() => (tab = 'research')}
+            >연구</button>
+        {/if}
+        {#if showCodexTab}
+          <button class="tab" class:active={tab === 'codex'} on:click={() => (tab = 'codex')}>
+            도감{#if codexCount > 0}<span class="tab-badge">{codexCount}</span>{/if}
+          </button>
+        {/if}
+        {#if showPrestigeTab}
+          <button
+            class="tab tab-prestige"
+            class:active={tab === 'prestige'}
+            class:first-glow={prestigeFirst}
+            on:click={() => (tab = 'prestige')}>
+            {prestigeFirst ? '미지 진입' : '상전이'}<span class="pt-dot" class:on={prestigeFirst}
+              ><Icon name="phase" size={11} label="상전이 준비" /></span>
+          </button>
+        {/if}
+      </nav>
+
+      <!-- 측정 컨텍스트(상태바 우측): 현재 층 · dec. mono 수치. -->
+      <span class="ctx">
+        <span class="ctx-layer">{snap.layer.nameKo}</span>
+        <span class="ctx-sep" aria-hidden="true">·</span>
+        <span class="ctx-dec"><span class="ctx-dec-label">dec</span> {snap.dec.toFixed(2)}</span>
+      </span>
     {/if}
   </header>
 
   {#if snap}
-    <!-- 탭바: 압축 / 도감(점진 등장) -->
-    <nav class="tabs" aria-label="화면">
-      <button class="tab" class:active={tab === 'compress'} on:click={() => (tab = 'compress')}
-        >압축</button>
-      {#if showResearchTab}
-        <button class="tab" class:active={tab === 'research'} on:click={() => (tab = 'research')}
-          >연구</button>
-      {/if}
-      {#if showCodexTab}
-        <button class="tab" class:active={tab === 'codex'} on:click={() => (tab = 'codex')}>
-          도감{#if codexCount > 0}<span class="tab-badge">{codexCount}</span>{/if}
-        </button>
-      {/if}
-      {#if showPrestigeTab}
-        <button
-          class="tab tab-prestige"
-          class:active={tab === 'prestige'}
-          class:first-glow={prestigeFirst}
-          on:click={() => (tab = 'prestige')}>
-          {prestigeFirst ? '미지 진입' : '상전이'}<span class="pt-dot" aria-hidden="true">●</span>
-        </button>
-      {/if}
-    </nav>
-
-    {#if tab === 'compress'}
-      <!-- r 게이지: "작아짐=강해짐". r은 작아지고 dec/숫자는 커진다. -->
-      <section class="gauge">
-        <!-- 게이지 본체+글로우는 캔버스(m2-render-plan V2-1). 캔버스 준비 전엔 DOM 점 폴백. -->
-        <div class="gauge-core-wrap">
-          <canvas class="gauge-glow" bind:this={glowCanvas} aria-hidden="true"></canvas>
-          <div class="r-core" class:hidden={canvasReady} style="--r-glow: {glowRadius}px"></div>
-        </div>
-        <div class="r-readout">
-          <span class="r-label">반경 r</span>
-          <span class="r-value">{formatRadius(snap.r)}</span>
-        </div>
-        <div class="dec-readout">
-          <span class="dec-label">dec</span>
-          <span class="dec-value">{snap.dec.toFixed(3)}</span>
-        </div>
-      </section>
-
-      <!-- 현재 층 카드(우측 패널 역할 — 모바일 단일 컬럼에선 게이지 아래) -->
-      <LayerCard layer={snap.layer} showMechanism={snap.ftue.showMechanismSlot} />
-
-      <!-- 메커니즘 위젯(층마다 다름, ui-flow §2-E). active=false면 위젯 자체가 숨음. -->
-      <!-- 원자~쿼크: 오비탈 공명(M1.4). -->
-      <ResonanceWidget resonance={snap.resonance} onClick={onResonanceClick} />
-      <!-- 프리온층: 위상 겹침(M1.6 — 미지 첫 메커니즘). -->
-      <PhaseWidget phase={snap.phase} onPin={onPhasePin} onUnpin={onPhaseUnpin} />
-      <!-- 끈층: 진동 하모닉스(M1.6). -->
-      <HarmonicsWidget harmonics={snap.harmonics} />
-
-      <!-- 자원(전부 Decimal, format으로 표시) -->
-      <section class="resources">
-        <div class="res res-depth">
-          <span class="res-icon">◎</span>
-          <span class="res-name">압축 깊이 C</span>
-          <span class="res-val">{formatNumber(snap.C)}</span>
-          {#if snap.rateC.gt(0)}<span class="res-rate">+{formatNumber(snap.rateC, 2)}/s</span>{/if}
-        </div>
-        <div class="res res-energy">
-          <span class="res-icon">⚡</span>
-          <span class="res-name">압축 에너지 E</span>
-          <span class="res-val">{formatNumber(snap.E)}</span>
-          {#if snap.rateC.gt(0)}<span class="res-rate">+{formatNumber(snap.rateC, 2)}/s</span>{/if}
-        </div>
-        {#if snap.ftue.showResourceD}
-          <div class="res res-data">
-            <span class="res-icon">▣</span>
-            <span class="res-name">발견 데이터 D</span>
-            <span class="res-val">{formatNumber(snap.D)}</span>
-            <span class="res-rate dim">공명 산출</span>
+    <!-- 반응형 3패널 셸(ux §2-2): LEFT 자원상주 / CENTER 탭콘텐츠 / RIGHT 메커니즘·층. -->
+    <div class="shell">
+      <!-- ───── LEFT: 자원 readout(모든 탭 상주, ux §P0-3) ───── -->
+      <aside class="panel-left">
+        <section class="resources" aria-label="자원">
+          <div class="res res-depth">
+            <span class="res-icon"><Icon name="depth" /></span>
+            <span class="res-name">압축 깊이 C</span>
+            <span class="res-val">{formatNumber(snap.C)}</span>
+            {#if snap.rateC.gt(0)}<span class="res-rate">+{formatNumber(snap.rateC, 2)}<span class="unit">/s</span></span>{/if}
           </div>
-        {/if}
-        {#if snap.QF.gt(0)}
-          <div class="res res-qf">
-            <span class="res-icon">◆</span>
-            <span class="res-name">양자 거품 QF</span>
-            <span class="res-val">{formatNumber(snap.QF)}</span>
-            <span class="res-rate dim">영구 보존</span>
+          <div class="res res-energy">
+            <span class="res-icon"><Icon name="energy" /></span>
+            <span class="res-name">압축 에너지 E</span>
+            <span class="res-val">{formatNumber(snap.E)}</span>
+            {#if snap.rateC.gt(0)}<span class="res-rate">+{formatNumber(snap.rateC, 2)}<span class="unit">/s</span></span>{/if}
           </div>
+          {#if snap.ftue.showResourceD}
+            <div class="res res-data">
+              <span class="res-icon"><Icon name="data" /></span>
+              <span class="res-name">발견 데이터 D</span>
+              <span class="res-val">{formatNumber(snap.D)}</span>
+              <span class="res-rate dim">공명 산출</span>
+            </div>
+          {/if}
+          {#if snap.QF.gt(0)}
+            <div class="res res-qf">
+              <span class="res-icon"><Icon name="qf" /></span>
+              <span class="res-name">양자 거품 QF</span>
+              <span class="res-val">{formatNumber(snap.QF)}</span>
+              <span class="res-rate dim">영구 보존</span>
+            </div>
+          {/if}
+          <div class="res res-mult">
+            <span class="res-icon"><Icon name="mult" /></span>
+            <span class="res-name">생산 배율</span>
+            <span class="res-val">{formatNumber(snap.mult, 3)}</span>
+          </div>
+        </section>
+
+        <footer class="status">
+          <span>{loadLabel[snap.loadKind]}</span>
+          <span class="dim">· 누적 틱 {snap.totalTicks.toLocaleString()}</span>
+          <p class="whisper">더 작은 것이 있다.</p>
+        </footer>
+      </aside>
+
+      <!-- ───── CENTER: 탭 콘텐츠(압축=게이지·체인 / 그 외=뷰 교체) ───── -->
+      <section class="panel-center">
+        {#if tab === 'compress'}
+          <!-- r 게이지: "작아짐=강해짐". r은 작아지고 dec/숫자는 커진다. -->
+          <section class="gauge">
+            <!-- 게이지 본체+글로우는 캔버스(m2-render-plan V2-1). 캔버스 준비 전엔 DOM 점 폴백. -->
+            <div class="gauge-core-wrap">
+              <canvas class="gauge-glow" bind:this={glowCanvas} aria-hidden="true"></canvas>
+              <div class="r-core" class:hidden={canvasReady} style="--r-glow: {glowRadius}px"></div>
+            </div>
+            <div class="r-readout">
+              <span class="r-label">반경 r</span>
+              <span class="r-value">{formatRadius(snap.r)}</span>
+            </div>
+
+            <!-- decade 진행 바(ux §P1-3): dec N ──[■■■□□]── dec N+1. 층 내 진행감. -->
+            <div class="dec-bar" aria-label="decade 진행" role="progressbar"
+                 aria-valuenow={Math.round(decProgress * 100)} aria-valuemin={0} aria-valuemax={100}>
+              <span class="dec-end">dec {decStart}</span>
+              <span class="dec-track">
+                {#each Array(DEC_SEGMENTS) as _, i}
+                  <span class="dec-seg" class:fill={i < decFilled}></span>
+                {/each}
+              </span>
+              <span class="dec-end">dec {decEnd}</span>
+            </div>
+            <div class="dec-readout">
+              <span class="dec-label">dec</span>
+              <span class="dec-value">{snap.dec.toFixed(3)}</span>
+            </div>
+          </section>
+
+          <!-- [압축] 버튼을 게이지 직하로(ux §P1-1: 게이지→버튼 동선 단축, 자원 위). -->
+          <section class="actions">
+            <button class="btn-compress" class:pulse={compressPulse} on:click={onCompress}>
+              <Icon name="compress" size={16} /> 압축
+            </button>
+          </section>
+
+          {#if snap.ftue.hint}
+            <p class="ftue-hint">{snap.ftue.hint}</p>
+          {/if}
+
+          <!-- 모바일에서만: 메커니즘 위젯·층 카드를 체인 앞에 인라인(데스크톱은 RIGHT 패널). -->
+          <div class="mech-inline">
+            <LayerCard layer={snap.layer} showMechanism={snap.ftue.showMechanismSlot} />
+            <ResonanceWidget resonance={snap.resonance} onClick={onResonanceClick} />
+            <PhaseWidget phase={snap.phase} onPin={onPhasePin} onUnpin={onPhaseUnpin} />
+            <HarmonicsWidget harmonics={snap.harmonics} />
+          </div>
+
+          {#if snap.ftue.showChain}
+            <ChainTable tiers={snap.tiers} {onBuy} />
+          {/if}
+        {:else if tab === 'research'}
+          <ResearchView research={snap.research} dCurrent={snap.D} onBuy={onBuyResearch} />
+        {:else if tab === 'codex'}
+          <CodexView codex={snap.codex} />
+        {:else if tab === 'prestige'}
+          <PrestigeView
+            prestige={snap.prestige}
+            onPrestige={onPrestige}
+            onContinue={onPrestigeContinue} />
         {/if}
-        <div class="res res-mult">
-          <span class="res-icon">×</span>
-          <span class="res-name">생산 배율</span>
-          <span class="res-val">{formatNumber(snap.mult, 3)}</span>
-        </div>
       </section>
 
-      <section class="actions">
-        <button class="btn-compress" class:pulse={compressPulse} on:click={onCompress}>압축</button>
-        <button class="btn-save" on:click={onSave}>저장</button>
-      </section>
-
-      {#if snap.ftue.hint}
-        <p class="ftue-hint">{snap.ftue.hint}</p>
-      {/if}
-
-      {#if snap.ftue.showChain}
-        <ChainTable tiers={snap.tiers} {onBuy} />
-      {/if}
-    {:else if tab === 'research'}
-      <ResearchView research={snap.research} dCurrent={snap.D} onBuy={onBuyResearch} />
-    {:else if tab === 'codex'}
-      <CodexView codex={snap.codex} />
-    {:else if tab === 'prestige'}
-      <PrestigeView
-        prestige={snap.prestige}
-        onPrestige={onPrestige}
-        onContinue={onPrestigeContinue} />
-    {/if}
-
-    <footer>
-      <span>{loadLabel[snap.loadKind]}</span>
-      <span class="dim">· 누적 틱 {snap.totalTicks.toLocaleString()}</span>
-      <p class="whisper">더 작은 것이 있다.</p>
-    </footer>
+      <!-- ───── RIGHT: 메커니즘 + 층 컨텍스트(데스크톱 상주, 압축 컨텍스트) ───── -->
+      <aside class="panel-right">
+        <LayerCard layer={snap.layer} showMechanism={snap.ftue.showMechanismSlot} />
+        <!-- 메커니즘 위젯(층마다 다름, ui-flow §2-E). active=false면 위젯 자체가 숨음. -->
+        <ResonanceWidget resonance={snap.resonance} onClick={onResonanceClick} />
+        <PhaseWidget phase={snap.phase} onPin={onPhasePin} onUnpin={onPhaseUnpin} />
+        <HarmonicsWidget harmonics={snap.harmonics} />
+        <!-- 저장(설정 탭 미구현 — 우측 패널 하단 상주). -->
+        <button class="btn-save" on:click={onSave}><Icon name="save" size={14} /> 저장</button>
+      </aside>
+    </div>
   {:else}
     <p class="booting">초기화 중…</p>
   {/if}
@@ -423,9 +473,6 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: var(--space-lg);
-    padding: var(--space-xl) var(--space-md) var(--space-xxl);
     /* 층 배경 틴트(layer-bg) — data-layer가 교체. 전환은 부드럽게. */
     background: var(--layer-bg, var(--canvas));
     color: var(--foreground);
@@ -433,39 +480,62 @@
     transition: background var(--motion-layer-bg-fade) ease-out;
   }
 
-  header {
-    text-align: center;
+  /* ───── 상단 상태바(visual §4-D) ───── */
+  .topbar {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-xs);
+    align-items: center;
+    gap: var(--space-md);
+    padding: var(--space-sm) var(--space-md);
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--canvas-layer) 60%, transparent);
   }
-  h1 {
-    margin: 0;
-    font-size: var(--text-num-xl);
+  /* 로고: sans 500 + 자간(visual §2-B: mono 빼서 코드처럼 안 보이게). */
+  .logo {
+    font-family: var(--font-label);
+    font-size: var(--text-label-md);
     font-weight: 500;
-    letter-spacing: 0.02em;
-    color: var(--foreground);
+    letter-spacing: 0.06em;
+    color: var(--foreground-sub);
+    white-space: nowrap;
   }
-  .layer-tag {
+  /* 측정 컨텍스트(우측): 층 라벨 + dec mono 수치. */
+  .ctx {
+    margin-left: auto;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-xs);
+    white-space: nowrap;
+  }
+  .ctx-layer {
     font-size: var(--text-label-sm);
     color: var(--layer-accent);
     font-family: var(--font-narrative);
     letter-spacing: 0.03em;
     transition: color var(--motion-layer-accent-shift) ease-out;
   }
+  .ctx-sep {
+    color: var(--foreground-dim);
+  }
+  .ctx-dec {
+    font-family: var(--font-numeric);
+    font-size: var(--text-num-md);
+    color: var(--foreground);
+  }
+  .ctx-dec-label {
+    font-size: var(--text-label-xs);
+    color: var(--foreground-sub);
+    letter-spacing: 0.08em;
+  }
 
-  /* 탭바 */
+  /* ───── 탭바 ───── */
   .tabs {
     display: flex;
     gap: var(--space-xs);
-    border-bottom: 1px solid var(--border);
-    width: 100%;
-    max-width: 460px;
-    justify-content: center;
   }
   .tab {
     font-family: var(--font-label);
     font-size: var(--text-label-md);
+    font-weight: 500;
     color: var(--foreground-sub);
     background: transparent;
     border: none;
@@ -491,46 +561,158 @@
     text-align: center;
   }
 
-  /* 상전이 탭 점등 도트(ui-flow §1-C): ● QF 녹. 첫 상전이는 글로우 펄스(1.5s, ui-flow §8-B). */
+  /* 상전이 탭 점등 도트(ui-flow §1-C): QF 녹 위상 아이콘. 첫 상전이는 글로우 펄스(1.5s). */
   .tab-prestige .pt-dot {
     color: var(--qf);
     margin-left: 4px;
-    font-size: 0.7em;
-    vertical-align: middle;
+    display: inline-flex;
+    align-items: center;
   }
   .tab-prestige.first-glow {
     color: var(--qf);
   }
-  .tab-prestige.first-glow .pt-dot {
+  .tab-prestige.first-glow .pt-dot.on {
     animation: pt-glow 1.5s ease-in-out infinite;
+    border-radius: var(--rounded-full);
   }
   @keyframes pt-glow {
     0%,
     100% {
       opacity: 0.5;
-      text-shadow: 0 0 2px transparent;
+      filter: drop-shadow(0 0 0 transparent);
     }
     50% {
       opacity: 1;
-      text-shadow: 0 0 8px var(--qf);
+      filter: drop-shadow(0 0 4px var(--qf));
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .tab-prestige.first-glow .pt-dot {
+    .tab-prestige.first-glow .pt-dot.on {
       animation: none;
       opacity: 1;
     }
   }
 
-  /* r 게이지: 중심 글로우(--col-glow-core), dec 커질수록 반경 확대(DESIGN glow.core). */
+  /* ═════ 반응형 셸 그리드(ux §2-2~2-4) ═════
+     기본(모바일 <720): 1컬럼. CENTER 먼저, LEFT(자원) 다음, RIGHT는 압축 본문에 인라인(아래서 숨김). */
+  .shell {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'center'
+      'left';
+    gap: var(--space-md);
+    width: 100%;
+    box-sizing: border-box;
+    padding: var(--space-md) var(--space-md) var(--space-xxl);
+  }
+  .panel-left {
+    grid-area: left;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+  }
+  .panel-center {
+    grid-area: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-lg);
+    min-width: 0;
+  }
+  .panel-right {
+    grid-area: right;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    min-width: 0;
+  }
+  /* 패널 직속 자식이 고정폭 트랙(200/240px)을 넘지 않게 — flex min-width:auto 오버플로 차단. */
+  .panel-left > *,
+  .panel-right > *,
+  .panel-center > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* 모바일: RIGHT 패널(데스크톱 메커니즘 상주) 숨김 — 대신 압축 본문 .mech-inline 사용. */
+  .panel-right {
+    display: none;
+  }
+  .mech-inline {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    width: 100%;
+  }
+
+  /* 중간(720–1079, ux §2-4): 2컬럼 — CENTER + RIGHT. 자원(LEFT)은 CENTER 위로(자리 절약). */
+  @media (min-width: 720px) {
+    .shell {
+      grid-template-columns: minmax(0, 1fr) 240px;
+      grid-template-areas:
+        'left   right'
+        'center right';
+      padding: var(--space-lg) var(--space-lg) var(--space-xxl);
+    }
+    .panel-left {
+      flex-direction: row;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .panel-left .resources {
+      flex: 1;
+      min-width: 240px;
+    }
+    .panel-left .status {
+      flex-basis: 100%;
+    }
+    .panel-right {
+      display: flex;
+    }
+    /* 메커니즘은 RIGHT로 — 압축 본문 인라인 숨김(중복 방지). */
+    .mech-inline {
+      display: none;
+    }
+  }
+
+  /* 데스크톱(>=1080, ux §2-2): 3패널 LEFT/CENTER/RIGHT. CENTER 최대폭 캡은 셸이 1회. */
+  @media (min-width: 1080px) {
+    .shell {
+      grid-template-columns: 200px minmax(0, 1fr) 240px;
+      grid-template-areas: 'left center right';
+      gap: var(--space-lg);
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    .panel-left {
+      flex-direction: column;
+      flex-wrap: nowrap; /* mid-mode wrap 해제 — column+wrap+고정높이면 status가 2번째 컬럼으로 새는 버그 */
+      align-items: stretch;
+    }
+    /* 데스크톱: 자원은 자연 높이로 상단 정렬(mid-mode flex:1 그로우 해제 — 카드가 세로로 안 퍼지게). */
+    .panel-left .resources {
+      min-width: 0;
+      flex: 0 0 auto;
+    }
+    /* CENTER 콘텐츠 과확산 방지(초광폭에서 게이지·체인이 너무 안 퍼지게). */
+    .panel-center {
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+    }
+  }
+
+  /* ───── r 게이지 ───── */
   .gauge {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--space-sm);
-    padding: var(--space-md);
+    padding: var(--space-md) var(--space-md) var(--space-sm);
+    width: 100%;
   }
-  /* 게이지 캔버스 래퍼: 본체+글로우 캔버스가 점유하는 정사각 영역. ux §2-A 원형 게이지 박스. */
+  /* 게이지 캔버스 래퍼: 본체+글로우 캔버스가 점유하는 정사각 영역. */
   .gauge-core-wrap {
     position: relative;
     width: 132px;
@@ -539,7 +721,6 @@
     align-items: center;
     justify-content: center;
   }
-  /* 게이지 글로우 캔버스: 래퍼 전체. CSS 크기=백버퍼는 렌더러가 dpr로 스케일. */
   .gauge-glow {
     position: absolute;
     inset: 0;
@@ -559,67 +740,139 @@
       background var(--motion-layer-accent-shift) ease-out,
       opacity var(--motion-fade-cross) ease-out;
   }
-  /* 캔버스 준비(getContext 성공) 시 DOM 점 숨김 — 캔버스 글로우가 대체(폴백은 no-getContext, V2-7 M8). */
   .r-core.hidden {
     opacity: 0;
   }
-  .r-readout,
+  /* r readout — r 값이 화면 최대 수치(num-display 34/500, visual §2-B). */
+  .r-readout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-family: var(--font-numeric);
+  }
+  .r-label {
+    color: var(--foreground-sub);
+    font-size: var(--text-label-xs);
+    letter-spacing: 0.08em;
+  }
+  .r-value {
+    color: var(--primary);
+    font-size: var(--text-num-display);
+    font-weight: 500;
+    line-height: 1.1;
+  }
+
+  /* decade 진행 바(ux §P1-3) — 게이지 직하. dec N ──[■■■□□]── dec N+1. */
+  .dec-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    width: 100%;
+    max-width: 280px;
+    margin-top: var(--space-xs);
+  }
+  .dec-end {
+    font-family: var(--font-numeric);
+    font-size: var(--text-label-xs);
+    color: var(--foreground-sub);
+    white-space: nowrap;
+  }
+  .dec-track {
+    flex: 1;
+    display: flex;
+    gap: 3px;
+  }
+  .dec-seg {
+    flex: 1;
+    height: 6px;
+    border-radius: var(--rounded-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    transition: background var(--motion-fade-cross) ease-out;
+  }
+  .dec-seg.fill {
+    background: var(--layer-accent);
+    border-color: var(--layer-accent);
+    box-shadow: 0 0 5px var(--layer-glow, var(--col-glow-core));
+  }
   .dec-readout {
     display: flex;
     gap: var(--space-sm);
     align-items: baseline;
     font-family: var(--font-numeric);
   }
-  .r-label,
   .dec-label {
     color: var(--foreground-sub);
-    font-size: var(--text-label-sm);
-  }
-  .r-value {
-    color: var(--primary);
-    font-size: var(--text-num-lg);
+    font-size: var(--text-label-xs);
+    letter-spacing: 0.08em;
   }
   .dec-value {
     color: var(--foreground);
     font-size: var(--text-num-md);
   }
 
+  /* ───── 자원 readout ───── */
   .resources {
     display: grid;
     grid-template-columns: 1fr;
     gap: var(--space-sm);
     width: 100%;
-    max-width: 460px;
   }
+  /* 자원 카드 — 좌측 accent 띠(visual §4-B: 현재 층 컨텍스트). inset 하이라이트로 깊이.
+     좁은 LEFT 패널(200px)에서 한글 라벨이 세로로 깨지지 않게: 아이콘(좌, 행 병합) + [이름/값/율] 세로 스택.
+     이름=작게 위, 값=크게(num-xl) 아래 — 계측 readout 위계(값이 라벨을 압도). */
   .res {
     display: grid;
-    grid-template-columns: 24px 1fr auto auto;
+    grid-template-columns: 22px minmax(0, 1fr);
+    grid-template-areas:
+      'icon name'
+      'icon val'
+      'icon rate';
     align-items: center;
-    gap: var(--space-sm);
+    column-gap: var(--space-sm);
+    row-gap: 1px;
     padding: var(--space-sm) var(--space-base);
     background: var(--canvas-layer);
     border: 1px solid var(--border);
+    border-left: 2px solid color-mix(in srgb, var(--layer-accent) 35%, var(--border));
     border-radius: var(--rounded-md);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
   .res-icon {
-    text-align: center;
-    font-size: var(--text-num-md);
+    grid-area: icon;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
+  /* 자원 이름 — label-sm 저채도(값에 양보). 넘치면 말줄임(세로 깨짐 방지). */
   .res-name {
+    grid-area: name;
     font-size: var(--text-label-sm);
     color: var(--foreground-sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  /* 자원 값 — num-xl/500(visual §2-B: 값이 라벨을 압도). tnum. */
   .res-val {
+    grid-area: val;
     font-family: var(--font-numeric);
-    font-size: var(--text-num-md);
+    font-size: var(--text-num-xl);
+    font-weight: 500;
     color: var(--foreground);
+    line-height: 1.15;
   }
   .res-rate {
+    grid-area: rate;
     font-family: var(--font-numeric);
     font-size: var(--text-label-sm);
     color: var(--foreground-sub);
-    min-width: 64px;
-    text-align: right;
+  }
+  /* 단위 — 값에서 분리·저채도(visual §2-C: 데이터시트 톤). */
+  .res-rate .unit {
+    color: var(--foreground-dim);
+    font-size: var(--text-label-xs);
   }
   .res-rate.dim {
     color: var(--foreground-dim);
@@ -640,29 +893,40 @@
     color: var(--foreground-sub);
   }
 
+  /* ───── 액션 ───── */
   .actions {
     display: flex;
     gap: var(--space-base);
+    width: 100%;
+    justify-content: center;
   }
-  button {
+  .btn-compress,
+  .btn-save {
     font-family: var(--font-label);
     font-size: var(--text-label-md);
+    font-weight: 500;
     color: var(--foreground);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--rounded-md);
     padding: 12px 24px;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-xs);
     transition: transform var(--motion-click-duration) ease-out;
   }
-  button:active {
+  .btn-compress:active,
+  .btn-save:active {
     transform: scale(var(--motion-click-scale));
   }
   .btn-compress {
     border-color: var(--layer-accent);
     color: var(--layer-accent);
-    min-width: 96px;
-    min-height: 44px;
+    min-width: 160px;
+    min-height: 48px;
+    font-size: var(--text-label-lg);
     /* 클릭 글로우 버스트(DESIGN §5: +2px/200ms). pulse 클래스가 켜질 때만. */
     box-shadow: 0 0 0 transparent;
     transition:
@@ -671,6 +935,12 @@
   }
   .btn-compress.pulse {
     box-shadow: 0 0 8px var(--layer-glow, var(--col-glow-core));
+  }
+  /* 저장 — RIGHT 패널 하단, ≥44px(ux §P0-5). */
+  .btn-save {
+    min-height: 44px;
+    color: var(--foreground-sub);
+    width: 100%;
   }
 
   .ftue-hint {
@@ -683,7 +953,8 @@
     max-width: 460px;
   }
 
-  footer {
+  /* ───── 상태 footer(LEFT 하단 상주) ───── */
+  .status {
     text-align: center;
     font-size: var(--text-label-sm);
     color: var(--foreground-sub);
@@ -701,5 +972,44 @@
   .booting {
     color: var(--foreground-sub);
     font-family: var(--font-narrative);
+    text-align: center;
+    padding: var(--space-xxl);
+  }
+
+  /* ═════ 모바일 하단 탭바(ux §P0-4): <720px에서 탭바를 하단 고정(thumb zone). ═════
+     데스크톱은 상단 상태바 안 유지. 모바일은 상태바에서 탭을 떼 화면 하단에 고정. */
+  @media (max-width: 719px) {
+    .tabs {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 40;
+      justify-content: space-around;
+      gap: 0;
+      background: color-mix(in srgb, var(--canvas-layer) 96%, transparent);
+      border-top: 1px solid var(--border);
+      padding: 0 var(--space-xs);
+      backdrop-filter: blur(8px);
+    }
+    .tab {
+      flex: 1;
+      justify-content: center;
+      min-height: 48px;
+      border-bottom: none;
+      border-top: 2px solid transparent;
+    }
+    .tab.active {
+      border-bottom: none;
+      border-top-color: var(--layer-accent);
+    }
+    /* 하단 탭바가 콘텐츠 마지막을 가리지 않게 셸 하단 여백 확보. */
+    .shell {
+      padding-bottom: calc(48px + var(--space-lg));
+    }
+    /* 상태바: 탭이 빠졌으므로 로고 + 컨텍스트만(2분할). */
+    .topbar {
+      justify-content: space-between;
+    }
   }
 </style>

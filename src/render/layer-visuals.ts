@@ -129,16 +129,19 @@ export const LAYER_VISUALS: Record<string, LayerVisual> = {
     bg: { kind: 'vignette', colorToken: '--layer-prn-accent', alpha: 0.025 },
   },
 
-  // --- 스텁(키만 존재, 차기 슬라이스에서 채움). glowBlend만 온도 아크로 미리 분류(V2-2). ---
-  atom: { haze: null, particles: null, glowBlend: 'add', bg: null }, // 따뜻(청록)
-  nuc: { haze: null, particles: null, glowBlend: 'add', bg: null }, // 따뜻(주황)
-  ncl: { haze: null, particles: null, glowBlend: 'add', bg: null }, // 삼원색 — 차기 판단
-  qrk: { haze: null, particles: null, glowBlend: 'add', bg: null }, // 탈색 — 차기 판단
-  str: { haze: null, particles: null, glowBlend: 'normal', bg: null }, // 차가운 단색
-  lp: { haze: null, particles: null, glowBlend: 'normal', bg: null },
-  fm: { haze: null, particles: null, glowBlend: 'normal', bg: null },
-  inf: { haze: null, particles: null, glowBlend: 'normal', bg: null },
-  plk: { haze: null, particles: null, glowBlend: 'normal', bg: null },
+  // --- 스텁(파티클·헤이즈는 차기 슬라이스). "검은 보이드" 응급 폴백(visual §4-A·P0-5):
+  //   각 층 accent로 최소 vignette bg를 켠다 → owner가 보던 L2+ 빈 화면이 즉시 "세계"가 됨.
+  //   prn이 이미 vignette 0.025로 검증된 패턴(드로우는 CanvasRenderer.drawBackground 일반 경로 — slug 무관).
+  //   glowBlend는 온도 아크로 미리 분류 유지(V2-2). 풀 헤이즈·파티클은 P2-2(graphics-programmer).
+  atom: { haze: null, particles: null, glowBlend: 'add', bg: { kind: 'vignette', colorToken: '--layer-atom-accent', alpha: 0.025 } }, // 따뜻(청록)
+  nuc: { haze: null, particles: null, glowBlend: 'add', bg: { kind: 'vignette', colorToken: '--layer-nuc-accent', alpha: 0.025 } }, // 따뜻(주황)
+  ncl: { haze: null, particles: null, glowBlend: 'add', bg: { kind: 'vignette', colorToken: '--layer-ncl-accent-r', alpha: 0.022 } }, // 삼원색 — R로 비네팅
+  qrk: { haze: null, particles: null, glowBlend: 'add', bg: { kind: 'vignette', colorToken: '--layer-qrk-accent', alpha: 0.018 } }, // 탈색 — 극저알파(미니멀)
+  str: { haze: null, particles: null, glowBlend: 'normal', bg: { kind: 'vignette', colorToken: '--layer-str-accent', alpha: 0.025 } }, // 차가운 단색
+  lp: { haze: null, particles: null, glowBlend: 'normal', bg: { kind: 'vignette', colorToken: '--layer-lp-accent', alpha: 0.025 } },
+  fm: { haze: null, particles: null, glowBlend: 'normal', bg: { kind: 'vignette', colorToken: '--layer-fm-accent', alpha: 0.018 } },
+  inf: { haze: null, particles: null, glowBlend: 'normal', bg: { kind: 'vignette', colorToken: '--layer-inf-accent', alpha: 0.025 } },
+  plk: { haze: null, particles: null, glowBlend: 'normal', bg: { kind: 'vignette', colorToken: '--layer-plk-accent', alpha: 0.02 } },
 };
 
 /** slug로 config 조회. 미정의 slug는 안전한 빈 비주얼(가산·전부 null)로 폴백. */
@@ -146,13 +149,25 @@ export function visualFor(slug: string): LayerVisual {
   return LAYER_VISUALS[slug] ?? { haze: null, particles: null, glowBlend: 'add', bg: null };
 }
 
-/** 렌더러가 onLayerChange 시 색 캐시에 읽어둘 토큰 키 전체(층 무관 고정 집합). */
+/** 렌더러가 onLayerChange 시 색 캐시에 읽어둘 토큰 키 전체(층 무관 고정 집합).
+ *  ★응급 보이드 폴백(P0-5): 9 스텁층의 vignette colorToken을 추가 — 없으면 colors.get가
+ *   녹색 fallback을 반환해 비네팅이 엉뚱한 색으로 나온다. 각 층 accent를 전부 캐시에 등록. */
 export const RENDER_TOKEN_KEYS: string[] = [
   '--col-glow-core',
   '--layer-accent',
   '--layer-glow',
   '--layer-bg',
   '--foreground-dim',
+  // 층 accent 전체(비네팅 colorToken 해석용 — 색맵 변경/색맹도 캐시 재읽기로 자동 반영).
   '--layer-mol-accent',
+  '--layer-atom-accent',
+  '--layer-nuc-accent',
+  '--layer-ncl-accent-r',
+  '--layer-qrk-accent',
   '--layer-prn-accent',
+  '--layer-str-accent',
+  '--layer-lp-accent',
+  '--layer-fm-accent',
+  '--layer-inf-accent',
+  '--layer-plk-accent',
 ];

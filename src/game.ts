@@ -104,6 +104,14 @@ export interface LayerSnapshot {
   scaleM: string;
   /** 서사 decade 범위 [start,end]. */
   decadeRange: readonly [number, number];
+  /**
+   * decade 진행 바용 정규화 진행도 0~1(ux-overhaul §P1-3). **표시 전용 읽기 파생** — 로직/경제 불변.
+   *   현재 층 enterDec→다음 층 enterDec 구간에서 dec의 위치(decadeRange는 known층이 단일점이라 부적합).
+   *   마지막 층은 decadeRange 폭으로 폴백. 분모≤0이면 0.
+   */
+  decadeProgress: number;
+  /** decade 바 양끝 라벨용 [start,end] dec(진행도 분모와 동일 구간). 표시 전용. */
+  decadeBarRange: readonly [number, number];
   /** 알려진 입자 경계 근접(dec15+) — ux.md §5-6 신호. */
   nearBoundary: boolean;
 }
@@ -278,6 +286,22 @@ type SnapshotListener = (snap: GameSnapshot) => void;
 
 /** 대량구매 모드: 1개 / 10개 / 100개 / Max(전액). (ui-flow §2-D, system-flows §2.1) */
 export type BuyMode = 1 | 10 | 100 | 'max';
+
+/**
+ * decade 진행 바 정규화(ux-overhaul §P1-3). **표시 전용 순수 파생** — 게임 상태·경제 불변.
+ *  진행 구간 = 현재 층 enterDec → 다음 층 enterDec. (decadeRange는 known층이 단일점이라 분모 0 → 부적합.)
+ *  마지막 층(다음 없음)은 decadeRange 폭으로 폴백, 그것도 0이면 +3 가상 폭. 분모≤0 가드.
+ *  @returns [progress(0~1), [barStart, barEnd]]
+ */
+function deriveDecadeProgress(def: LayerDefinition, dec: number): [number, readonly [number, number]] {
+  const start = def.enterDec;
+  const next = layerByIndex(def.index + 1);
+  let end = next ? next.enterDec : def.decadeRange[1];
+  if (end <= start) end = def.decadeRange[1] > start ? def.decadeRange[1] : start + 3;
+  const span = end - start;
+  const progress = span > 0 ? Math.min(1, Math.max(0, (dec - start) / span)) : 0;
+  return [progress, [start, end]];
+}
 
 export class Game {
   private readonly platform: PlatformAdapter;
@@ -957,6 +981,8 @@ export class Game {
     const dec = computeDec(s.resources.C);
     // 활성 층: 알려진 물리는 dec 파생, 미지(상전이 진입)는 currentIndex(프리온 등)가 진실.
     const def: LayerDefinition = this.activeLayer(dec);
+    // decade 진행 바(표시 전용 — 로직 불변, ux-overhaul §P1-3).
+    const [decadeProg, decadeBar] = deriveDecadeProgress(def, dec);
     const discovered = s.codex.discovered;
 
     // T1 첫 구매 가능 여부(FTUE 체인 노출 게이트).
@@ -1079,6 +1105,9 @@ export class Game {
         mechanismNameKo: def.mechanismNameKo,
         scaleM: def.scaleM,
         decadeRange: def.decadeRange,
+        // decade 진행 바(표시 전용 파생 — 로직 불변): 층 enterDec→다음 층 enterDec 구간 정규화.
+        decadeProgress: decadeProg,
+        decadeBarRange: decadeBar,
         nearBoundary: isNearKnownBoundary(dec),
       },
       codex: {
