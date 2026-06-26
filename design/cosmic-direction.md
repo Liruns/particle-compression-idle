@@ -167,6 +167,7 @@
   - **메커니즘 bloom 오버레이 폐기:** 능동 4종이 전부 게임판에 다이제틱하게 올라와 메커니즘 패널이 완전 중복 → 제거. `메커니즘` 디바이스 노드·`mech` 패널·`onResonanceClick/onPhasePin/onPhaseUnpin` 위임 삭제. (개입 bloom은 연구·도감·상전이 콘텐츠 뷰에만 — §3-B 디바이스.)
   - **미사용 컴포넌트 6종 삭제:** `ResonanceWidget`·`PhaseWidget`·`HarmonicsWidget`(메커니즘 위젯, 다이제틱으로 대체) + `ChainTable`·`LayerCard`·`RightPanelStatus`(대시보드 잔재). svelte-check 0 — dangling import 없음.
   - **콘텐츠 뷰 cosmic 리스타일:** 연구·도감·상전이 뷰(`CodexView`/`ResearchView`/`PrestigeView`)가 쓰던 구 대시보드 네온 토큰(#3ecf8e 등)을 `.bloom-panel`에서 **탈채도 공허 팔레트로 remap**(custom property 캐스케이드 — 뷰 구조 불변, 색 토큰만). 네온 녹 제거·카드 테두리 약화(§7-C#2). check 0 / test 257.
+  - **분자층 배경 후퇴(혼탁 해소):** L1 `MoleculeWorld`가 1단계에선 가득 찬 세포+막(cosmic-layers 버전)을 그렸는데, 2단계 전경 *만질 세포*(BoardRenderer)와 같은 sage 모티프라 겹쳐 혼탁했다 → 프로토타입(`cosmic-particle-game.html` worlds[0])대로 **옅은 조직 헤이즈(7 blob, α0.035)로 후퇴** → 전경 세포가 또렷이 도드라짐. 배경(분위기)/전경(상호작용) 분리 = 프로토타입 검증 룩 정합.
 - **2단계 후속(다음 패스):** 사운드·내러티브 보이스·게임필 정합(정거장2 졸업), 6층 전체 확장(정거장3).
 
 ### 7-C. 2단계 착수 전 체크 (game-director 가드)
