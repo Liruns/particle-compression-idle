@@ -16,7 +16,7 @@
 
 /** render 진입점(읽기 전용 상태 소비 계약). graphics-programmer가 구현. */
 export interface Renderer {
-  /** GameLoop render 콜백에서 호출. alpha=tick 사이 보간(0~1). 상태 변경 금지. */
+  /** 표현 레이어에서 호출(호출자 무관·읽기전용). alpha=tick 사이 보간(0~1). 상태 변경 금지. */
   draw(alpha: number): void;
   /** 층 전환 시 파티클/팔레트 교체(§6.3, DESIGN motion). */
   onLayerChange(layerSlug: string): void;
@@ -24,4 +24,5 @@ export interface Renderer {
   dispose(): void;
 }
 
-export {}; // 캔버스/WebGL 렌더는 graphics-programmer. 헬로 셸은 DOM으로 표시.
+// Canvas2D 렌더 구현체(m2-render-plan v0.2). App.svelte가 인스턴스화·subscribe 콜백에서 draw(V2-4).
+export { CanvasRenderer, type RenderInput } from './CanvasRenderer';

@@ -11,6 +11,8 @@
   import { Game, installUnloadSave, type GameSnapshot, type BuyMode } from './game';
   import { formatNumber, formatRadius } from './core/format';
   import { bus } from './core/events';
+  import { CanvasRenderer } from './render';
+  import { reducedMotion } from './ui/stores/reduced-motion';
   import { particleById } from './data/particles';
   import { layerEntryBeat } from './data/narrative';
   import ChainTable from './ui/ChainTable.svelte';
@@ -31,6 +33,19 @@
   const busUnsubs: (() => void)[] = [];
   let toast: Toast;
 
+  // 캔버스 렌더 레이어(m2-render-plan v0.2). 배경 fx(헤이즈·파티클) + 게이지 글로우 2장.
+  //  표현 전담 — snapshot 파생만 읽음(읽기 전용 §4.1). App 자체 rAF 없음(subscribe 콜백서 draw, V2-4).
+  let bgCanvas: HTMLCanvasElement | null = null;
+  let glowCanvas: HTMLCanvasElement | null = null;
+  let renderer: CanvasRenderer | null = null;
+  let canvasReady = false;
+  let lastSlug = '';
+  let rmUnsub: (() => void) | null = null;
+  let bgResizeObserver: ResizeObserver | null = null;
+  let glowResizeObserver: ResizeObserver | null = null;
+  /** 현재 렌더러에 붙은 글로우 캔버스(중복 재생성 방지 — 동일 참조면 재구성 안 함). */
+  let attachedGlowCanvas: HTMLCanvasElement | null = null;
+
   /** 현재 탭. */
   type Tab = 'compress' | 'research' | 'codex' | 'prestige';
   let tab: Tab = 'compress';
@@ -44,8 +59,26 @@
 
   onMount(async () => {
     game = new Game();
-    unsub = game.subscribe((s) => (snap = s));
+    // 구독: snapshot 보관(DOM 반응성) + 렌더러 푸시·draw(V2-4 — subscribe가 rAF마다 구동).
+    unsub = game.subscribe((s) => {
+      snap = s;
+      pushRender(s);
+    });
     installUnloadSave(game);
+
+    // 배경 fx 렌더러 생성(배경 캔버스는 항상 존재). 게이지 글로우 캔버스는 압축 탭에서만 →
+    //   바인딩되면 attachGlowCanvas로 합류(reactive 블록). reduced-motion 스토어 구독.
+    setupRenderer();
+    rmUnsub = reducedMotion.subscribe((v) => renderer?.setReducedMotion(v));
+
+    // dev: L6 색 온도 대비 조기 검증 훅(프로덕션 제거). window.forceLayer('prn')로 렌더만 전환.
+    if (import.meta.env.DEV) {
+      (window as unknown as { forceLayer: (slug: string) => void }).forceLayer = (slug: string) => {
+        document.documentElement.setAttribute('data-layer', slug);
+        renderer?.onLayerChange(slug);
+        lastSlug = slug;
+      };
+    }
 
     // 이벤트 버스 → 토스트(발견·층 진입 비트). start() 전에 등록해 부팅 발견도 포착.
     busUnsubs.push(
@@ -78,8 +111,82 @@
     unsub?.();
     for (const u of busUnsubs) u();
     if (compressPulseTimer) clearTimeout(compressPulseTimer);
+    rmUnsub?.();
+    bgResizeObserver?.disconnect();
+    glowResizeObserver?.disconnect();
+    renderer?.dispose();
     game?.dispose();
   });
+
+  // --- 캔버스 렌더 와이어링(m2-render-plan v0.2) -------------------------------------
+  /** 렌더러 생성(배경 캔버스 기준). 글로우 캔버스는 합류 시 재생성. getContext 성공 시 canvasReady. */
+  function setupRenderer(): void {
+    if (!bgCanvas) return;
+    renderer = new CanvasRenderer({
+      bgCanvas,
+      glowCanvas, // 압축 탭이 아니면 null — 이후 attach에서 재생성
+      rootEl: document.documentElement,
+    });
+    attachedGlowCanvas = glowCanvas; // 초기 바인딩 기록(reactive 재구성 중복 방지)
+    canvasReady = renderer.ready;
+    renderer.setReducedMotion($reducedMotion);
+    // 현재 층 즉시 반영(부팅 슬러그).
+    if (snap) {
+      lastSlug = snap.layer.slug;
+      renderer.onLayerChange(snap.layer.slug);
+    }
+    // 배경 리사이즈 관찰.
+    if (typeof ResizeObserver !== 'undefined') {
+      bgResizeObserver?.disconnect();
+      bgResizeObserver = new ResizeObserver(() => renderer?.resize());
+      bgResizeObserver.observe(bgCanvas);
+    }
+  }
+
+  /** 글로우 캔버스가 바인딩/해제될 때 렌더러를 재구성(게이지 자리 등장·소멸). 참조 변화 시에만. */
+  function attachGlowCanvas(el: HTMLCanvasElement | null): void {
+    if (!bgCanvas || el === attachedGlowCanvas) return;
+    attachedGlowCanvas = el;
+    renderer?.dispose();
+    renderer = new CanvasRenderer({ bgCanvas, glowCanvas: el, rootEl: document.documentElement });
+    canvasReady = renderer.ready;
+    renderer.setReducedMotion($reducedMotion);
+    if (snap) {
+      lastSlug = snap.layer.slug;
+      renderer.onLayerChange(snap.layer.slug);
+    }
+    if (typeof ResizeObserver !== 'undefined') {
+      glowResizeObserver?.disconnect();
+      if (el) {
+        glowResizeObserver = new ResizeObserver(() => renderer?.resize());
+        glowResizeObserver.observe(el);
+      }
+    }
+  }
+
+  /** snapshot → 렌더러 입력(읽기 전용 파생만). 층 변화 감지 + draw. */
+  function pushRender(s: GameSnapshot): void {
+    if (!renderer) return;
+    if (s.layer.slug !== lastSlug) {
+      lastSlug = s.layer.slug;
+      // 색 캐시 재읽기 전 :root data-layer를 동기 갱신(reactive 블록보다 먼저 — 구 색 읽기 방지).
+      if (typeof document !== 'undefined') {
+        document.documentElement.setAttribute('data-layer', s.layer.slug);
+      }
+      renderer.onLayerChange(s.layer.slug);
+    }
+    renderer.setSnapshot({
+      dec: s.dec,
+      rateCPositive: s.rateCPositive,
+      rateCLog10: s.rateCLog10,
+      layer: { slug: s.layer.slug },
+      phaseState: s.phase.active ? s.phase.state : '',
+    });
+    renderer.draw();
+  }
+
+  // 글로우 캔버스 바인딩 변화 감지(압축 탭 진입/이탈 → 게이지 캔버스 등장/소멸).
+  $: if (renderer && glowCanvas !== undefined) attachGlowCanvas(glowCanvas);
 
   // 수동 압축 주스(DESIGN §5): 클릭 시 글로우 버스트 1회(+2px/200ms). scale는 button:active로.
   let compressPulse = false;
@@ -125,6 +232,12 @@
 
   // r 게이지 중심 글로우 반경: dec 클수록 확대(3→14px, DESIGN glow.core).
   $: glowRadius = snap ? Math.min(14, 3 + snap.dec * 0.42) : 3;
+  // 층 토큰을 :root(documentElement)에도 반영 → body 배경(--layer-bg) + 캔버스 색 캐시(getComputedStyle)
+  //   가 현재 층 값으로 갱신된다(tokens.css [data-layer]는 미스코프 속성 셀렉터 — :root에도 매칭).
+  //   dev forceLayer는 직접 documentElement를 세팅하므로 snap 미존재 시엔 건드리지 않음.
+  $: if (typeof document !== 'undefined' && snap) {
+    document.documentElement.setAttribute('data-layer', snap.layer.slug);
+  }
   // 도감 탭은 첫 발견 후 등장(FTUE). 발견 시 압축 탭에 배지.
   $: showCodexTab = snap?.ftue.showCodexTab ?? false;
   $: codexCount = snap?.codex.collected ?? 0;
@@ -140,6 +253,10 @@
 </script>
 
 <Toast bind:this={toast} />
+
+<!-- 배경 fx 캔버스(m2-render-plan §2-4): <main> 뒤 전역 레이어. 헤이즈+앰비언트 파티클.
+     z-index:-1·pointer-events:none — 콘텐츠 박스 뒤·여백에서만 비침(art z-스택 결정). -->
+<canvas class="bg-fx" bind:this={bgCanvas} aria-hidden="true"></canvas>
 
 <!-- 오프라인 복귀 모달(M1.7, ui-flow §10). 로드 시 elapsed>60s면 표시. -->
 {#if snap?.offline}
@@ -182,7 +299,11 @@
     {#if tab === 'compress'}
       <!-- r 게이지: "작아짐=강해짐". r은 작아지고 dec/숫자는 커진다. -->
       <section class="gauge">
-        <div class="r-core" style="--r-glow: {glowRadius}px"></div>
+        <!-- 게이지 본체+글로우는 캔버스(m2-render-plan V2-1). 캔버스 준비 전엔 DOM 점 폴백. -->
+        <div class="gauge-core-wrap">
+          <canvas class="gauge-glow" bind:this={glowCanvas} aria-hidden="true"></canvas>
+          <div class="r-core" class:hidden={canvasReady} style="--r-glow: {glowRadius}px"></div>
+        </div>
         <div class="r-readout">
           <span class="r-label">반경 r</span>
           <span class="r-value">{formatRadius(snap.r)}</span>
@@ -275,9 +396,30 @@
 </main>
 
 <style>
-  /* 다크 베이스 — DESIGN.md --canvas. tokens.css가 :root 변수 공급. */
+  /* 페이지 딥다크 베이스(art z-스택 §10-3: main 딥다크 솔리드 유지를 페이지 base로 구현).
+     층 배경 틴트(--layer-bg)를 body에 두고, main은 투명 → 배경 fx 캔버스(z-1)가 그 위로 비친다.
+     헤이즈는 카드(--canvas-layer 자체 배경) 뒤·여백에서만 보임 → 가독성 보호. */
+  :global(body) {
+    margin: 0;
+    background: var(--layer-bg, var(--canvas));
+    transition: background var(--motion-layer-bg-fade) ease-out;
+  }
+
+  /* 배경 fx 캔버스(m2-render-plan §2-4): <main> 뒤 전역. 헤이즈·앰비언트 파티클(투명 base 위). */
+  .bg-fx {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
+    display: block;
+  }
+
+  /* 다크 베이스는 body가 공급(위). main은 투명 — 배경 fx가 비치게. */
   main {
     min-height: 100vh;
+    position: relative; /* 콘텐츠는 배경 fx(z-1) 위 */
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
@@ -388,6 +530,24 @@
     gap: var(--space-sm);
     padding: var(--space-md);
   }
+  /* 게이지 캔버스 래퍼: 본체+글로우 캔버스가 점유하는 정사각 영역. ux §2-A 원형 게이지 박스. */
+  .gauge-core-wrap {
+    position: relative;
+    width: 132px;
+    height: 132px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* 게이지 글로우 캔버스: 래퍼 전체. CSS 크기=백버퍼는 렌더러가 dpr로 스케일. */
+  .gauge-glow {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+  }
   .r-core {
     width: 16px;
     height: 16px;
@@ -396,7 +556,12 @@
     box-shadow: 0 0 var(--r-glow, 8px) var(--layer-glow, var(--col-glow-core));
     transition:
       box-shadow var(--motion-click-glow) ease-out,
-      background var(--motion-layer-accent-shift) ease-out;
+      background var(--motion-layer-accent-shift) ease-out,
+      opacity var(--motion-fade-cross) ease-out;
+  }
+  /* 캔버스 준비(getContext 성공) 시 DOM 점 숨김 — 캔버스 글로우가 대체(폴백은 no-getContext, V2-7 M8). */
+  .r-core.hidden {
+    opacity: 0;
   }
   .r-readout,
   .dec-readout {
