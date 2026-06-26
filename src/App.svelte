@@ -112,6 +112,7 @@
     unsub?.();
     for (const u of busUnsubs) u();
     rmUnsub?.();
+    if (savedTimer) clearTimeout(savedTimer);
     bgResizeObserver?.disconnect();
     if (onWindowResize) window.removeEventListener('resize', onWindowResize);
     renderer?.dispose();
@@ -330,8 +331,14 @@
   function onDismissOffline() {
     game?.dismissOffline();
   }
+  /** 수동 저장 — 노드에 잠깐 "저장됨" 인라인 피드백(오토세이브는 무토스트, 수동만 신호). */
+  let justSaved = false;
+  let savedTimer: ReturnType<typeof setTimeout> | null = null;
   async function onSave() {
     await game?.persist();
+    justSaved = true;
+    if (savedTimer) clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => (justSaved = false), 1500);
   }
   function onPrestige() {
     const result = game?.executePrestige();
@@ -442,7 +449,8 @@
           class:first={prestigeFirst}
           on:click={() => openPanel('prestige')}>{prestigeFirst ? '미지 진입' : '상전이'}</button>
       {/if}
-      <button class="node node-quiet" on:click={onSave} title="저장">저장</button>
+      <button class="node node-quiet" class:saved={justSaved} on:click={onSave} title="저장"
+        >{justSaved ? '저장됨 ✓' : '저장'}</button>
     </div>
   </div>
 
@@ -652,6 +660,10 @@
   .node:hover {
     color: rgba(210, 224, 230, 0.85);
     text-shadow: 0 0 10px rgba(160, 190, 210, 0.45);
+  }
+  .node-quiet.saved {
+    color: rgba(168, 196, 182, 0.95); /* QF 톤 — 저장 확인 */
+    text-shadow: 0 0 12px rgba(120, 175, 150, 0.5);
   }
   .node.on {
     color: rgba(228, 240, 246, 0.95);

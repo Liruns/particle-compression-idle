@@ -778,10 +778,14 @@ export class BoardRenderer {
     ctx.beginPath();
     ctx.arc(0, 0, coreR * 7, 0, TAU);
     ctx.fill();
+    // 흰 코어 점 + 부드러운 발광 블룸(프로토타입 cosmic-particle-game 정합 — 심장의 luminous 결).
     ctx.beginPath();
     ctx.arc(0, 0, coreR, 0, TAU);
     ctx.fillStyle = `rgba(245,250,255,${0.85 * pulse})`;
+    ctx.shadowColor = `rgba(${col},0.9)`;
+    ctx.shadowBlur = 18 + this.coreFlash * 16;
     ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.restore();
   }
 
