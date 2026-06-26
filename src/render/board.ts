@@ -722,6 +722,16 @@ export class BoardRenderer {
         ctx.stroke();
       }
     }
+    // 최적(다음 구매 추천) 티어 — 구매 가능 여부와 무관하게 껍질 정상(12시)에 옅은 안내 비드.
+    //   구 ChainTable ▶ 넛지(FTUE 넛지3 "최적 구매 티어")를 다이제틱으로 보존 — 아이콘 없이 빛 하나로.
+    if (s.best) {
+      const bb = this.reducedMotion ? 0.7 : 0.55 + 0.45 * Math.sin(now * 2.2);
+      this.glow(ctx, 0, -r, 6, col, 0.26 * bb);
+      ctx.beginPath();
+      ctx.arc(0, -r, 1.7, 0, TAU);
+      ctx.fillStyle = `rgba(${col},${0.7 * bb})`;
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -956,6 +966,8 @@ export class BoardRenderer {
       this.glow(ctx, p.x, p.y, 4, '230,228,248', isCurrent ? 0.8 * beat : 0.4);
 
       // 미고정 현재 상태 — 자동순환 진행 호(다음 상태로 넘어가기까지).
+      //   ★reduced-motion: 맥동·호흡은 위에서 감쇠(beat)했고, 이 호는 게임 상태(남은 시간)를 나타내는
+      //    정보 표시(진행바와 동형) — dec 호·공명 카운트다운과 일관되게 항상 표시(정보 보존, §2-C는 줌·호흡 한정).
       if (isCurrent && !ph.pinned && ph.cycleProgress > 0.001) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 12, -Math.PI / 2, -Math.PI / 2 + clamp(ph.cycleProgress, 0, 1) * TAU);
