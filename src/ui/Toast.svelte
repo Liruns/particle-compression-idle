@@ -73,10 +73,21 @@
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    z-index: 50;
+    /* z-8: 게임판(0)·주석(2) 위, 단 bloom 백드롭(9)·팝업(10) 아래 — 팝업 열리면 토스트가 그 뒤로 가림. */
+    z-index: 8;
     pointer-events: none;
     max-width: 72vw;
     text-align: center;
+  }
+  /* 좁은 화면: 상단 주석 띠(결속·자원 성표)와 겹치지 않게 아래로 내리고 폭 확보. */
+  @media (max-width: 600px) {
+    .toast-stack {
+      top: 86px;
+      max-width: 92vw;
+    }
+    .toast-line {
+      font-size: 11px;
+    }
   }
   .toast {
     padding: 2px 12px;
