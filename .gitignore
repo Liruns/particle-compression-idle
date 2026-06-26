@@ -19,3 +19,9 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# 시각 검증 테스트 산출물 (루트 스크린샷·플레이라이트 — 커밋 금지)
+/*.png
+/*.jpeg
+/*.jpg
+.playwright-mcp/

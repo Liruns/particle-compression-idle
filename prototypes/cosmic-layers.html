@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Micro Idle — 11층 distinct 세계</title>
+<style>
+  html, body { margin:0; height:100%; background:#04060a; overflow:hidden;
+    font-family: system-ui, -apple-system, sans-serif; }
+  #c { display:block; width:100vw; height:100vh; }
+  .name { position:fixed; left:20px; bottom:46px; color:#aebcc2; opacity:.72;
+    font-size:13px; letter-spacing:.06em; pointer-events:none;
+    transition: color 1.0s ease; }
+  .hud { position:fixed; left:20px; bottom:20px; opacity:.55; pointer-events:none; }
+  .hud .r { font-family: ui-monospace, "SFMono-Regular", monospace; font-size:16px;
+    color:#c8d4d0; letter-spacing:.02em; transition: color 1.0s ease; }
+  .hint { position:fixed; right:20px; bottom:20px; color:#6a7a82; opacity:.45;
+    font-size:12px; letter-spacing:.03em; pointer-events:none; text-align:right; line-height:1.6; }
+  .whisper { position:fixed; right:20px; top:18px; color:#5a6a72; opacity:.4;
+    font-size:11px; letter-spacing:.04em; pointer-events:none; transition: opacity .8s ease; }
+  /* 층 점프 인덱스 — 변두리에 잠든 희미한 눈금 */
+  .jump { position:fixed; left:20px; top:18px; color:#56646c; opacity:.34;
+    font-size:11px; letter-spacing:.05em; pointer-events:none; line-height:1.5;
+    font-family: ui-monospace, monospace; }
+  .jump b { color:#9fb0b8; font-weight:600; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="name" id="name">분자층 — Molecular</div>
+<div class="hud"><span class="r" id="r">r = 1.42×10⁻⁹ m</span></div>
+<div class="jump" id="jump"></div>
+<div class="hint">클릭 / Space / ↓ — 더 깊이 (다음 층)<br/>↑ — 올라가기 · 1~9 0 - — 층 점프</div>
+<div class="whisper" id="whisper">더 작은 것이 있다.</div>
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+
+const TAU = Math.PI * 2;
+function rng(seed){ return function(){ seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+  let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+// 부드러운 발광 덩어리 (radial gradient — 매끈, 번쩍임 없음). 광원에서만 빛난다(§2-C·F8).
+function glow(x, y, r, col, a) {
+  if (a <= 0 || r <= 0) return;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0,   `rgba(${col},${a})`);
+  g.addColorStop(0.4, `rgba(${col},${a * 0.32})`);
+  g.addColorStop(1,   `rgba(${col},0)`);
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+}
+// 발광 선 — 부드러운 가닥(끈·격자·스캔라인 등). lighter 모드 전제.
+function lineGlow(pts, col, a, w){
+  if(a<=0) return;
+  ctx.strokeStyle=`rgba(${col},${a})`; ctx.lineWidth=w; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath();
+  for(let i=0;i<pts.length;i+=2){ i?ctx.lineTo(pts[i],pts[i+1]):ctx.moveTo(pts[i],pts[i+1]); }
+  ctx.stroke();
+}
+
+// ─── 11층 "세계" — 각자 고유 구조(형태로 구별) + 색온도 아크(따뜻→차가움→무색) ───
+// 모델 불변: 고요(상시 줌 없음·번쩍임 0)·전환 하강·미니멀 마진. 각 층 = 그 스케일의 의도된 구조.
+const layers = [
+
+  { // L1 분자 — 유기 세포/막. 따뜻한 조직: 세포 부유 + 막 가닥(세포 간 연결) + 느린 호흡/분열. sage #9fb89a
+    name:'분자층 — Molecular', r:'1.42×10⁻⁹ m', void:'#0a0e0c', col:'159,184,154',
+    init(){ const r=rng(7); this.cells=[]; for(let i=0;i<14;i++)
+      this.cells.push({a:r()*TAU, d:0.08+r()*0.46, sz:34+r()*54, ph:r()*TAU, sp:0.10+r()*0.16,
+        // 막 내부 소기관 — 세포 안의 작은 핵점 + 느린 분열 위상
+        nuc:0.4+r()*0.5, nx:(r()-0.5)*0.4, ny:(r()-0.5)*0.4, div:r()*TAU, dsp:0.04+r()*0.05}); },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5;
+      // 세포 위치를 한 번 계산(막 가닥 잇기에 재사용)
+      const P=this.cells.map(c=>{ const rad=c.d*R*sc;
+        return { x:cx+Math.cos(c.a+Math.sin(t*c.sp+c.ph)*0.07)*rad,
+                 y:cy+Math.sin(c.a+Math.cos(t*c.sp+c.ph)*0.07)*rad, c }; });
+      // 막 가닥 — 가까운 세포끼리 부드러운 발광 연결(조직처럼). 호흡으로 미세하게 흔들림.
+      for(let i=0;i<P.length;i++){ for(let j=i+1;j<P.length;j++){
+        const dx=P[j].x-P[i].x, dy=P[j].y-P[i].y; const dist=Math.hypot(dx,dy);
+        const reach=(P[i].c.sz+P[j].c.sz)*sc*1.05;
+        if(dist<reach){ const close=1-dist/reach;             // 가까울수록 진한 가닥
+          const sway=Math.sin(t*0.3+i*1.3+j*0.7)*6*sc;
+          const mx=(P[i].x+P[j].x)/2 - dy/dist*sway, my=(P[i].y+P[j].y)/2 + dx/dist*sway;
+          lineGlow([P[i].x,P[i].y, mx,my, P[j].x,P[j].y], this.col, 0.10*close*al, 1.6); } } }
+      for(const p of P){ const c=p.c;
+        const br=0.5+0.24*Math.sin(t*0.35+c.ph);
+        const grow=1+0.05*Math.sin(t*c.dsp+c.div);                  // 느린 분열/호흡 — 부피가 들고남
+        glow(p.x,p.y,c.sz*sc*grow,this.col,br*0.62*al);             // 막(부드러운 외피)
+        glow(p.x,p.y,c.sz*0.62*sc,this.col,br*0.20*al);             // 막 내부 차오름
+        glow(p.x+c.nx*c.sz*sc, p.y+c.ny*c.sz*sc, c.sz*0.34*sc*c.nuc, '214,232,208', br*0.55*al); } } },
+
+  { // L2 원자 — 핵 + 오비탈 껍질·궤도 + 여러 전자 + 확률 구름. teal #7fb0b8
+    name:'원자층 — Atomic', r:'8.91×10⁻¹¹ m', void:'#0a0e0c', col:'127,176,184',
+    init(){ // 껍질마다 전자 수가 다른 다중 오비탈(원자다움 — 채워진 껍질)
+      this.rings=[{rx:0.30,ry:0.12,ti:0.35,sp:0.55,n:2},{rx:0.44,ry:0.20,ti:-0.6,sp:-0.34,n:3},
+        {rx:0.20,ry:0.32,ti:1.15,sp:0.66,n:2},{rx:0.52,ry:0.40,ti:-1.5,sp:0.28,n:3}]; },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5*sc;
+      const breathe=0.92+0.08*Math.sin(t*0.22);
+      // 오비탈 확률 구름 — 핵 둘레 옅은 teal 헤이즈(전자가 "어딘가 있을" 영역)
+      glow(cx,cy,R*0.44*breathe,this.col,0.05*al);
+      glow(cx,cy,46*sc*breathe,this.col,0.7*al);                    // 핵(밀집)
+      glow(cx,cy,16*sc,'205,233,238',0.8*al);
+      for(const g of this.rings){ const ca=Math.cos(g.ti),sa=Math.sin(g.ti);
+        ctx.strokeStyle=`rgba(${this.col},${0.20*al})`; ctx.lineWidth=1.2;   // 궤도선 또렷하게
+        ctx.beginPath();
+        for(let k=0;k<=64;k++){ const a=k/64*TAU; const ex=Math.cos(a)*g.rx*R, ey=Math.sin(a)*g.ry*R;
+          const wx=cx+ex*ca-ey*sa, wy=cy+ex*sa+ey*ca; k?ctx.lineTo(wx,wy):ctx.moveTo(wx,wy); }
+        ctx.stroke();
+        for(let e=0;e<g.n;e++){ const ea=t*g.sp + e*TAU/g.n;        // 껍질당 여러 전자
+          const ex=Math.cos(ea)*g.rx*R, ey=Math.sin(ea)*g.ry*R;
+          const wx=cx+ex*ca-ey*sa, wy=cy+ex*sa+ey*ca;
+          const br=0.85+0.12*Math.sin(t*0.8+e+g.sp*7);
+          glow(wx,wy,14*sc,this.col,br*al);                        // 전자(또렷한 발광)
+          glow(wx,wy,4*sc,'225,244,247',br*0.7*al); } } } },        // 전자 코어 하이라이트
+
+  { // L3 핵 — 밀집 핵자 클러스터. 강결합으로 뭉친 양성자/중성자, 압력감·결합 진동. amber #d99a6c
+    name:'핵층 — Nuclear', r:'5.30×10⁻¹⁵ m', void:'#0c0d0a', col:'217,154,108',
+    init(){ const r=rng(31); this.nuc=[]; const N=30;
+      for(let i=0;i<N;i++){ // 구형 충전 같은 밀집 — 중심으로 끌리는 분포
+        const u=r(), rr=Math.pow(u,0.60)*0.165;   // 중심 밀집(저반경 쪽 가중)
+        const a=r()*TAU;
+        this.nuc.push({bx:Math.cos(a)*rr, by:Math.sin(a)*rr, ph:r()*TAU, sp:0.5+r()*0.7,
+          sz:10+r()*8, kind:r()<0.5?1:0}); } },   // 양성자/중성자 두 톤
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5*sc;
+      // 압력감 — 결합을 감싸는 따뜻한 외피(맥동하는 강결합장). 두 겹으로 깊이.
+      const press=0.5+0.5*Math.sin(t*0.4);
+      glow(cx,cy,R*0.34,this.col,(0.16+0.06*press)*al);
+      glow(cx,cy,R*0.20,'235,175,125',0.14*al);
+      for(const n of this.nuc){ // 강결합 진동 — 서로 밀착해 떨림(맥동에 동조)
+        const wob=(0.012+0.006*press)*Math.sin(t*n.sp+n.ph);
+        const x=cx+(n.bx+Math.cos(n.ph)*wob)*R, y=cy+(n.by+Math.sin(n.ph)*wob)*R;
+        const br=0.68+0.26*Math.sin(t*0.6+n.ph);
+        const c=n.kind? '233,172,118' : '205,128,140';  // 양성자=호박 / 중성자=식은 적(톤 대비 강화)
+        glow(x,y,n.sz*sc,c,br*0.92*al);
+        glow(x,y,n.sz*0.32*sc,'252,228,208',br*0.6*al); } } },   // 결합 코어 하이라이트
+
+  { // L4 핵자 — 색전하 삼색. RGB 세 빛이 글루온으로 결속(쿼크 3체), 비등방. 탈채도 RGB(§2-C 보존, 밝게)
+    name:'핵자층 — Nucleon', r:'8.41×10⁻¹⁶ m', void:'#0b0c0d', col:'150,176,170',
+    init(){ this.tri=[ {col:'214,120,142', ph:0}, {col:'112,158,205', ph:TAU/3}, {col:'128,200,150', ph:TAU*2/3} ]; },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5*sc;
+      // 삼체 결속 — 세 쿼크가 공통 중심을 비등방으로 회전. 글루온 결속관이 셋을 묶는다.
+      const base=0.215, swing=0.05; const rot=t*0.18;
+      const pos=this.tri.map(q=>{ const rr=base+swing*Math.sin(t*0.5+q.ph*1.7); // 비등방 반경 진동
+        const a=rot+q.ph; return {x:cx+Math.cos(a)*rr*R, y:cy+Math.sin(a)*rr*R, col:q.col}; });
+      // 글루온 바다 — 세 색이 섞인 중심 결속 헤이즈(핵자 내부가 빛으로 차 있음)
+      glow(cx,cy,R*0.30,'170,175,185',0.10*al);
+      // 결속관(글루온) — 세 변. 양 끝 색이 관을 따라 흐르는 펄스로 역동적 결속 표현.
+      for(let e=0;e<3;e++){ const A=pos[e], B=pos[(e+1)%3];
+        lineGlow([A.x,A.y,B.x,B.y],'205,212,220',0.16*al,1.8);          // 굵고 밝은 결속관
+        // 관을 따라 흐르는 글루온 펄스 — 색전하 교환(부드럽게 왕복)
+        const f=(t*0.5+e*0.33)%1; const gx=A.x+(B.x-A.x)*f, gy=A.y+(B.y-A.y)*f;
+        glow(gx,gy,9*sc,'225,228,233',0.32*al); }
+      glow(cx,cy,R*0.12,'215,220,228',0.20*al);                    // 중심 결속점(밝게)
+      for(let i=0;i<pos.length;i++){ const p=pos[i]; const br=0.82+0.16*Math.sin(t*0.7+i*2.1);
+        glow(p.x,p.y,40*sc,p.col,br*0.42*al);                      // 색전하 바깥 후광(존재감)
+        glow(p.x,p.y,22*sc,p.col,br*0.95*al);                      // 색전하 본체(또렷·선명)
+        glow(p.x,p.y,7*sc,'240,244,246',br*0.7*al); } } },         // 흰 코어
+
+  { // L5 쿼크 — 거의 빈 공허 + 날카로운 점. 점근 자유: 가까이=자유, 멀어지면 가둠선이 당김. 차가운 흰 #d8e0e4
+    name:'쿼크층 — Quark', r:'4.20×10⁻¹⁸ m', void:'#070a0d', col:'216,224,228',
+    init(){ const r=rng(23); this.pts=[]; for(let i=0;i<7;i++)
+      this.pts.push({a:r()*TAU, d:0.07+r()*0.42, ph:r()*TAU, sp:0.05+r()*0.09, sw:0.05+r()*0.06}); },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5*sc;
+      // 점근 자유 — 중심에서 멀수록 결합이 강해진다(가둠). 반경이 천천히 진동: 멀어졌다 당겨짐.
+      glow(cx,cy,7*sc,this.col,0.5*al);                                         // 공통 결속 중심(희미)
+      for(const p of this.pts){ const pull=Math.sin(t*p.sw+p.ph);              // -1(당겨짐)..+1(자유)
+        const rad=(p.d*(0.78+0.22*(pull*0.5+0.5)))*R;                          // 멀어졌다 다시 당겨짐
+        const x=cx+Math.cos(p.a+Math.sin(t*p.sp+p.ph)*0.05)*rad;
+        const y=cy+Math.sin(p.a+Math.cos(t*p.sp)*0.04)*rad;
+        const dist=Math.hypot(x-cx,y-cy)/R;                                     // 0..~0.5
+        const br=0.62+0.36*Math.sin(t*0.45+p.ph);
+        // 가둠선 — 멀수록 또렷해지는 중심으로의 가는 끈(점근 자유의 반대: 멀면 강결합)
+        const conf=Math.min(1, dist/0.4);
+        lineGlow([x,y,cx,cy], this.col, 0.14*conf*br*al, 1.0);
+        glow(x,y,12*sc,this.col,br*0.9*al);                                    // 날카로운 점(또렷)
+        glow(x,y,2.8*sc,'255,255,255',br*al); } } },
+
+  { // L6 프리온 — 위상 간섭 무늬. 두 파원 보강/상쇄 마디선, 홀로그램 잔상, 느린 불안정. 차가운 보라 #8a7fd0
+    name:'프리온층 — Preon', r:'2.71×10⁻²⁰ m', void:'#06070d', col:'138,127,208',
+    init(){ this.k=0.055; },   // 파수
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5;
+      // 두 파원이 천천히 표류 — 간섭 마디선(보강/상쇄). 등위상 호로 무늬를 그린다.
+      const sep=R*0.20*sc;
+      const drift=Math.sin(t*0.13)*R*0.04*sc;
+      const s1x=cx-sep+drift, s1y=cy, s2x=cx+sep-drift, s2y=cy;
+      const k=this.k/sc;
+      // 홀로그램 잔상 — 무늬가 떠오를 바탕(옅은 보라 면) 먼저 깔아 존재감 부여
+      glow(cx,cy,R*0.62*sc,this.col,0.10*al);
+      glow(cx,cy,R*0.34*sc,'120,110,200',0.08*al);
+      // 보강 간섭선들 = 두 파원 위상차가 2πn인 등고선 ≈ 쌍곡선족. 호를 샘플링해 그린다.
+      const lines=11; const maxR=R*0.64*sc;
+      ctx.globalCompositeOperation='lighter';
+      for(let n=-lines;n<=lines;n++){
+        // 경로차 d = n·λ → 두 파원 거리차가 일정한 쌍곡선. 매개변수 θ로 샘플.
+        const pathDiff=n*(TAU/k)*0.5;
+        const pts=[]; let ok=false;
+        for(let s=-1.0;s<=1.0001;s+=0.04){
+          // 쌍곡선: 초점 s1,s2, 거리차 = pathDiff. a=pathDiff/2, c=sep
+          const a=pathDiff*0.5; const c=sep;
+          if(Math.abs(a)>=c){ continue; }
+          const b2=c*c-a*a; const yy=s*maxR;
+          const xx=Math.sign(a||1)*Math.abs(a)*Math.sqrt(1+ (yy*yy)/Math.max(1,b2));
+          // 가로 배치(파원이 x축) → 회전 없이 x가 경로차 방향
+          pts.push(cx+xx, cy+yy); ok=true;
+        }
+        if(ok && pts.length>=4){
+          const fade=0.5+0.5*(1-Math.abs(n)/(lines+1));            // 가장자리도 어느 정도 보이게
+          // 느린 불안정 — 잔상처럼 천천히 숨쉬는 밝기(고주파 금지)
+          const breath=0.62+0.38*Math.sin(t*0.32+n*0.55);
+          const central=1-Math.abs(n)/(lines+1);                  // 중앙 마디선일수록 굵고 밝게
+          lineGlow(pts, this.col, 0.44*fade*breath*al, 1.4+central*1.0);
+          // 마디선을 따라 보강점 발광 — 빛 하나하나가 사건(여러 지점에 맺힘)
+          if(n!==0){ for(let m=0;m<pts.length;m+=12){
+            const beadF=fade*breath*(0.5+0.5*Math.sin(t*0.4+m*0.3+n));
+            glow(pts[m],pts[m+1], 5*sc, this.col, 0.30*beadF*al); } }
+        }
+      }
+      // 파원 둘레 동심 파면 — 보강/상쇄를 낳는 원형 파동(홀로그램 결). 천천히 바깥으로.
+      const wf=(t*0.05)%0.07;
+      for(const [sxx,syy] of [[s1x,s1y],[s2x,s2y]]){
+        for(let rr=0.06;rr<0.5;rr+=0.07){ const rad=(rr+wf)*R*sc;
+          const ringA=0.07*(1-rr/0.5)*al;
+          ctx.strokeStyle=`rgba(${this.col},${ringA})`; ctx.lineWidth=1;
+          ctx.beginPath(); ctx.arc(sxx,syy,rad,0,TAU); ctx.stroke(); } }
+      // 중앙 보강 띠 — 두 파원 사이 가장 밝은 간섭(부드러운 후광)
+      glow(cx,cy,R*0.14*sc,'170,160,235',0.12*al);
+      // 두 파원 코어 — 무늬의 근원(차가운 보라 발광점, 밝게)
+      const sb=0.6+0.18*Math.sin(t*0.4);
+      glow(s1x,s1y,20*sc,'180,170,238',0.85*sb*al);
+      glow(s2x,s2y,20*sc,'180,170,238',0.85*sb*al);
+      glow(s1x,s1y,4*sc,'232,228,252',0.9*al);
+      glow(s2x,s2y,4*sc,'232,228,252',0.9*al); } },
+
+  { // L7 끈 — 진동 사인 필라멘트. 여러 파장의 하모닉 모드가 동시에 떨림. 식은 자홍 #c47a9a
+    name:'끈층 — String', r:'1.62×10⁻²³ m', void:'#06070d', col:'196,122,154',
+    init(){ const r=rng(71); this.str=[]; const N=9;
+      for(let i=0;i<N;i++)               // 하모닉 1~6을 골고루 — 파장 다양성
+        this.str.push({ y:(i-(N-1)/2)/((N-1)/2*1.18), harm:1+(i%6), amp:0.045+r()*0.05, ph:r()*TAU,
+          sp:0.45+r()*0.6, hue:i/N }); },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5;
+      const halfW=R*0.66*sc;
+      ctx.globalCompositeOperation='lighter';
+      for(const s of this.str){ const baseY=cy+s.y*R*0.46*sc;
+        const pts=[]; const segs=80;
+        const drive=Math.sin(t*s.sp+s.ph);
+        for(let i=0;i<=segs;i++){ const u=i/segs;            // 0..1 가로
+          const x=cx-halfW+u*halfW*2;
+          // 정상파: 끝이 고정된 하모닉(sin(nπu)) × 시간 진동
+          const env=Math.sin(u*Math.PI*s.harm);
+          const yy=baseY + env*drive*s.amp*R*sc;
+          pts.push(x,yy);
+        }
+        // 진동 에너지(진폭)에 비례한 밝기 — 열지도 느낌
+        const energy=0.55+0.45*Math.abs(drive);
+        // 식은 자홍 ~ 약간의 색 변주(하모닉 높을수록 차갑게)
+        const cool=s.hue; const c=`${Math.round(200-cool*46)},${Math.round(120+cool*14)},${Math.round(152+cool*36)}`;
+        lineGlow(pts, c, 0.10*energy*al, 4.0);              // 두꺼운 후광(필라멘트 몸체)
+        lineGlow(pts, c, 0.34*energy*al, 1.5);              // 또렷한 심
+        // 배(antinode) — 진폭이 가장 큰 지점에 발광(하모닉 모드가 눈에 읽힘)
+        for(let m=0;m<s.harm;m++){ const u=(m+0.5)/s.harm; const x=cx-halfW+u*halfW*2;
+          const yy=baseY + Math.sin(u*Math.PI*s.harm)*drive*s.amp*R*sc;
+          glow(x,yy,5*sc,c,0.3*energy*al); }
+        // 마디(node) — 정상파의 고정점(작고 차분)
+        for(let m=1;m<s.harm;m++){ const u=m/s.harm; const x=cx-halfW+u*halfW*2;
+          glow(x,baseY,3*sc,'235,210,225',0.28*energy*al); }
+      } } },
+
+  { // L8 루프 — 스핀 네트워크 격자. 육각/삼각 노드 그물, 위상 전파 펄스. 깊은 청 #5f7fd0
+    name:'루프층 — Loop', r:'4.05×10⁻²⁸ m', void:'#05060d', col:'95,127,208',
+    init(){ // 삼각 격자 노드 생성(육각 그물의 기반)
+      const r=rng(88); this.nodes=[]; this.edges=[];
+      const gx=7, gy=5, step=0.155;
+      const idx=(i,j)=> i*gy+j;
+      for(let i=0;i<gx;i++)for(let j=0;j<gy;j++){
+        const offx=(j%2)*step*0.5;
+        this.nodes.push({ x:(i-(gx-1)/2)*step+offx, y:(j-(gy-1)/2)*step*0.92,
+          ph:r()*TAU }); }
+      // 인접 노드를 잇는 변(삼각/육각 그물)
+      for(let i=0;i<gx;i++)for(let j=0;j<gy;j++){
+        const a=idx(i,j);
+        const cand=[[i+1,j],[i,j+1],[ (j%2? i+1:i-1), j+1]];
+        for(const [ni,nj] of cand){ if(ni>=0&&ni<gx&&nj>=0&&nj<gy)
+          this.edges.push([a, idx(ni,nj)]); } }
+    },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5*sc;
+      const P=this.nodes.map(n=>({ x:cx+n.x*R, y:cy+n.y*R, ph:n.ph }));
+      ctx.globalCompositeOperation='lighter';
+      glow(cx,cy,R*0.5,this.col,0.05*al);                       // 격자가 깃든 공간장(옅은 청)
+      // 위상 전파 펄스 — 중심에서 퍼지는 밝기 파동(둘을 어긋나게 → 항상 파면이 지나감)
+      const waveR=(t*0.16)%1.4, waveR2=((t*0.16)+0.7)%1.4;
+      const pulseAt=(d)=> Math.max(0, 1-Math.abs(d-waveR)*4.5) + 0.7*Math.max(0, 1-Math.abs(d-waveR2)*4.5);
+      for(const [a,b] of this.edges){ const A=P[a],B=P[b];
+        const mx=(A.x+B.x)/2-cx, my=(A.y+B.y)/2-cy; const d=Math.hypot(mx,my)/R;
+        const pulse=pulseAt(d);                                 // 파면 근처만 더 밝음
+        lineGlow([A.x,A.y,B.x,B.y], this.col, (0.13+0.26*pulse)*al, 1.1+pulse*1.0);
+      }
+      // 노드 발광 — 격자 교점(펄스가 지날 때 밝게 점등)
+      for(const p of P){ const d=Math.hypot(p.x-cx,p.y-cy)/R;
+        const pulse=pulseAt(d);
+        const br=0.5+0.6*Math.min(1,pulse)+0.12*Math.sin(t*0.6+p.ph);
+        glow(p.x,p.y,9*sc,this.col,br*0.6*al);
+        glow(p.x,p.y,2.6*sc,'190,205,245',br*0.5*al); } } },     // 노드 코어 하이라이트
+
+  { // L9 거품 — 양자 요동 거품. 무작위 버블이 부드럽게 생겼다 사라짐(확률적), 비어있음. 은청 #8fa8b0
+    name:'거품층 — Quantum Foam', r:'1.62×10⁻³⁰ m', void:'#05070a', col:'143,168,176',
+    init(){ this.bubbles=[]; this.seed=rng(909); this.spawn=0; },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5;
+      // 확률적 생성·소멸 — 매 프레임 낮은 확률로 버블이 핀다(짧은 수명, 부드럽게 in/out)
+      this.spawn-=1/60;
+      if(this.spawn<=0){ this.spawn=0.03+this.seed()*0.07;       // 평균 생성 간격(더 자주 — 요동이 보이게)
+        const a=this.seed()*TAU, rr=Math.pow(this.seed(),0.5)*0.46;
+        this.bubbles.push({ x:cx+Math.cos(a)*rr*R, y:cy+Math.sin(a)*rr*R,
+          sz:(6+this.seed()*20), life:0, dur:0.7+this.seed()*1.7 }); }
+      // 너무 많아지지 않게(방치 안정성)
+      if(this.bubbles.length>110) this.bubbles.splice(0, this.bubbles.length-110);
+      ctx.globalCompositeOperation='lighter';
+      for(let i=this.bubbles.length-1;i>=0;i--){ const b=this.bubbles[i];
+        b.life+=1/60; const u=b.life/b.dur;
+        if(u>=1){ this.bubbles.splice(i,1); continue; }
+        // 부드러운 생성/소멸 곡선(sin) — 팝 없이 피었다 진다
+        const env=Math.sin(u*Math.PI);
+        const grow=0.6+0.4*u;                                   // 살짝 부풀며 핀다
+        glow(b.x,b.y,b.sz*sc*grow,this.col,env*0.55*al);        // 거품 발광체
+        glow(b.x,b.y,b.sz*0.28*sc,'200,218,222',env*0.45*al);  // 코어
+        // 거품 막 — 가는 링(버블의 경계, 요동의 거품다움)
+        if(b.sz>10){ ctx.strokeStyle=`rgba(${this.col},${env*0.20*al})`; ctx.lineWidth=1;
+          ctx.beginPath(); ctx.arc(b.x,b.y,b.sz*sc*grow*0.9,0,TAU); ctx.stroke(); } }
+      // 비어있는 공허감 — 중심 아주 옅은 은청 헤이즈
+      glow(cx,cy,R*0.42*sc,this.col,0.05*al); } },
+
+  { // L10 정보 — 홀로그래픽. 얇은 스캔라인 평면 + 흐르는 데이터 스트림, 2D→3D 착시 경계. 청록 #5fb0c0
+    name:'정보층 — Information', r:'5.40×10⁻³³ m', void:'#04060a', col:'95,176,192',
+    init(){ const r=rng(1010); this.streams=[]; for(let i=0;i<7;i++)
+      this.streams.push({ x:(i-3)/3.4, sp:0.10+r()*0.12, ph:r()*TAU, dir:r()<0.5?1:-1 }); },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5;
+      const halfH=R*0.62*sc;
+      ctx.globalCompositeOperation='lighter';
+      // 홀로그래픽 평면 — 스캔라인이 깔린 옅은 청록 면(경계가 떠 있는 느낌)
+      glow(cx,cy,R*0.6*sc,this.col,0.05*al);
+      // 수평 스캔라인 — 얇고 촘촘, 2D 평면의 결(홀로그래픽 경계). 한 줄이 휘돌며 스윕.
+      const lines=26; const scan=(t*0.08)%1;                    // 밝게 지나가는 스캔 위치
+      for(let i=0;i<lines;i++){ const u=i/(lines-1);
+        const y=cy-halfH+u*halfH*2;
+        // 경계 착시 — 스캔라인이 sin으로 살짝 위상 흘러 평면이 휘는 듯
+        const sweep=0.04+0.04*Math.sin(t*0.4+u*6);
+        const w=R*0.6*sc*(0.72+0.28*Math.sin(t*0.2+u*3));
+        // 스캔 위치 근처는 더 밝게(정보가 평면을 훑는 결)
+        const near=Math.max(0,1-Math.abs(u-scan)*6);
+        const sl=0.12+0.05*Math.sin(t*0.6+u*2.0)+0.22*near;
+        ctx.strokeStyle=`rgba(${this.col},${sl*al})`; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(cx-w, y+sweep*30*sc); ctx.lineTo(cx+w, y-sweep*30*sc); ctx.stroke();
+      }
+      // 데이터 스트림 — 수직으로 흐르는 발광 패킷(정보의 빛). 머리는 밝고 꼬리가 따른다.
+      for(const s of this.streams){ const sx=cx+s.x*R*0.5*sc;
+        const flow=((t*s.sp+s.ph)%1);
+        for(let p=0;p<7;p++){ const u0=((flow+p/7)%1);
+          const u=s.dir>0?u0:1-u0;                              // 방향 다양성
+          const y=cy-halfH+u*halfH*2;
+          const br=Math.sin(u*Math.PI)*(0.7+0.3*Math.sin(t*1.0+p));
+          glow(sx,y,8*sc,this.col,br*0.85*al);                 // 패킷 발광(또렷)
+          glow(sx,y,2.4*sc,'210,242,248',br*0.7*al);           // 패킷 코어
+          // 꼬리 — 흐름 방향으로 짧은 잔광
+          const ty=y-s.dir*10*sc; glow(sx,ty,4*sc,this.col,br*0.3*al); }
+        // 스트림 세로 가이드선(옅게)
+        ctx.strokeStyle=`rgba(${this.col},${0.06*al})`; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(sx,cy-halfH); ctx.lineTo(sx,cy+halfH); ctx.stroke();
+      } } },
+
+  { // L11 플랑크 — 픽셀 격자 붕괴. 이산 타일, 시공간이 눈금으로 깨짐. 순백 #f4f6f8 → #fff
+    name:'플랑크층 — Planck', r:'1.62×10⁻³⁵ m', void:'#000000', col:'244,246,248',
+    init(){ this.seed=rng(1111); },
+    draw(t,cx,cy,sc,al){ const R=Math.min(W,H)*0.5;
+      const cell=14*sc;                        // 이산 타일 한 변
+      const span=R*0.66*sc;
+      ctx.globalCompositeOperation='lighter';
+      // 모든 빛이 합쳐진 순백 — 붕괴의 중심을 잡아주는 코어 블룸(밝게)
+      glow(cx,cy,R*0.30*sc,'255,255,255',0.10*al);
+      glow(cx,cy,R*0.14*sc,'255,255,255',0.22*al);
+      // 시공간 균열 — 천천히 숨쉬는 반경. 이 파면 위 타일이 더 밝게 깨진다.
+      const frac=0.30+0.16*Math.sin(t*0.3);
+      // 시공간이 눈금으로 깨진다 — 격자 타일이 중심부에서 발광, 가장자리로 흩어짐
+      const cols=Math.ceil(span*2/cell), rows=Math.ceil(span*2/cell);
+      for(let i=0;i<cols;i++)for(let j=0;j<rows;j++){
+        const gx=cx-span+i*cell+cell*0.5, gy=cy-span+j*cell+cell*0.5;
+        const dx=gx-cx, dy=gy-cy; const d=Math.hypot(dx,dy)/R;
+        if(d>0.66) continue;
+        // 중심일수록 또렷·밝음(최대 밀도·최소 반경 코어). 바깥은 픽셀이 듬성 꺼진다.
+        const fall=1-d/0.66;
+        // 부드러운 시머 — 타일마다 위상 다른 느린 사인(고주파 점멸 아님, 격자 단위로 일렁임)
+        const shim=0.5+0.5*Math.sin(t*0.9 + i*1.7 + j*2.3);
+        // 균열 파면 위에서 추가 발광 — 시공간이 그 띠에서 깨짐
+        const crack=Math.max(0,1-Math.abs(d-frac)*8);
+        const br=fall*fall*(0.5+0.45*shim)+crack*0.35*fall;
+        if(br<0.05) continue;
+        // 사각 타일을 발광으로(둥근 글로우가 아니라 이산 사각 → 픽셀감)
+        const tw=cell*0.78;
+        ctx.fillStyle=`rgba(${this.col},${Math.min(0.95,br*0.7)*al})`;
+        ctx.fillRect(gx-tw/2, gy-tw/2, tw, tw);
+        // 밝은 코어 타일엔 순백 점(붕괴의 핵)
+        if(br>0.5){ ctx.fillStyle=`rgba(255,255,255,${(br-0.5)*1.2*al})`;
+          ctx.fillRect(gx-tw*0.30, gy-tw*0.30, tw*0.60, tw*0.60); }
+      }
+      // 격자선 — 시공간 눈금(아주 옅음, 중심만)
+      ctx.strokeStyle=`rgba(${this.col},${0.09*al})`; ctx.lineWidth=1;     // 시공간 눈금(또렷이)
+      for(let i=0;i<=cols;i++){ const x=cx-span+i*cell;
+        const fade=1-Math.abs(x-cx)/span; if(fade<=0)continue;
+        ctx.globalAlpha=fade*al; ctx.beginPath(); ctx.moveTo(x,cy-span*fade); ctx.lineTo(x,cy+span*fade); ctx.stroke(); }
+      for(let j=0;j<=rows;j++){ const y=cy-span+j*cell;
+        const fade=1-Math.abs(y-cy)/span; if(fade<=0)continue;
+        ctx.globalAlpha=fade*al; ctx.beginPath(); ctx.moveTo(cx-span*fade,y); ctx.lineTo(cx+span*fade,y); ctx.stroke(); }
+      ctx.globalAlpha=1; } },
+];
+layers.forEach(l => l.init());
+
+// 층 점프 인덱스 렌더(좌상단) — 변두리에 잠든 눈금
+const jumpEl=document.getElementById('jump');
+const KEYS=['1','2','3','4','5','6','7','8','9','0','-'];
+function renderJump(activeIdx){ const act = (activeIdx==null? cur : activeIdx);
+  jumpEl.innerHTML = layers.map((l,i)=>{
+  const k=KEYS[i]; const short=l.name.split(' — ')[0];
+  return (i===act? `<b>${k} ${short}</b>` : `${k} ${short}`); }).join('<br/>'); }
+
+let cur = 0;
+let trans = null;     // {from,to,p}
+const DUR = 1.7;      // 전환 길이(초)
+function go(dir){ if(trans) return; const ni=cur+dir;
+  if(ni<0||ni>=layers.length) return; trans={from:cur,to:ni,p:0}; }
+function jumpTo(ni){ if(trans||ni===cur||ni<0||ni>=layers.length) return;
+  trans={from:cur,to:ni,p:0}; }
+// 즉시 점프(전환 없음) — 검증·디버그용. Shift+숫자 또는 window.__setLayer(i).
+function setLayer(ni){ if(ni<0||ni>=layers.length) return; trans=null; cur=ni;
+  setHUD(ni); nameEl.dataset.t=String(ni); }
+window.__setLayer = setLayer;
+window.addEventListener('click', () => go(1));
+window.addEventListener('keydown', e => {
+  if(e.code==='Space'||e.code==='ArrowDown'){ e.preventDefault(); go(1); return; }
+  if(e.code==='ArrowUp'){ e.preventDefault(); go(-1); return; }
+  const ki=KEYS.indexOf(e.key);
+  if(ki>=0){ e.preventDefault(); if(e.shiftKey) setLayer(ki); else jumpTo(ki); }
+});
+
+const nameEl=document.getElementById('name'), rEl=document.getElementById('r'),
+      whisperEl=document.getElementById('whisper');
+function setHUD(i){ nameEl.textContent=layers[i].name; nameEl.style.color=`rgb(${layers[i].col})`;
+  rEl.textContent='r = '+layers[i].r; rEl.style.color=`rgb(${layers[i].col})`;
+  whisperEl.style.opacity = i>=10 ? '0' : '.4';  // 끝 층에선 속삭임이 사라진다
+  whisperEl.textContent = i>=10 ? '' : (i>=5 ? '아무도 온 적 없다.' : '더 작은 것이 있다.');
+  renderJump(i); }
+setHUD(0);
+
+function vignette(){ ctx.globalCompositeOperation='source-over';
+  const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.22,W/2,H/2,Math.max(W,H)*0.72);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.62)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H); }
+
+// fps 측정(좌하단 디버그 — ?fps 쿼리로 켜기)
+const SHOW_FPS=/[?&]fps/.test(location.search);
+let fpsEl=null, fAcc=0, fCnt=0, fLast=performance.now();
+if(SHOW_FPS){ fpsEl=document.createElement('div');
+  fpsEl.style.cssText='position:fixed;right:20px;bottom:64px;color:#5fb0c0;opacity:.6;font:12px ui-monospace,monospace;pointer-events:none;';
+  document.body.appendChild(fpsEl); }
+
+const start=performance.now();
+let prevNow=start;
+function frame(now){
+  const t=(now-start)/1000; const cx=W/2, cy=H/2;
+  // dt 기반(프레임 카운트 아님) — 탭 백그라운드 rAF 스로틀·offline 복귀에도 전환이 멈추지 않게.
+  // 큰 갭(백그라운드 복귀)은 클램프해 전환이 점프하지 않고 부드럽게 마무리되도록.
+  let dt=(now-prevNow)/1000; prevNow=now; if(dt>0.1) dt=0.1;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.globalCompositeOperation='source-over';
+
+  if(!trans){
+    ctx.fillStyle=layers[cur].void; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    layers[cur].draw(t,cx,cy,1,1);
+  } else {
+    trans.p += dt/DUR; const p=Math.min(1,trans.p);
+    ctx.fillStyle = p<0.5 ? layers[trans.from].void : layers[trans.to].void;
+    ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    // A: 현재 세계로 *떨어진다* (확대 + 페이드아웃)
+    if(p<0.62){ const k=p/0.62; layers[trans.from].draw(t,cx,cy,1+k*1.7,(1-k)*(1-k)); }
+    // B: 새 세계가 떠오른다 (확대되며 등장)
+    if(p>0.40){ const k=(p-0.40)/0.60; layers[trans.to].draw(t,cx,cy,0.42+Math.min(1,k)*0.58,Math.min(1,k)); }
+    // 문턱의 어둠 — 통과하는 순간 가장 깊은 침묵
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle=`rgba(0,0,0,${0.55*Math.sin(p*Math.PI)})`; ctx.fillRect(0,0,W,H);
+    if(trans.p>=0.5 && nameEl.dataset.t!=String(trans.to)){ setHUD(trans.to); nameEl.dataset.t=String(trans.to); }
+    if(trans.p>=1){ cur=trans.to; trans=null; }
+  }
+  vignette();
+
+  if(SHOW_FPS){ const dt=now-fLast; fLast=now; fAcc+=dt; fCnt++;
+    if(fAcc>=500){ fpsEl.textContent=(1000/(fAcc/fCnt)).toFixed(0)+' fps · '+layers[cur].name.split(' — ')[0];
+      fAcc=0; fCnt=0; } }
+  requestAnimationFrame(frame);
+}
+
+// ── 검증용 perf 프로브(비침습, 렌더에 영향 없음): 각 층 draw의 순수 CPU 비용을 동기 측정.
+//    headless rAF 스로틀과 무관하게 층별 부하를 잰다. window.__bench()로 호출.
+window.__bench = function(iters){
+  iters = iters||40; const out=[]; const cx=W/2, cy=H/2;
+  for(let li=0; li<layers.length; li++){
+    layers[li].draw(0,cx,cy,1,1);              // 워밍업 1회
+    const t0=performance.now();
+    for(let k=0;k<iters;k++){ ctx.setTransform(DPR,0,0,DPR,0,0);
+      ctx.fillStyle=layers[li].void; ctx.fillRect(0,0,W,H);
+      ctx.globalCompositeOperation='lighter';
+      layers[li].draw(k*0.016,cx,cy,1,1); }
+    const ms=(performance.now()-t0)/iters;
+    out.push({ layer:layers[li].name.split(' — ')[0], msPerFrame:+ms.toFixed(2), estFps:Math.round(1000/ms) });
+  }
+  return out;
+};
+
+resize();
+// ?jump=N (1~11) — 특정 층으로 바로 부팅(검증·공유용).
+{ const m=/[?&]jump=(\d+)/.exec(location.search); if(m){ const n=parseInt(m[1],10)-1;
+  if(n>=0 && n<layers.length) setLayer(n); } }
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
