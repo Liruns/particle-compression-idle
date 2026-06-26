@@ -51,6 +51,53 @@ export interface BoardResonance {
   progress: number;
 }
 
+/** 위상 상태 식별(phase.ts PhaseState와 동일 — 표현 전용 재선언, core 비의존). */
+export type BoardPhaseState = 'coherent' | 'dispersed' | 'resonant';
+
+/** 한 위상 상태 노드(§4 표 3행 다이제틱). 토글 버튼 폐기 → 공허에 뜬 만질 수 있는 상태점. */
+export interface BoardPhaseNode {
+  state: BoardPhaseState;
+  /** 한국어 라벨(응집/분산/공명). */
+  nameKo: string;
+  /** 짧은 효과(체인↑/데이터↑/거품↑). */
+  effect: string;
+  /** 그 상태의 체인 배율(number — 스칼라, Decimal 아님). */
+  mult: number;
+  /** 발견 임계 달성(누적 유지시간 ≥ gate). UI ✓. */
+  found: boolean;
+}
+
+/**
+ * 위상 겹침 다이제틱 입력(§4 표 3행). 프리온층(L6+)에서 세 상태 노드를 직접 만진다.
+ *  active=프리온+, state=현재 상태, pinned=고정, cycleProgress=다음 자동순환까지 0..1.
+ */
+export interface BoardPhase {
+  active: boolean;
+  state: BoardPhaseState;
+  pinned: boolean;
+  cycleProgress: number;
+  /** 핀 1회 비용 라벨(사전 포맷 E — Decimal 미유입). */
+  pinCostLabel: string;
+  /** 세 상태 노드(coherent/dispersed/resonant 순). */
+  nodes: BoardPhaseNode[];
+}
+
+/**
+ * 진동 하모닉스 다이제틱 입력(§4 표 4행). ★수동 입력 없음(passive) — 시각화 전용(로직 호출 0).
+ *  끈층(L7+)에서 V 충전·다음 공명 티어 예고·버스트 티어 폭발을 보드(껍질)에 살아있는 빛으로.
+ */
+export interface BoardHarmonics {
+  active: boolean;
+  /** 다음 공명까지 충전 0..1. */
+  chargeProgress: number;
+  /** 다음에 공명(폭발)할 티어(1..8) — 그 껍질을 점화 예고. */
+  nextTier: number;
+  /** 현재 버스트 중인 티어들(1..8) — 그 껍질을 플래시. */
+  burstingTiers: number[];
+  /** 누적 공명 횟수(조용한 카운터). */
+  totalResonances: number;
+}
+
 /** 게임판 한 프레임 입력(읽기전용 파생). */
 export interface BoardInput {
   /** 해금된 껍질만(저→고 티어 순). 빈 배열이면 껍질 미표시(FTUE 체인 전). */
@@ -61,6 +108,10 @@ export interface BoardInput {
   energyLabel: string;
   /** 오비탈 공명 상태(원자층+). 비활성이면 active=false — 전자 미표시. */
   resonance: BoardResonance;
+  /** 위상 겹침 상태(프리온층+). 비활성이면 active=false — 상태 노드 미표시. */
+  phase: BoardPhase;
+  /** 진동 하모닉스 상태(끈층+, passive 시각화). 비활성이면 active=false. */
+  harmonics: BoardHarmonics;
 }
 
 /** 히트테스트 결과 — App이 game 호출을 분기. */
@@ -68,11 +119,22 @@ export type BoardHit =
   | { kind: 'cell' }
   | { kind: 'shell'; tier: number }
   | { kind: 'resonance' }
+  | { kind: 'phase'; state: BoardPhaseState }
   | { kind: 'none' };
 
 /** 자원 발광색(§3-C 탈채도, 단일 악센트 해체). E 금 / 화이트 양자대용은 미사용. */
 const COL_CELL_NUC = '214,232,208'; // 세포 핵점(따뜻한 흰빛)
 const COL_FLIGHT = '235,244,250'; // 결속 비행 흰빛
+
+/** 위상 세 상태 색(프리온 냉기 보라 계열 — 상태별 미묘 구분). 응집=강화·분산=데이터·공명=거품. */
+const PHASE_STATE_ORDER: BoardPhaseState[] = ['coherent', 'dispersed', 'resonant'];
+const PHASE_COLORS: Record<BoardPhaseState, string> = {
+  coherent: '172,162,236', // 응집 — 가장 밝은 보라(체인 강화)
+  dispersed: '150,196,206', // 분산 — 식은 청록(데이터)
+  resonant: '202,176,224', // 공명 — 옅은 자보라(거품/QF)
+};
+/** 하모닉 버스트·점화 색(끈 자홍 계열). */
+const HARMONIC_COLOR = '208,140,170';
 
 /** 8 티어 발광색(탈채도 — 색온도 따뜻→차가움. art §2-B 정신). 'r,g,b'. */
 const SHELL_COLORS: string[] = [
@@ -164,6 +226,8 @@ export class BoardRenderer {
     decadeProgress: 0,
     energyLabel: '0',
     resonance: { active: false, open: false, progress: 0 },
+    phase: { active: false, state: 'coherent', pinned: false, cycleProgress: 0, pinCostLabel: '', nodes: [] },
+    harmonics: { active: false, chargeProgress: 0, nextTier: 1, burstingTiers: [], totalResonances: 0 },
   };
   private reducedMotion = false;
   /** 현재 층 발광색('r,g,b') — WorldRenderer가 매 프레임 공급(전환 보간 포함). 코어·자유빛이 따른다. */
@@ -197,6 +261,8 @@ export class BoardRenderer {
   private hoverResonance = false; // 공명 전자 위(클릭 유효: open일 때만)
   private resonancePulse = 0; // 공명 성공 잔광(0..1)
   private resonanceMissPulse = 0; // 빗맞춤(닫힌 슬롯 클릭) 옅은 신호
+  private hoverPhase: BoardPhaseState | null = null; // 호버 중인 위상 노드
+  private phasePinPulse = 0; // 위상 고정/해제 잔광
 
   constructor() {
     this.seedCells();
@@ -293,11 +359,19 @@ export class BoardRenderer {
     return { x: this.cx + Math.cos(ang) * rad, y: this.cy + Math.sin(ang) * rad, r: rad };
   }
 
-  /** 마우스 아래 무엇? 세포 우선(능동) → 공명 전자(타이밍) → 껍질(엔진). */
+  /** 위상 상태 노드 좌표(삼각 배치, 외곽 — 껍질 바깥). index 0..2 = coherent/dispersed/resonant. */
+  private phasePos(index: number): { x: number; y: number } {
+    const rad = this.minDim * 0.46; // 외곽 껍질(0.44) 바깥 — 엔진과 분리된 "위상장"
+    const ang = -Math.PI / 2 + (index * TAU) / 3; // 위·우하·좌하 삼각
+    return { x: this.cx + Math.cos(ang) * rad, y: this.cy + Math.sin(ang) * rad };
+  }
+
+  /** 마우스 아래 무엇? 세포(능동) → 공명 전자(타이밍) → 위상 노드(상태) → 껍질(엔진). */
   private updateHover(): void {
     this.hoverCell = -1;
     this.hoverShellTier = 0;
     this.hoverResonance = false;
+    this.hoverPhase = null;
     if (this.pointerX < 0) return;
     // 1) 세포(가장 가까운 float, 반경 내).
     let bestC = -1;
@@ -325,7 +399,24 @@ export class BoardRenderer {
         return;
       }
     }
-    // 3) 껍질(가장 가까운 궤도, 좁은 밴드). 해금된 티어만.
+    // 3) 위상 상태 노드(프리온층+ 활성 시). 세 노드 근처 클릭 → pin/unpin.
+    if (this.input.phase.active && this.input.phase.nodes.length === 3) {
+      let bestIdx = -1;
+      let bestD = this.minDim * 0.075;
+      for (let i = 0; i < 3; i++) {
+        const p = this.phasePos(i);
+        const d = Math.hypot(this.pointerX - p.x, this.pointerY - p.y);
+        if (d < bestD) {
+          bestD = d;
+          bestIdx = i;
+        }
+      }
+      if (bestIdx >= 0) {
+        this.hoverPhase = this.input.phase.nodes[bestIdx].state;
+        return;
+      }
+    }
+    // 4) 껍질(가장 가까운 궤도, 좁은 밴드). 해금된 티어만.
     const dist = Math.hypot(this.pointerX - this.cx, this.pointerY - this.cy);
     let bestTier = 0;
     let bestSD = 1e9;
@@ -353,6 +444,7 @@ export class BoardRenderer {
       // open이면 공명(성공), closed면 빗맞춤 신호만 — game 호출은 App이 분기.
       return { kind: 'resonance' };
     }
+    if (this.hoverPhase) return { kind: 'phase', state: this.hoverPhase };
     if (this.hoverShellTier > 0) return { kind: 'shell', tier: this.hoverShellTier };
     return { kind: 'none' };
   }
@@ -418,6 +510,23 @@ export class BoardRenderer {
   /** 공명 전자 색(원자층 teal 계열 — 세계색과 무관하게 전자다움 유지). */
   private atomColor(): string {
     return '160,210,222';
+  }
+
+  /** 위상 고정/해제 피드백(App이 pin/unpin 후 호출). 선택 노드에 잔광 + "고정/해제" 텍스트. */
+  onPhase(state: BoardPhaseState, pinned: boolean): void {
+    this.phasePinPulse = 1;
+    const idx = PHASE_STATE_ORDER.indexOf(state);
+    if (idx < 0) return;
+    const p = this.phasePos(idx);
+    this.spawnAbsorbSparks(p.x, p.y, PHASE_COLORS[state]);
+    this.floatTexts.push({
+      x: p.x,
+      y: p.y - 14,
+      str: pinned ? '고정' : '해제',
+      col: PHASE_COLORS[state],
+      t: 0,
+      dur: 1.0,
+    });
   }
 
   // ── 발광 헬퍼(lighter 합성 전제). ──
@@ -486,8 +595,10 @@ export class BoardRenderer {
     ctx.globalCompositeOperation = 'lighter';
     const breath = this.reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(nowSec * (TAU / 7));
 
-    // 1) 껍질(엔진) — 안→밖.
+    // 1) 껍질(엔진) — 안→밖. (하모닉 점화/버스트 강조는 drawShell이 harmonics 입력으로 반영)
     for (const s of shells) this.drawShell(ctx, s, nowSec);
+    // 1b) 진동 하모닉스(끈층+, passive 시각화) — V 충전 + 다음 티어 점화 예고 + 버스트 플래시.
+    if (this.input.harmonics.active) this.drawHarmonics(ctx);
     // 2) 결속 비행(중심→껍질).
     this.drawFlights(ctx, d);
     // 3) 중심 코어(관조 디폴트 심장).
@@ -498,6 +609,8 @@ export class BoardRenderer {
     this.drawSparks(ctx, d);
     // 5b) 공명 전자(활성 시) — 궤도를 도는 전자, open이면 클릭 가능(§4 표 2행).
     if (this.input.resonance.active) this.drawResonance(ctx, nowSec, d);
+    // 5c) 위상 상태 노드(프리온층+) — 세 상태를 만져 고정(§4 표 3행).
+    if (this.input.phase.active) this.drawPhase(ctx, nowSec, d);
     // 6) dec 진행 호(다음 세계 하강 게이트).
     this.drawDecArc(ctx);
     // 7) 호버 툴팁(세포/껍질) — 공허에 뜬 텍스트.
@@ -589,6 +702,25 @@ export class BoardRenderer {
       ctx.arc(px, py, pr, 0, TAU);
       ctx.fillStyle = `rgba(${col},${Math.min(0.95, pa)})`;
       ctx.fill();
+    }
+    // 하모닉(끈층+) 강조: 버스트 중이면 자홍 환링(폭발), 다음 공명 티어면 옅은 점화 예고 맥동.
+    const harm = this.input.harmonics;
+    if (harm.active) {
+      if (harm.burstingTiers.indexOf(s.tier) >= 0) {
+        const b = this.reducedMotion ? 1 : 0.6 + 0.4 * Math.sin(now * 9);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, TAU);
+        ctx.strokeStyle = `rgba(${HARMONIC_COLOR},${0.45 * b})`;
+        ctx.lineWidth = 2.5 + 3 * b;
+        ctx.stroke();
+      } else if (s.tier === harm.nextTier) {
+        const b = this.reducedMotion ? 0.5 : 0.5 + 0.5 * Math.sin(now * 2.2);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, TAU);
+        ctx.strokeStyle = `rgba(${HARMONIC_COLOR},${0.1 + 0.12 * b})`;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
     }
     ctx.restore();
   }
@@ -781,6 +913,134 @@ export class BoardRenderer {
       ctx.strokeStyle = `rgba(150,168,178,${0.3 * this.resonanceMissPulse})`;
       ctx.lineWidth = 1;
       ctx.stroke();
+    }
+  }
+
+  /**
+   * 위상 상태 노드(§4 표 3행). 세 상태(응집/분산/공명)를 삼각으로 배치한 "위상장".
+   *  현재 상태=환히 빛남 + (미고정)자동순환 진행 호 / (고정)잠금 링. 호버=확대+상세 라벨.
+   *  클릭 매핑: 노드 클릭 → pin(state) / 고정된 현재 노드 클릭 → unpin (App이 분기 호출).
+   */
+  private drawPhase(ctx: CanvasRenderingContext2D, now: number, dt: number): void {
+    const ph = this.input.phase;
+    if (ph.nodes.length !== 3) return;
+    const decay = Math.pow(0.9, dt * 60);
+    this.phasePinPulse *= decay;
+    if (this.phasePinPulse < 0.001) this.phasePinPulse = 0;
+    const pos = ph.nodes.map((_, i) => this.phasePos(i));
+
+    // 위상장 — 세 노드를 잇는 아주 옅은 삼각(하나의 계임을 암시).
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const p = pos[i];
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle = `rgba(150,150,200,${0.05 + this.phasePinPulse * 0.05})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    for (let i = 0; i < 3; i++) {
+      const node = ph.nodes[i];
+      const p = pos[i];
+      const col = PHASE_COLORS[node.state];
+      const isCurrent = node.state === ph.state;
+      const isPinned = ph.pinned && isCurrent;
+      const isHover = this.hoverPhase === node.state;
+      const beat = this.reducedMotion ? 0.85 : 0.65 + 0.35 * Math.sin(now * 1.6 + i);
+      // 현재 상태는 환히, 나머지는 잠재된 빛. 호버면 더 크고 밝게.
+      const intensity = (isCurrent ? 0.85 : 0.3) * beat + (isHover ? 0.3 : 0) + (isCurrent ? this.phasePinPulse * 0.4 : 0);
+      const glowR = 16 + (isCurrent ? 8 : 0) + (isHover ? 6 : 0);
+      this.glow(ctx, p.x, p.y, glowR, col, Math.min(0.75, intensity));
+      this.glow(ctx, p.x, p.y, 4, '230,228,248', isCurrent ? 0.8 * beat : 0.4);
+
+      // 미고정 현재 상태 — 자동순환 진행 호(다음 상태로 넘어가기까지).
+      if (isCurrent && !ph.pinned && ph.cycleProgress > 0.001) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 12, -Math.PI / 2, -Math.PI / 2 + clamp(ph.cycleProgress, 0, 1) * TAU);
+        ctx.strokeStyle = `rgba(${col},0.5)`;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+      // 고정 — 잠금 링(자동순환 정지, 전문화 중).
+      if (isPinned) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 13, 0, TAU);
+        ctx.strokeStyle = `rgba(230,228,248,${0.55 * beat})`;
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+    }
+
+    // 라벨(source-over 텍스트 — 공허에 직접). 이름·효과·(현재)배율, 발견 ✓, 호버 시 핀 비용.
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 10;
+    for (let i = 0; i < 3; i++) {
+      const node = ph.nodes[i];
+      const p = pos[i];
+      const col = PHASE_COLORS[node.state];
+      const isCurrent = node.state === ph.state;
+      const isHover = this.hoverPhase === node.state;
+      const labA = isCurrent ? 0.85 : isHover ? 0.7 : 0.4;
+      ctx.font = "600 12px 'IBM Plex Sans KR', sans-serif";
+      ctx.fillStyle = `rgba(${col},${labA})`;
+      ctx.fillText(`${node.nameKo}${node.found ? ' ✓' : ''}`, p.x, p.y + 30);
+      ctx.font = "10px 'IBM Plex Sans KR', sans-serif";
+      ctx.fillStyle = `rgba(200,206,224,${labA * 0.7})`;
+      ctx.fillText(node.effect, p.x, p.y + 44);
+      // 호버 — 배율 + 핀/해제 비용 힌트.
+      if (isHover) {
+        ctx.font = "10px 'IBM Plex Mono', monospace";
+        ctx.fillStyle = `rgba(${col},0.8)`;
+        const action =
+          isCurrent && ph.pinned ? '클릭: 해제(무료)' : `클릭: 고정 −${ph.pinCostLabel} E`;
+        ctx.fillText(`×${node.mult.toFixed(2)} · ${action}`, p.x, p.y + 58);
+      }
+    }
+    ctx.restore();
+    ctx.shadowBlur = 0;
+    ctx.globalCompositeOperation = 'lighter';
+  }
+
+  /**
+   * 진동 하모닉스 시각화(§4 표 4행, ★passive — 클릭 없음). V 충전을 코어 둘레 충전 호로,
+   *  버스트/다음티어 강조는 drawShell이 담당. 누적 공명은 코어 아래 조용한 카운터.
+   */
+  private drawHarmonics(ctx: CanvasRenderingContext2D): void {
+    const h = this.input.harmonics;
+    const r = this.minDim * 0.082; // 코어 바로 바깥 — 진동 에너지가 차오르는 띠
+    const p = clamp(h.chargeProgress, 0, 1);
+    // 충전 호(다음 공명까지). 거의 다 차면 더 밝게(임박).
+    ctx.beginPath();
+    ctx.arc(this.cx, this.cy, r, -Math.PI / 2, -Math.PI / 2 + p * TAU);
+    ctx.strokeStyle = `rgba(${HARMONIC_COLOR},${0.25 + 0.4 * p})`;
+    ctx.lineWidth = 1.6 + 1.4 * p;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    // 바탕 링(아주 옅게 — 띠의 존재).
+    ctx.beginPath();
+    ctx.arc(this.cx, this.cy, r, 0, TAU);
+    ctx.strokeStyle = `rgba(${HARMONIC_COLOR},0.06)`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // 누적 공명 — 코어 아래 조용한 카운터(테두리 0).
+    if (h.totalResonances > 0) {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.shadowColor = 'rgba(0,0,0,0.9)';
+      ctx.shadowBlur = 8;
+      ctx.font = "10px 'IBM Plex Mono', monospace";
+      ctx.fillStyle = `rgba(${HARMONIC_COLOR},0.5)`;
+      ctx.fillText(`공명 ${h.totalResonances} · 다음 T${h.nextTier}`, this.cx, this.cy + r + 28);
+      ctx.restore();
+      ctx.shadowBlur = 0;
+      ctx.globalCompositeOperation = 'lighter';
     }
   }
 

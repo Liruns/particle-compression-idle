@@ -19,7 +19,8 @@
   import { formatNumber, formatRadius } from './core/format';
   import { bus } from './core/events';
   import { CanvasRenderer } from './render';
-  import type { BoardInput, BoardShell } from './render/board';
+  import type { BoardInput, BoardShell, BoardPhase, BoardHarmonics, BoardPhaseState } from './render/board';
+  import { PHASE_OVERLAP } from './data/constants';
   import { reducedMotion } from './ui/stores/reduced-motion';
   import { particleById } from './data/particles';
   import { layerEntryBeat } from './data/narrative';
@@ -172,6 +173,28 @@
       open: s.resonance.active && s.resonance.phase === 'open',
       progress: s.resonance.progress,
     };
+    // 위상 겹침(프리온층+) — 세 상태 노드 직접 조작(§4 표 3행). 배율은 표시 전용 상수(로직 불변).
+    //   발견 임계(누적 유지시간): 응집/분산 10s, 공명 20s (PhaseWidget 정보 로직 보존).
+    const phase: BoardPhase = {
+      active: s.phase.active,
+      state: s.phase.state,
+      pinned: s.phase.pinned,
+      cycleProgress: s.phase.cycleProgress,
+      pinCostLabel: formatNumber(s.phase.pinCost, 1),
+      nodes: [
+        { state: 'coherent', nameKo: '응집', effect: '체인 ↑', mult: PHASE_OVERLAP.COHERENT_MULT, found: s.phase.times.coherent >= 10 },
+        { state: 'dispersed', nameKo: '분산', effect: '데이터 ↑', mult: PHASE_OVERLAP.DISPERSED_MULT, found: s.phase.times.dispersed >= 10 },
+        { state: 'resonant', nameKo: '공명', effect: '거품 ↑', mult: PHASE_OVERLAP.RESONANT_MULT, found: s.phase.times.resonant >= 20 },
+      ],
+    };
+    // 진동 하모닉스(끈층+) — passive 시각화(클릭 없음, §4 표 4행).
+    const harmonics: BoardHarmonics = {
+      active: s.harmonics.active,
+      chargeProgress: s.harmonics.chargeProgress,
+      nextTier: s.harmonics.nextTier,
+      burstingTiers: s.harmonics.burstingTiers,
+      totalResonances: s.harmonics.totalResonances,
+    };
     // 체인 미공개(FTUE)면 껍질 없음 — 관조(코어+세포) + 공명만.
     if (!s.ftue.showChain) {
       return {
@@ -179,6 +202,8 @@
         decadeProgress: s.layer.decadeProgress,
         energyLabel: formatNumber(s.E, 2),
         resonance,
+        phase,
+        harmonics,
       };
     }
     // 최적(가장 싼 다음 구매) 티어 — 부름 강조.
@@ -215,6 +240,8 @@
       decadeProgress: s.layer.decadeProgress,
       energyLabel: formatNumber(s.E, 2),
       resonance,
+      phase,
+      harmonics,
     };
   }
 
@@ -233,6 +260,7 @@
     if (hit.kind === 'cell') doCompress();
     else if (hit.kind === 'shell') doBind(hit.tier);
     else if (hit.kind === 'resonance') doResonance();
+    else if (hit.kind === 'phase') doPhase(hit.state);
   }
   function onPointerMove(e: PointerEvent): void {
     if (!renderer) return;
@@ -271,6 +299,16 @@
     if (!game) return;
     const ok = game.clickResonance();
     renderer?.gameBoard.onResonance(ok);
+  }
+  /** 위상 노드 클릭 = 고정/해제(실제 게임, §4 표 3행). 고정된 현재 상태 재클릭=해제, 그 외=고정(E). */
+  function doPhase(state: BoardPhaseState): void {
+    if (!game || !snap) return;
+    if (snap.phase.pinned && snap.phase.state === state) {
+      game.unpinPhase();
+      renderer?.gameBoard.onPhase(state, false);
+    } else if (game.pinPhase(state)) {
+      renderer?.gameBoard.onPhase(state, true);
+    }
   }
 
   // --- 디바이스 노드(개입 bloom) -----------------------------------------------
