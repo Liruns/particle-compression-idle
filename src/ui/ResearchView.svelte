@@ -1,17 +1,14 @@
 <script lang="ts">
   /**
-   * ResearchView — 연구 화면 (SCR-02, ui-flow §3). M1.7 A가지 체인증폭 2노드(A1·A2).
-   *  상단 바: D 보유. 노드 카드: 효과·D 비용·구매 버튼. 상태별(구매가능/D부족/완료/잠금).
-   *  D 소비 로직은 부모(game.buyResearch) 위임 — 단방향(§4.1). 구매하면 다음 tick부터 효과 반영.
-   *
-   *  연구 효과 = 체인 내부 배율(C안, research_mult≈1.0). 노드 카드는 economy 정합 — 전역 곱 아님.
+   * ResearchView — 연구 (ui-flow §3). 우주적 현미경 재구성(2단계): 카드 그리드 → **연구 로그**.
+   *  패널 크롬 제거(bloom-panel이 컨테이너) · 노드=테두리 없는 2줄 엔트리(효과·플레이버·비용/구매).
+   *  상태는 빛으로(구매가능=밝음/완료=물러남+✓/잠금=흐림). 구매 위임(game.buyResearch) — 로직 불변.
    */
   import type { GameSnapshot } from '../game';
   import { formatNumber } from '../core/format';
-  import Icon from './icons/Icon.svelte';
 
   export let research: GameSnapshot['research'];
-  /** 현재 D 보유(상단 바 표시). */
+  /** 현재 D 보유. */
   export let dCurrent: import('../core/bignum').Decimal;
   /** 노드 구매 위임(부모가 game.buyResearch 호출). */
   export let onBuy: (nodeId: string) => void;
@@ -20,49 +17,39 @@
 <section class="research">
   <header class="rs-top">
     <span class="rs-title">연구 — 체인 증폭</span>
-    <span class="rs-d">
-      <span class="rs-d-icon"><Icon name="data" size={14} /></span>
-      D 보유 {formatNumber(dCurrent)}
-    </span>
+    <span class="rs-d"><span class="rs-d-sym">D</span> 보유 {formatNumber(dCurrent)}</span>
   </header>
 
   <p class="rs-branch">
-    A. 체인 증폭
-    <span class="dim">— {research.branchProgress[0]}/{research.branchProgress[1]}</span>
+    A. 체인 증폭<span class="dim"> · {research.branchProgress[0]}/{research.branchProgress[1]}</span>
   </p>
 
-  <div class="rs-nodes">
+  <ul class="rs-nodes" role="list">
     {#each research.nodes as node (node.id)}
-      <article
-        class="rs-card"
+      <li
+        class="rs-node"
         class:purchased={node.purchased}
         class:locked={!node.unlocked && !node.purchased}>
-        <div class="rs-card-head">
-          <span class="rs-name">{node.nameKo}</span>
-          {#if node.purchased}<span class="rs-check" aria-hidden="true">✓</span>{/if}
-        </div>
-        <p class="rs-effect">{node.effectKo}</p>
-        <p class="rs-flavor">{node.flavorKo}</p>
-        <div class="rs-foot">
+        <span class="rs-name">{node.nameKo}{#if node.purchased}<span class="rs-check"> ✓</span>{/if}</span>
+        <span class="rs-effect">{node.effectKo}</span>
+        <span class="rs-flavor">{node.flavorKo}</span>
+        <span class="rs-action">
           {#if node.purchased}
-            <span class="rs-cost done">구매됨</span>
-            <button class="rs-buy done" disabled>완료</button>
+            <span class="rs-state done">기록됨</span>
           {:else if !node.unlocked}
-            <span class="rs-cost lock"
-              >선행: {node.prereqNamesKo.join(', ') || '—'}</span>
-            <button class="rs-buy lock" disabled>잠금</button>
+            <span class="rs-state lock">잠금</span>
+            <span class="rs-prereq">선행 {node.prereqNamesKo.join(', ') || '—'}</span>
           {:else}
-            <span class="rs-cost" class:short={!node.affordable}>{node.costD} D</span>
             <button
               class="rs-buy"
               class:active={node.affordable}
               disabled={!node.affordable}
-              on:click={() => onBuy(node.id)}>구매</button>
+              on:click={() => onBuy(node.id)}>결속 −{node.costD} D</button>
           {/if}
-        </div>
-      </article>
+        </span>
+      </li>
     {/each}
-  </div>
+  </ul>
 
   <p class="rs-note">
     체인 증폭은 특정 티어 생산만 강화합니다. 발견 데이터 D로 영구 구매 — 상전이·재하강에 보존됩니다.
@@ -70,20 +57,18 @@
 </section>
 
 <style>
-  /* 폭은 부모(CENTER 패널)가 결정 — max-width 해방(ux §P0-1). 노드 그리드가 횡으로 확장. */
+  /* 컨테이너 크롬 0 — bloom-panel이 프레임. */
   .research {
     width: 100%;
-    background: var(--canvas-layer);
-    border: 1px solid var(--border);
-    border-radius: var(--rounded-md);
-    padding: var(--space-base);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
   }
   .rs-top {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    padding-bottom: var(--space-sm);
-    border-bottom: 1px solid var(--border);
+    gap: 10px;
   }
   .rs-title {
     font-family: var(--font-label);
@@ -92,124 +77,131 @@
   }
   .rs-d {
     font-family: var(--font-numeric);
-    font-size: var(--text-num-md);
+    font-size: var(--text-label-md);
     color: var(--data);
-    display: flex;
-    align-items: center;
-    gap: var(--space-xs);
   }
-  .rs-d-icon {
-    color: var(--data);
+  .rs-d-sym {
+    opacity: 0.7;
   }
   .dim {
     color: var(--foreground-dim);
   }
 
   .rs-branch {
-    margin: var(--space-base) 0 var(--space-sm);
+    margin: 0;
     font-family: var(--font-label);
     font-size: var(--text-label-md);
     color: var(--layer-accent);
+    padding-bottom: 6px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   }
 
+  /* 노드 = 2줄 엔트리(테두리 0). [이름] [효과] … [액션] / 둘째 줄 플레이버. */
   .rs-nodes {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: var(--space-sm);
-  }
-  .rs-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--rounded-sm);
-    padding: var(--space-sm) var(--space-base);
+    list-style: none;
+    margin: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-xs);
   }
-  .rs-card.purchased {
-    opacity: 0.6;
-    border-color: color-mix(in srgb, var(--col-keep, #27ae60) 40%, var(--border));
+  .rs-node {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      'name action'
+      'effect action'
+      'flavor action';
+    align-items: baseline;
+    column-gap: 14px;
+    row-gap: 3px;
+    padding: 12px 2px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
   }
-  .rs-card.locked {
-    opacity: 0.45;
+  .rs-node:last-of-type {
+    border-bottom: none;
   }
-  .rs-card-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-xs);
+  .rs-node.purchased {
+    opacity: 0.55;
+  }
+  .rs-node.locked {
+    opacity: 0.5;
   }
   .rs-name {
+    grid-area: name;
     font-family: var(--font-label);
     font-size: var(--text-label-md);
     color: var(--foreground);
   }
   .rs-check {
-    color: var(--col-keep, #27ae60);
-    font-size: var(--text-label-md);
+    color: var(--col-keep);
   }
   .rs-effect {
-    margin: 0;
+    grid-area: effect;
     font-family: var(--font-numeric);
     font-size: var(--text-label-sm);
     color: var(--primary);
   }
   .rs-flavor {
-    margin: 0;
+    grid-area: flavor;
     font-family: var(--font-narrative);
     font-size: var(--text-narr-sm);
     color: var(--foreground-sub);
     line-height: 1.45;
   }
-  .rs-foot {
+  .rs-action {
+    grid-area: action;
+    align-self: center;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-sm);
-    margin-top: var(--space-xs);
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    text-align: right;
   }
-  .rs-cost {
+  .rs-state {
+    font-family: var(--font-label);
+    font-size: var(--text-label-sm);
+  }
+  .rs-state.done {
+    color: var(--col-keep);
+  }
+  .rs-state.lock {
+    color: var(--foreground-dim);
+  }
+  .rs-prereq {
+    font-family: var(--font-narrative);
+    font-size: var(--text-narr-sm);
+    color: var(--foreground-dim);
+    max-width: 130px;
+  }
+  /* 구매 = 조용한 텍스트 버튼(카드 버튼 폐기). 가능=데이터 보라 발광, 불가=흐림. */
+  .rs-buy {
     font-family: var(--font-numeric);
     font-size: var(--text-label-sm);
-    color: var(--data);
-  }
-  .rs-cost.short {
-    color: var(--col-reset, #c0392b);
-  }
-  .rs-cost.lock,
-  .rs-cost.done {
     color: var(--foreground-dim);
-    font-family: var(--font-label);
-  }
-  .rs-buy {
-    font-family: var(--font-label);
-    font-size: var(--text-label-sm);
-    color: var(--foreground-dim);
-    background: var(--canvas-layer);
-    border: 1px solid var(--border);
-    border-radius: var(--rounded-sm);
-    padding: 6px 14px;
-    min-height: 32px;
+    background: none;
+    border: none;
+    padding: 4px 2px;
     cursor: not-allowed;
+    white-space: nowrap;
+    transition: color 0.2s ease, text-shadow 0.2s ease;
   }
   .rs-buy.active {
     color: var(--data);
-    border-color: var(--data);
     cursor: pointer;
   }
   .rs-buy.active:hover {
-    box-shadow: 0 0 6px color-mix(in srgb, var(--data) 40%, transparent);
+    text-shadow: 0 0 10px color-mix(in srgb, var(--data) 55%, transparent);
   }
   .rs-buy.active:active {
-    transform: scale(var(--motion-click-scale));
+    transform: scale(var(--motion-click-scale, 0.97));
   }
 
   .rs-note {
-    margin: var(--space-base) 0 0;
+    margin: 0;
     font-family: var(--font-narrative);
     font-size: var(--text-narr-sm);
     color: var(--foreground-sub);
-    opacity: 0.75;
+    opacity: 0.7;
     line-height: 1.5;
   }
 </style>
