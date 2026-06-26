@@ -8,7 +8,8 @@
    *  관조 ↔ 개입(§3-B): 평소엔 입자가 떠다니는 것을 지켜보고(관조), 손을 뻗을 때 만진다(개입):
    *   - 세포 만지기 = 압축·흡수(능동, §4 수동 압축) → game.manualCompress().
    *   - 껍질 클릭 = 결속(구매) → game.buy(tier, mode) (E 비용 — 실제 경제 불변).
-   *   - 가장자리 노드(연구·도감·상전이·메커니즘) = 잠든 빛 → 부르면 bloom 오버레이(기존 뷰 재사용).
+   *   - 공명 전자/위상 노드 = 능동 메커니즘 직접 조작(§4) — 전부 게임판 위 다이제틱(BoardRenderer).
+   *   - 가장자리 노드(연구·도감·상전이) = 잠든 빛 → 부르면 bloom 오버레이(콘텐츠 뷰 재사용).
    *
    *  ★표현만, 로직 0줄(§6·§7-C): 모든 game 호출은 기존 API 그대로. 경제·수식·밸런스 불변.
    *   FTUE 점진 공개·점등 조건·오프라인 복귀 요약(정보 로직 §7-C#3)을 공허 모델로 보존.
@@ -27,12 +28,8 @@
   import CodexView from './ui/CodexView.svelte';
   import ResearchView from './ui/ResearchView.svelte';
   import PrestigeView from './ui/PrestigeView.svelte';
-  import ResonanceWidget from './ui/ResonanceWidget.svelte';
-  import PhaseWidget from './ui/PhaseWidget.svelte';
-  import HarmonicsWidget from './ui/HarmonicsWidget.svelte';
   import OfflineModal from './ui/OfflineModal.svelte';
   import Toast from './ui/Toast.svelte';
-  import type { PhaseState } from './core/layers/mechanics';
 
   let snap: GameSnapshot | null = null;
   let game: Game | null = null;
@@ -58,7 +55,7 @@
   ];
 
   /** 부른 디바이스(개입 bloom 오버레이). null=관조. */
-  type Panel = 'research' | 'codex' | 'prestige' | 'mech';
+  type Panel = 'research' | 'codex' | 'prestige';
   let activePanel: Panel | null = null;
 
   /** 포인터 드래그(누른 채 쓸어담기) 상태. */
@@ -330,15 +327,6 @@
   function onBuyResearch(nodeId: string) {
     game?.buyResearch(nodeId);
   }
-  function onResonanceClick() {
-    game?.clickResonance();
-  }
-  function onPhasePin(state: PhaseState) {
-    game?.pinPhase(state);
-  }
-  function onPhaseUnpin() {
-    game?.unpinPhase();
-  }
   function onDismissOffline() {
     game?.dismissOffline();
   }
@@ -359,12 +347,9 @@
   $: showResearchNode = snap?.ftue.showResearchTab ?? false;
   $: showPrestigeNode = snap?.prestige.available ?? false;
   $: prestigeFirst = (snap?.prestige.available && snap?.prestige.isFirst) ?? false;
-  $: mechActive =
-    (snap?.resonance.active || snap?.phase.active || snap?.harmonics.active) ?? false;
   // 노드가 사라졌는데 그 패널이 열려 있으면 닫음(점등 해소·로드 직후 방어).
   $: if (activePanel === 'prestige' && !showPrestigeNode) activePanel = null;
   $: if (activePanel === 'research' && !showResearchNode) activePanel = null;
-  $: if (activePanel === 'mech' && !mechActive) activePanel = null;
   // QF 성표는 층 발광색을 따른다(§3-C). data-layer는 :root에 이미 반영(pushRender).
   $: qfStyle = `color: rgba(${layerRgb}, 0.82);`;
 </script>
@@ -441,10 +426,6 @@
 
     <!-- 하단 중앙: 잠든 디바이스 노드(개입). 부르면 bloom. (§3-B 가장자리 발광 노드) -->
     <div class="dock">
-      {#if mechActive}
-        <button class="node" class:on={activePanel === 'mech'} on:click={() => openPanel('mech')}
-          >메커니즘</button>
-      {/if}
       {#if showResearchNode}
         <button class="node" class:on={activePanel === 'research'} on:click={() => openPanel('research')}
           >연구</button>
@@ -484,12 +465,6 @@
           <CodexView codex={snap.codex} />
         {:else if activePanel === 'prestige'}
           <PrestigeView prestige={snap.prestige} onPrestige={onPrestige} onContinue={onPrestigeContinue} />
-        {:else if activePanel === 'mech'}
-          <div class="mech-stack">
-            <ResonanceWidget resonance={snap.resonance} onClick={onResonanceClick} />
-            <PhaseWidget phase={snap.phase} onPin={onPhasePin} onUnpin={onPhaseUnpin} />
-            <HarmonicsWidget harmonics={snap.harmonics} />
-          </div>
         {/if}
       </div>
     </div>
@@ -741,6 +716,29 @@
     border-radius: 14px;
     box-shadow: 0 0 60px rgba(0, 0, 0, 0.7);
     animation: bloom-rise 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    /* ───── 공허 팔레트 오버라이드(§7-C#2: 네온 카드 폐기) ─────
+       콘텐츠 뷰(연구·도감·상전이)는 구 대시보드 토큰(네온 #3ecf8e/카드 테두리)을 쓴다.
+       여기서 색 토큰만 탈채도 공허 톤으로 remap → 자식 뷰 전체가 한 번에 cosmic화(구조 불변,
+       custom property 캐스케이드). 간격·서체·모션 토큰은 유지. */
+    --canvas: #06070d;
+    --canvas-layer: #0b1016;
+    --surface: #121a22;
+    --border: #1c2733;
+    --foreground: #e2eef4;
+    --foreground-sub: #8ba0ad;
+    --foreground-dim: #4b5d69;
+    --primary: #a6b8cc; /* 신호색 — 탈채도 청회(네온 녹 폐기) */
+    --qf: #a8c4b6; /* 양자 거품 — 탈채도 민트회 */
+    --layer-accent: #a6b8cc; /* 안정 탈채도 악센트(동적 네온 대체) */
+    --layer-glow: #6f8496;
+    --layer-prn-accent: #9a8fd0; /* 프리온 보라(냉기) */
+    --energy: #d9b86a; /* 식은 금 (board와 정합) */
+    --depth: #7a9fc0; /* 차분한 청 */
+    --data: #9a8fc0; /* 흐린 보라 */
+    --col-keep: #7faf96; /* 보존 — 탈채도 녹 */
+    --col-reset: #c08a8a; /* 리셋 — 탈채도 로즈 */
+    --col-partial: #c4a06a; /* 부분 — 탈채도 호박 */
+    --legendary: #d8c489; /* 전설 — 부드러운 금 */
   }
   @keyframes bloom-fade {
     from {
@@ -773,11 +771,6 @@
   }
   .bloom-close:hover {
     color: rgba(228, 240, 246, 0.95);
-  }
-  .mech-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
   }
 
   .booting {

@@ -163,7 +163,11 @@
   - ③ **진동 하모닉스**(§4 표 4행, L7) — ★수동 입력 없는 passive 메커니즘(game.ts에 입력 메서드 부재)이라 **시각화 전용**: 코어 둘레 V 충전 호 + 다음 공명 티어 껍질 점화 예고 + 버스트 티어 껍질 자홍 플래시(`drawHarmonics` + `drawShell` 강조) + 누적 공명 카운터. 클릭/로직 호출 0.
   - ④ **하강 게이트 힌트**(dec 호 차오르면 "더 깊은 곳이 열린다") + 좁은 화면 반응형.
   - 히트 우선순위: 세포>공명전자(open)>위상노드(L6, active·3노드)>껍질. 공명(L2~5)·위상(L6+)은 층 상호배타라 동시 활성 없음. `src/render/__tests__/board.test.ts`가 위상 노드 히트·게이팅·하모닉 passive를 회귀 보증(check 0 / test 257).
-- **2단계 후속(다음 패스):** 메커니즘 bloom 오버레이의 기존 위젯(상세 계기 읽기용)은 잔존 — 정보 중복이나 정밀 수치 fallback으로 유지. 구 카드 스타일 다이제틱 리스타일·ChainTable/LayerCard/RightPanelStatus(대시보드 컴포넌트, 미사용 파일) 정리는 후속.
+- **2단계 정리(완료분 — 대시보드 잔재 제거 + 콘텐츠 뷰 cosmic화):**
+  - **메커니즘 bloom 오버레이 폐기:** 능동 4종이 전부 게임판에 다이제틱하게 올라와 메커니즘 패널이 완전 중복 → 제거. `메커니즘` 디바이스 노드·`mech` 패널·`onResonanceClick/onPhasePin/onPhaseUnpin` 위임 삭제. (개입 bloom은 연구·도감·상전이 콘텐츠 뷰에만 — §3-B 디바이스.)
+  - **미사용 컴포넌트 6종 삭제:** `ResonanceWidget`·`PhaseWidget`·`HarmonicsWidget`(메커니즘 위젯, 다이제틱으로 대체) + `ChainTable`·`LayerCard`·`RightPanelStatus`(대시보드 잔재). svelte-check 0 — dangling import 없음.
+  - **콘텐츠 뷰 cosmic 리스타일:** 연구·도감·상전이 뷰(`CodexView`/`ResearchView`/`PrestigeView`)가 쓰던 구 대시보드 네온 토큰(#3ecf8e 등)을 `.bloom-panel`에서 **탈채도 공허 팔레트로 remap**(custom property 캐스케이드 — 뷰 구조 불변, 색 토큰만). 네온 녹 제거·카드 테두리 약화(§7-C#2). check 0 / test 257.
+- **2단계 후속(다음 패스):** 사운드·내러티브 보이스·게임필 정합(정거장2 졸업), 6층 전체 확장(정거장3).
 
 ### 7-C. 2단계 착수 전 체크 (game-director 가드)
 모든 2단계 산출물은 이 질문을 통과해야 한다:
