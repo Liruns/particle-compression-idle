@@ -8,6 +8,7 @@
    */
   import type { GameSnapshot } from '../game';
   import { formatNumber } from '../core/format';
+  import Icon from './icons/Icon.svelte';
 
   export let research: GameSnapshot['research'];
   /** 현재 D 보유(상단 바 표시). */
@@ -20,7 +21,7 @@
   <header class="rs-top">
     <span class="rs-title">연구 — 체인 증폭</span>
     <span class="rs-d">
-      <span class="rs-d-icon">▣</span>
+      <span class="rs-d-icon"><Icon name="data" size={14} /></span>
       D 보유 {formatNumber(dCurrent)}
     </span>
   </header>
@@ -69,9 +70,9 @@
 </section>
 
 <style>
+  /* 폭은 부모(CENTER 패널)가 결정 — max-width 해방(ux §P0-1). 노드 그리드가 횡으로 확장. */
   .research {
     width: 100%;
-    max-width: 560px;
     background: var(--canvas-layer);
     border: 1px solid var(--border);
     border-radius: var(--rounded-md);

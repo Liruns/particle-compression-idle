@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Micro Idle — Proto GAME: 입자가 곧 게임 (A+B, 플레이 가능 슬라이스)</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin:0; padding:0; height:100%; width:100%;
+    background:#000; overflow:hidden; cursor:default;
+    font-family: "Spline Sans Mono", ui-monospace, "SFMono-Regular", monospace; }
+  /* 단일 Canvas2D — 세계(배경) + 게임 빛(전경)을 한 파이프라인에서. */
+  #c { position:fixed; inset:0; display:block; width:100vw; height:100vh; }
+
+  /* 공허에 뜬 희미한 텍스트 — 카드/패널/테두리 없음 (§7 F3). 정적 라벨만 DOM. */
+  .annot { position:fixed; pointer-events:none; user-select:none;
+    font-family:"Spline Sans Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums; letter-spacing:.05em;
+    text-shadow:0 0 12px rgba(0,0,0,.92); -webkit-font-smoothing:antialiased; }
+  #radius { left:28px; bottom:24px; font-size:15px; color:rgba(224,238,244,.5); transition:color 1s ease; }
+  #radius .num { color:rgba(236,246,250,.74); }
+  #layer { left:28px; bottom:50px; font-size:12px; color:rgba(174,188,194,.62); transition:color 1s ease; }
+  #hint { right:24px; bottom:22px; text-align:right; line-height:1.7; font-size:11px;
+    color:rgba(122,138,146,.5); transition:opacity 1.4s ease; }
+  #hint.fade { opacity:0; }
+  #whisper { right:24px; top:18px; text-align:right; line-height:1.6; font-size:11px;
+    color:rgba(110,126,134,.42); transition:opacity .8s ease; }
+  #buymode { left:28px; top:18px; font-size:12px; color:rgba(150,166,174,.5);
+    pointer-events:auto; cursor:default; }
+  #buymode span[data-mode] { cursor:pointer; padding:0 5px; color:rgba(150,166,174,.5);
+    transition:color .3s ease; }
+  #buymode span[data-mode].on { color:rgba(217,184,106,.92); }  /* E 금빛 = 활성 */
+  #buymode .sep { color:rgba(90,104,112,.4); padding:0; }
+  #fps { right:24px; bottom:60px; font-size:11px; color:rgba(95,176,192,.6); display:none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="annot" id="layer">분자층 — Molecular</div>
+<div class="annot" id="radius">r = <span class="num">1.42×10⁻⁹</span> m</div>
+<div class="annot" id="hint">
+  떠다니는 세포를 <b>클릭/드래그</b> — 압축·흡수 (E·C 획득)<br/>
+  흡수한 양자를 <b>껍질(궤도)에 클릭</b> — 결속 = 엔진 성장 (passive 생산)<br/>
+  C(깊이)가 차오르면 — 더 깊은 세계로 하강
+</div>
+<div class="annot" id="whisper">물질 속으로, 영원히 천천히 떨어진다.<br/>작아질수록 더 광막하고 빛난다.</div>
+<div class="annot" id="buymode">결속 <span data-mode="1" class="on">×1</span><span class="sep">·</span><span data-mode="10">×10</span><span class="sep">·</span><span data-mode="max">최대</span></div>
+<div class="annot" id="fps">— fps</div>
+
+<script>
+"use strict";
+// ╔══════════════════════════════════════════════════════════════════════╗
+// ║  Micro Idle — Proto GAME (throwaway, src/ 불변, 게임코드 import 0)     ║
+// ║  컨셉: "세계의 입자(물질) 자체가 게임이다." (A+B, Osmos 계보)          ║
+// ║    A 능동: 떠다니는 세포를 직접 만져 압축·흡수 → E·C + 자유 양자(q)     ║
+// ║    B 엔진: 흡수한 양자를 동심 껍질(궤도)에 결속 → 쌓인 구조가 passive 생산║
+// ║    → 상호작용이 곧 엔진을 키운다. 진행(C)=하강(다음 세계).             ║
+// ║  단일 Canvas2D:                                                        ║
+// ║    PART A  세계 배경 = proto-layers-draft 재사용(분자·원자 + 하강 전환) ║
+// ║    PART B  순수 모크 이코노미(상태) — 렌더는 읽기만 (표현↔로직 분리)    ║
+// ║    PART C  입자 시뮬: 떠다니는 세포 + 흡수 애니 + 결속 비행 + 껍질 궤도   ║
+// ║    PART D  입력 · 메인 루프(상태 적분 → 렌더)                           ║
+// ╚══════════════════════════════════════════════════════════════════════╝
+
+const TAU = Math.PI * 2;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d', { alpha:false });
+let W=0, H=0, DPR=1, cx=0, cy=0, MINDIM=0;
+function resize(){
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.floor(W*DPR); cv.height = Math.floor(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  cx = W*0.5; cy = H*0.5; MINDIM = Math.min(W,H);
+}
+window.addEventListener('resize', resize);
+
+// 결정적 난수 (세계 구조 시드용)
+function rng(seed){ return function(){ seed|=0; seed = seed + 0x6D2B79F5 | 0;
+  let t = Math.imul(seed ^ seed>>>15, 1|seed);
+  t = t + Math.imul(t ^ t>>>7, 61|t) ^ t;
+  return ((t ^ t>>>14)>>>0) / 4294967296; }; }
+function fract(x){ return x - Math.floor(x); }
+function clamp(x,a,b){ return x<a?a:x>b?b:x; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function easeOutCubic(x){ return 1-Math.pow(1-x,3); }
+
+// ── 발광 헬퍼 (proto-layers-draft 계승): 광원에서만 빛난다(§2-C·F8). 면 글로우 금지.
+function glow(x,y,r,col,a){
+  if(a<=0 || r<=0) return;
+  const g = ctx.createRadialGradient(x,y,0,x,y,r);
+  g.addColorStop(0, `rgba(${col},${a})`);
+  g.addColorStop(0.4, `rgba(${col},${a*0.32})`);
+  g.addColorStop(1, `rgba(${col},0)`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+}
+function lineGlow(pts,col,a,w){
+  if(a<=0) return;
+  ctx.strokeStyle=`rgba(${col},${a})`; ctx.lineWidth=w; ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.beginPath();
+  for(let i=0;i<pts.length;i+=2){ i?ctx.lineTo(pts[i],pts[i+1]):ctx.moveTo(pts[i],pts[i+1]); }
+  ctx.stroke();
+}
+function rgba(c,a){ return `rgba(${Math.round(c[0]*255)},${Math.round(c[1]*255)},${Math.round(c[2]*255)},${a})`; }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ════  PART A — 세계 배경 (proto-layers-draft 재사용: 분자·원자 + 하강)  ══
+//   고요: 상시 줌 없음 · 번쩍임 0 · 호흡만. 각 층 = 그 스케일의 의도된 구조.
+//   배경은 "분위기"만 — 만질 수 있는 입자(세포)는 PART C가 따로 그린다.
+//   분자 배경은 옅은 조직 헤이즈로 후퇴시켜(만질 세포와 구분), 원자는 오비탈 유지.
+// ═══════════════════════════════════════════════════════════════════════
+const worlds = [
+
+  { // 분자 — 따뜻한 조직 헤이즈. 만질 세포(PART C)의 배경 무대. sage #9fb89a
+    name:'분자층 — Molecular', r:'1.42×10⁻⁹ m', void:'#0a0e0c', col:'159,184,154',
+    init(){ const r=rng(7); this.haze=[]; for(let i=0;i<7;i++)
+      this.haze.push({a:r()*TAU, d:0.12+r()*0.5, sz:120+r()*180, ph:r()*TAU, sp:0.03+r()*0.05}); },
+    draw(t,cx,cy,sc,al){ const R=MINDIM*0.5;
+      // 옅은 유기 조직 헤이즈 — 세포가 떠다닐 "양분"의 무대 (후퇴: 만질 세포와 명도 분리)
+      for(const h of this.haze){ const rad=h.d*R*sc;
+        const x=cx+Math.cos(h.a+Math.sin(t*h.sp+h.ph)*0.1)*rad;
+        const y=cy+Math.sin(h.a+Math.cos(t*h.sp+h.ph)*0.1)*rad;
+        const br=0.5+0.3*Math.sin(t*0.22+h.ph);
+        glow(x,y,h.sz*sc,this.col,0.035*br*al); } } },
+
+  { // 원자 — 핵 + 오비탈 껍질·궤도 + 여러 전자 + 확률 구름. teal #7fb0b8
+    name:'원자층 — Atomic', r:'8.91×10⁻¹¹ m', void:'#0a0e0c', col:'127,176,184',
+    init(){ this.rings=[{rx:0.30,ry:0.12,ti:0.35,sp:0.55,n:2},{rx:0.44,ry:0.20,ti:-0.6,sp:-0.34,n:3},
+        {rx:0.20,ry:0.32,ti:1.15,sp:0.66,n:2},{rx:0.52,ry:0.40,ti:-1.5,sp:0.28,n:3}]; },
+    draw(t,cx,cy,sc,al){ const R=MINDIM*0.5*sc;
+      const breathe=0.92+0.08*Math.sin(t*0.22);
+      glow(cx,cy,R*0.44*breathe,this.col,0.04*al);
+      for(const g of this.rings){ const ca=Math.cos(g.ti),sa=Math.sin(g.ti);
+        ctx.strokeStyle=`rgba(${this.col},${0.13*al})`; ctx.lineWidth=1.1;
+        ctx.beginPath();
+        for(let k=0;k<=64;k++){ const a=k/64*TAU; const ex=Math.cos(a)*g.rx*R, ey=Math.sin(a)*g.ry*R;
+          const wx=cx+ex*ca-ey*sa, wy=cy+ex*sa+ey*ca; k?ctx.lineTo(wx,wy):ctx.moveTo(wx,wy); }
+        ctx.stroke();
+        for(let e=0;e<g.n;e++){ const ea=t*g.sp + e*TAU/g.n;
+          const ex=Math.cos(ea)*g.rx*R, ey=Math.sin(ea)*g.ry*R;
+          const wx=cx+ex*ca-ey*sa, wy=cy+ex*sa+ey*ca;
+          const br=0.85+0.12*Math.sin(t*0.8+e+g.sp*7);
+          glow(wx,wy,11*sc,this.col,br*0.5*al);
+          glow(wx,wy,3.5*sc,'225,244,247',br*0.5*al); } } } },
+];
+worlds.forEach(w => w.init());
+
+let curWorld = 0;
+let worldTrans = null;   // {from,to,p}  p:0..1
+const WORLD_DUR = 2.2;   // 전환 길이(초) — 머니샷이라 살짝 더 길게(고요한 통과)
+function descendWorld(){
+  if(worldTrans) return false;
+  const ni = curWorld + 1;
+  if(ni >= worlds.length) return false;
+  worldTrans = { from:curWorld, to:ni, p:0 };
+  return true;
+}
+// 현재 세계의 빛 색 (중심 코어·자유 양자가 따름). 전환 중 보간.
+function worldColorRGB(){
+  if(worldTrans){
+    const a = worlds[worldTrans.from].col.split(',').map(Number);
+    const b = worlds[worldTrans.to].col.split(',').map(Number);
+    const k = clamp((worldTrans.p-0.4)/0.3,0,1);
+    return [a[0]+(b[0]-a[0])*k, a[1]+(b[1]-a[1])*k, a[2]+(b[2]-a[2])*k];
+  }
+  return worlds[curWorld].col.split(',').map(Number);
+}
+
+function drawWorldBackground(t, dt){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.globalCompositeOperation='source-over';
+  if(!worldTrans){
+    ctx.fillStyle = worlds[curWorld].void; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    worlds[curWorld].draw(t,cx,cy,1,1);
+  } else {
+    worldTrans.p += dt/WORLD_DUR; const p=Math.min(1,worldTrans.p);
+    ctx.fillStyle = p<0.5 ? worlds[worldTrans.from].void : worlds[worldTrans.to].void;
+    ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    if(p<0.62){ const k=p/0.62; worlds[worldTrans.from].draw(t,cx,cy,1+k*1.7,(1-k)*(1-k)); }
+    if(p>0.40){ const k=(p-0.40)/0.60; worlds[worldTrans.to].draw(t,cx,cy,0.42+Math.min(1,k)*0.58,Math.min(1,k)); }
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle=`rgba(0,0,0,${0.55*Math.sin(p*Math.PI)})`; ctx.fillRect(0,0,W,H);
+    if(worldTrans.p>=0.5 && lastHudWorld!==worldTrans.to){ setWorldHUD(worldTrans.to); onWorldChanged(worldTrans.to); }
+    if(worldTrans.p>=1){ curWorld=worldTrans.to; worldTrans=null; }
+  }
+  // vignette — 현미경 시야 (§2-B). 전경 그리기 전에.
+  ctx.globalCompositeOperation='source-over';
+  const vg=ctx.createRadialGradient(cx,cy,MINDIM*0.22,cx,cy,Math.max(W,H)*0.72);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.62)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ════  PART B — 순수 모크 이코노미 (상태). 렌더는 읽기만.  ═══════════════
+//   "엔진도 입자로": 8개 동심 껍질(SHELL). 각 껍질에 결속된 양자(bound) 수 = 생산.
+//   능동 루프: 세포 흡수 → E·C 획득 + 자유 양자(q) 1 적립.
+//   엔진 루프: 자유 양자를 껍질에 결속(E 지불) → bound↑ → passive 생산↑ → C↑.
+//   상호작용이 곧 엔진을 키운다. C 임계 → 다음 세계 하강.
+// ═══════════════════════════════════════════════════════════════════════
+// 8 껍질 — 안쪽(저티어)이 싸고 E 생산, 바깥(고티어)이 비싸고 C·D 생산.
+// 비용은 결속 1개당 base×mult^bound (기하급수). prod=결속당 초당 생산.
+// 슬라이스 페이싱: 1분 내 루프 완주 + 첫 하강(머니샷) 도달이 목표.
+//   T1/T2(E 생산) → 재투자 → T3(오비탈, 첫 C 생산) 빠르게 도달 → C 램프 → 하강.
+//   mult를 낮춰(1.10~1.12) 한 껍질이 E를 독점하는 함정 완화 → 다음 티어로 자연 확장.
+const SHELLS = [
+  { name:"응결핵", sci:"Condensation", base:5,      mult:1.10, prod:1.2,    res:"E", color:[0.62,0.72,0.60] }, // sage
+  { name:"친화쌍", sci:"Affinity",     base:22,     mult:1.11, prod:7.5,    res:"E", color:[0.50,0.69,0.72] }, // teal
+  { name:"오비탈", sci:"Orbital",      base:80,     mult:1.12, prod:34.0,   res:"C", color:[0.85,0.60,0.42] }, // amber — 첫 C 생산
+  { name:"결합망", sci:"Bond Lattice", base:520,    mult:1.13, prod:150.0,  res:"C", color:[0.78,0.56,0.62] }, // 분홍
+  { name:"핵응축", sci:"Nuclear",      base:5200,   mult:1.14, prod:620.0,  res:"C", color:[0.48,0.62,0.75] }, // 청
+  { name:"쿼크해", sci:"Quark Sea",    base:4.0e4,  mult:1.15, prod:2600.0, res:"D", color:[0.85,0.88,0.90] }, // 탈색 흰
+  { name:"프리온", sci:"Preon",        base:3.0e5,  mult:1.16, prod:1.3e4,  res:"D", color:[0.54,0.50,0.82] }, // 보라
+  { name:"끈진동", sci:"String",       base:2.2e6,  mult:1.17, prod:7.0e4,  res:"D", color:[0.77,0.48,0.60] }, // 자홍
+];
+
+const GAME = {
+  E:0, C:0, D:0,
+  q:0,                                  // 자유 양자 풀 — 흡수로 +1, 결속으로 -1
+  bound: new Array(SHELLS.length).fill(0),  // 껍질별 결속 양자 수 = 그 티어의 "owned"
+  absorbed:0,                           // 누적 흡수 세포 수(통계)
+  worldThreshold: 1.2e3,                // C 임계 → 분자→원자 하강 (슬라이스: ~1분 내 도달)
+  worldStep: 22.0,
+};
+const COST_RES = "E";                   // 결속은 E로 지불 (만지기→E→엔진)
+
+function bindCost(i, count){
+  const s=SHELLS[i], b=GAME.bound[i], m=s.mult;
+  if(count===1) return s.base*Math.pow(m,b);
+  return s.base*Math.pow(m,b)*(Math.pow(m,count)-1)/(m-1);
+}
+function maxAffordableBind(i){
+  // E와 자유 양자 둘 다 게이트. 둘 중 작은 쪽이 상한.
+  const s=SHELLS[i], have=GAME[COST_RES], b=GAME.bound[i];
+  const unit=s.base*Math.pow(s.mult,b);
+  if(have<unit || GAME.q<1) return 0;
+  const m=s.mult;
+  const ratio = have*(m-1)/(s.base*Math.pow(m,b)) + 1;
+  const byE = Math.max(0, Math.floor(Math.log(ratio)/Math.log(m)));
+  return Math.min(byE, Math.floor(GAME.q));
+}
+function shellProduction(i){ const b=GAME.bound[i]; return b===0 ? 0 : SHELLS[i].prod*b; }
+function productionRates(){
+  let e=0,c=0,d=0;
+  for(let i=0;i<SHELLS.length;i++){ const p=shellProduction(i), r=SHELLS[i].res;
+    if(r==="E") e+=p; else if(r==="C") c+=p; else d+=p; }
+  return { e, c, d };
+}
+function buyCountForMode(){ return buyMode==="1"?1 : buyMode==="10"?10 : -1; }
+
+// 한 껍질에 양자 결속 (구매). E + 자유 양자 소모 → bound↑.
+function bindShell(i){
+  const mode = buyCountForMode();
+  const can = maxAffordableBind(i);
+  let count = mode===-1 ? can : Math.min(mode, can);
+  if(count<=0) return false;
+  const cost = bindCost(i,count);
+  if(GAME[COST_RES] < cost-1e-6 || GAME.q < count) return false;
+  GAME[COST_RES] -= cost;
+  GAME.q -= count;
+  GAME.bound[i] += count;
+  // 비주얼: 중심에서 그 껍질로 양자가 날아가 궤도에 합류 (PART C)
+  spawnBindFlights(i, count);
+  triggerShellBloom(i);
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ════  PART C — 입자 시뮬 (전경). 떠다니는 세포 + 흡수 + 결속 비행 + 껍질.  ═
+//   상태(GAME) → 렌더에 가깝게. 단, 입자 위치/물리는 표현 전용 상태(렌더 레이어).
+//   카드/테두리/박스 0. 모두 발광 (§7).
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── 떠다니는 세포 (만질 수 있는 물질) ──────────────────────────────────
+// 능동의 핵심. Osmos처럼 부드럽게 표류. hover=발광, 잡으면 중심으로 끌려 수축·흡수.
+// cell.state: 'float' | 'captured'(흡수 진행) . captured 끝나면 제거 + 보상.
+let cells = [];
+let cellSeed = rng(4242);
+const CELL_TARGET = 16;          // 화면 위 떠다니는 세포 목표 수
+let cellRespawn = 0;             // 다음 스폰까지 시간
+
+function cellWorldColor(){
+  // 세포는 그 세계의 유기색을 띤다(분자=sage, 원자=teal). 약간 따뜻하게.
+  return worldColorRGB();
+}
+function spawnCell(atEdge){
+  const r = cellSeed;
+  // 가장자리에서 천천히 흘러들어옴(또는 초기엔 분포). 중심 근처는 피함.
+  let a, dist;
+  if(atEdge){ a=r()*TAU; dist=0.52+r()*0.06; }
+  else { a=r()*TAU; dist=0.16+r()*0.36; }
+  const sz = 16 + r()*30;        // 세포 크기 (클수록 보상↑)
+  cells.push({
+    a, dist,
+    // 표류 파라미터 (느린 연속 모션 §5)
+    dax:(r()-0.5)*0.018, day:(r()-0.5)*0.018,
+    ph:r()*TAU, sp:0.06+r()*0.10,
+    sz, baseSz:sz,
+    nuc:0.42+r()*0.4, nx:(r()-0.5)*0.34, ny:(r()-0.5)*0.34,
+    div:r()*TAU, dsp:0.05+r()*0.06,
+    hover:0,                      // hover 발광 보간
+    state:'float',
+    cap:0,                        // 흡수 진행 0..1
+    capFromX:0, capFromY:0,
+  });
+}
+function seedCells(){
+  cells = [];
+  for(let i=0;i<CELL_TARGET;i++) spawnCell(false);
+}
+function cellPos(c){
+  // 표류: 각/반경이 느린 사인으로 떠다님. 화면 좌표 반환.
+  const R = MINDIM*0.5;
+  const aa = c.a + Math.sin(nowT*c.sp+c.ph)*0.18 + nowT*c.dax;
+  const dd = c.dist + Math.cos(nowT*c.sp*0.8+c.ph)*0.04 + Math.sin(nowT*c.day*6)*0.01;
+  return { x:cx+Math.cos(aa)*dd*R, y:cy+Math.sin(aa)*dd*R };
+}
+// 세포 흡수 보상 — 크기 비례. E 주력 + C 약간 + 자유 양자 1.
+function cellReward(c){
+  const sizeK = c.baseSz/30;                 // 0.5~1.5
+  const rates = productionRates();
+  // E: 현재 E 생산 위에 비례(초반엔 바닥값). 만질수록 누적 → 결속 자원.
+  const eGain = (4 + rates.e*0.9) * sizeK;
+  // C: 깊이의 능동 가속. 만지는 손맛이 진행(하강)에 직접 기여 — 개입 보상(필러 ③).
+  //    바닥값을 키워 "만지면 C가 눈에 띄게 찬다"를 보장(슬라이스에서 능동의 의미 확보).
+  const cGain = (6 + rates.c*0.30) * sizeK;
+  return { e:eGain, c:cGain, q:1 };
+}
+
+// ── 결속 비행: 중심에서 껍질로 양자가 날아가 궤도에 합류 (구매 피드백) ──
+let bindFlights = [];   // {i, t, dur, angle}
+function spawnBindFlights(i, count){
+  const n = Math.min(count, 6);   // 시각적으로 6개까지만(대량 결속도 과하지 않게)
+  for(let k=0;k<n;k++){
+    bindFlights.push({ i, t:0, dur:0.5+Math.random()*0.25, angle:Math.random()*TAU, delay:k*0.05 });
+  }
+}
+
+// ── 흡수 파편/잔광 (부드러운 빛 — 번쩍임 아님) ──
+let sparks = [];   // {x,y,vx,vy,t,dur,col,sz}
+function spawnAbsorbSparks(x,y,col){
+  const n = 5 + Math.floor(Math.random()*3);
+  for(let k=0;k<n;k++){
+    const a=Math.random()*TAU, sp=14+Math.random()*30;
+    sparks.push({ x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+      t:0, dur:0.6+Math.random()*0.4, col, sz:1.5+Math.random()*2.2 });
+  }
+}
+
+// 껍질 반지름: 화면 단변 기준. 8켜를 중심~외곽에 (안쪽 촘촘).
+function shellRadius(i){
+  const r0=MINDIM*0.10, r1=MINDIM*0.45;
+  const t=i/(SHELLS.length-1);
+  return r0 + (r1-r0)*Math.pow(t,0.92);
+}
+
+// 보간/연출 상태 (티어별 부드러움)
+const shellBloom = new Array(SHELLS.length).fill(0);   // hover 개화
+const bindPulse  = new Array(SHELLS.length).fill(0);   // 결속 직후 개화
+const affordPulse= new Array(SHELLS.length).fill(0);   // 부름 맥동(연속)
+let hoverShell=-1, mouseX=-1, mouseY=-1, buyMode="1";
+let hoverCell=-1;                                      // hover 중인 세포 index
+let dragCell=-1;                                       // 잡고 있는 세포 index
+const disp = { E:0, C:0, D:0, q:0 };                   // 표시 스무딩 (§F6)
+let nowT = 0;                                          // 현재 시간(초) — cellPos에서 참조
+
+// 가장 싼 결속 가능 껍질 = 부름 맥동 주인공.
+function bestCallShell(){
+  for(let i=0;i<SHELLS.length;i++) if(maxAffordableBind(i)>=1) return i;
+  return -1;
+}
+
+// 마우스 아래 무엇? 세포 우선(능동), 없으면 껍질(엔진).
+function updateHover(){
+  hoverCell=-1; hoverShell=-1;
+  if(mouseX<0) return;
+  // 1) 세포 hover (가장 가까운 float 세포, 반경 내)
+  let bestC=-1, bestCD=1e9;
+  for(let i=0;i<cells.length;i++){ const c=cells[i]; if(c.state!=='float') continue;
+    const p=cellPos(c); const d=Math.hypot(mouseX-p.x, mouseY-p.y);
+    const hitR=c.sz*0.95 + 10;
+    if(d<hitR && d<bestCD){ bestCD=d; bestC=i; } }
+  if(bestC>=0){ hoverCell=bestC; return; }   // 세포가 있으면 껍질은 무시(능동 우선)
+  // 2) 껍질 hover (가장 가까운 궤도, 좁은 밴드)
+  const dist=Math.hypot(mouseX-cx, mouseY-cy);
+  let bestS=-1, bestSD=1e9;
+  for(let i=0;i<SHELLS.length;i++){ const d=Math.abs(dist-shellRadius(i)); if(d<bestSD){bestSD=d;bestS=i;} }
+  if(bestSD < MINDIM*0.026) hoverShell=bestS;
+}
+
+// 과학표기 포맷 (작고 조용히 §3-C).
+const SUP={ "-":"⁻","0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶","7":"⁷","8":"⁸","9":"⁹","+":"" };
+function toSup(n){ return String(n).split("").map(c=>SUP[c]||c).join(""); }
+function fmt(n){
+  if(!isFinite(n)) return "∞";
+  if((n<1000 && n>=0.01) || n===0) return n>=100?n.toFixed(0):n>=10?n.toFixed(1):n.toFixed(2);
+  const exp=Math.floor(Math.log10(Math.abs(n)));
+  return (n/Math.pow(10,exp)).toFixed(2)+"×10"+toSup(exp);
+}
+function fmtInt(n){ return Math.floor(n).toLocaleString('en-US'); }
+
+const RES = {
+  E:{ color:[0.85,0.72,0.42], label:"E", sub:"압축 에너지" }, // #d9b86a 금
+  C:{ color:[0.48,0.62,0.75], label:"C", sub:"압축 깊이" },   // #7a9fc0 청
+  D:{ color:[0.60,0.56,0.75], label:"D", sub:"발견 데이터" }, // #9a8fc0 보라
+};
+
+function triggerShellBloom(i){ bindPulse[i]=1; }
+
+// ── 전경 1프레임 (GAME + 입자 상태 → 빛) ──
+let overlayHeld=false, overlayAmt=0;
+function renderForeground(now, dt){
+  nowT = now;
+  ctx.globalCompositeOperation='lighter';
+  const breath = 0.5 + 0.5*Math.sin(now*(TAU/7)); // 7초 호흡 (§5)
+  const callShell = bestCallShell();
+
+  for(let i=0;i<SHELLS.length;i++){
+    shellBloom[i] += ((hoverShell===i?1:0) - shellBloom[i]) * Math.min(1,dt*6);
+    bindPulse[i]  += (0 - bindPulse[i]) * Math.min(1,dt*1.6);
+    affordPulse[i]+= ((i===callShell?1:0) - affordPulse[i]) * Math.min(1,dt*3);
+  }
+
+  // 1) 껍질(엔진) — 안→밖. 결속 양자가 궤도에 빛으로 쌓임.
+  for(let i=0;i<SHELLS.length;i++) drawShell(i, now);
+  // 2) 결속 비행 (중심→껍질)
+  drawBindFlights(now, dt);
+  // 3) 중심 코어 (관조 디폴트의 심장)
+  drawCenter(now, breath);
+  // 4) 떠다니는 세포 (만질 물질) — 흡수 진행 포함
+  drawCells(now, dt);
+  // 5) 흡수 잔광 파편
+  drawSparks(dt);
+  // 6) 주석/게이트
+  if(hoverCell>=0) drawCellHover(cells[hoverCell]);
+  else if(hoverShell>=0) drawShellHover(hoverShell);
+  drawResourceAnnotations(dt);
+  drawWorldGate();
+  if(overlayAmt>0.001) drawHudOverlay();
+
+  ctx.globalCompositeOperation='source-over';
+}
+
+// 한 껍질의 빛. 결속 수=밝기·밀도·회전. 빈 껍질=어둡고 정적. 결속 가능=따뜻한 맥동.
+function drawShell(i, now){
+  const s=SHELLS[i], r=shellRadius(i), bound=GAME.bound[i];
+  const can=maxAffordableBind(i)>=1, bloom=shellBloom[i], buyP=bindPulse[i], call=affordPulse[i];
+  const boundNorm = bound>0 ? Math.min(1, Math.log10(1+bound)/2.2) : 0;
+  const dir=(i%2===0)?1:-1;
+  const spin = dir*(0.04 + boundNorm*0.5 + i*0.006);
+  const ang0 = now*spin;
+  const col=s.color;
+
+  let baseA = 0.05 + boundNorm*0.5;
+  let callGlow = 0;
+  if(bound===0) baseA = can ? 0.08 + 0.05*(0.5+0.5*Math.sin(now*3)) : 0.025;
+  if(can) callGlow = (0.10 + 0.18*call)*(0.45 + 0.55*(0.5+0.5*Math.sin(now*2.4+i)));
+  const bloomGlow = bloom*0.5 + buyP*0.6;
+  const ringA = baseA + callGlow*0.6 + bloomGlow*0.5;
+
+  ctx.save(); ctx.translate(cx,cy);
+  // 연속 링 — 가산 다중 스트로크(넓고 옅음 + 좁고 또렷)로 발광 (shadowBlur 미사용, §F8).
+  if(ringA>0.018){
+    const lw=0.7 + boundNorm*0.6 + bloom*1.0 + buyP*1.2;
+    const haloA=(bloom*0.5 + buyP*0.7 + call*0.25);
+    if(haloA>0.01){
+      ctx.beginPath(); ctx.arc(0,0,r,0,TAU);
+      ctx.strokeStyle=rgba(col, Math.min(0.5, ringA*0.5*haloA + 0.035));
+      ctx.lineWidth=lw + 5 + haloA*8;
+      ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(0,0,r,0,TAU);
+    ctx.strokeStyle=rgba(col, ringA*0.7);
+    ctx.lineWidth=lw;
+    ctx.stroke();
+  }
+  // 결속 양자 = 궤도 위 발광 점. 수가 bound에 비례(결속이 쌓인 구조가 보인다).
+  const dotCount = bound===0 ? (can?4:0) : Math.max(3, Math.min(46, 4 + Math.floor(Math.log10(1+bound)*16) + bound%6));
+  const dotBaseR = 1.0 + boundNorm*1.6 + bloom*0.9;
+  let brightBudget = 10;
+  for(let k=0;k<dotCount;k++){
+    const a=ang0 + (k/dotCount)*TAU;
+    const h=fract(Math.sin(k*12.9898 + i*7.13)*43758.5453);
+    const twinkle=0.55 + 0.45*Math.sin(now*(0.6+h)+k);
+    const pr=dotBaseR*(0.6+0.8*h);
+    const pa=(ringA*0.85 + bloomGlow*0.4)*(0.45+0.55*twinkle)*(0.45+0.55*h);
+    if(pa<0.02) continue;
+    const px=Math.cos(a)*r, py=Math.sin(a)*r;
+    if(pa>0.30 && brightBudget>0){ brightBudget--;
+      glow(px, py, pr*3.2 + 2, col, Math.min(0.5, pa*0.5)); }
+    ctx.beginPath(); ctx.arc(px,py,pr,0,TAU);
+    ctx.fillStyle=rgba(col, Math.min(0.95,pa));
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// 결속 비행 — 중심에서 출발해 목표 껍질 반경으로 부드럽게 도착(궤도 합류).
+function drawBindFlights(now, dt){
+  for(let k=bindFlights.length-1;k>=0;k--){
+    const f=bindFlights[k];
+    if(f.delay>0){ f.delay-=dt; continue; }
+    f.t += dt;
+    const u=clamp(f.t/f.dur,0,1);
+    if(u>=1){ bindFlights.splice(k,1); continue; }
+    const e=easeOutCubic(u);
+    const r = shellRadius(f.i)*e;
+    const col=SHELLS[f.i].color;
+    const x=cx+Math.cos(f.angle)*r, y=cy+Math.sin(f.angle)*r;
+    const a=(1-Math.abs(u-0.5)*1.4)*0.9;
+    glow(x,y, 5+6*(1-u), col, a*0.5);
+    ctx.beginPath(); ctx.arc(x,y,1.6+1.4*(1-u),0,TAU);
+    ctx.fillStyle=rgba([0.95,0.98,1.0], a*0.8); ctx.fill();
+  }
+}
+
+// 중심: 떨어지는 점 (관조 디폴트의 심장). 현재 세계 색. 흡수 순간 살짝 차오름.
+let coreFlash=0;   // 흡수 시 짧게 +
+function drawCenter(now, breath){
+  const col=worldColorRGB();
+  const pulse=0.7 + 0.3*breath + coreFlash*0.5;
+  coreFlash *= 0.90;
+  const coreR=(4.5 + coreFlash*5)*pulse;
+  ctx.save(); ctx.translate(cx,cy);
+  const g=ctx.createRadialGradient(0,0,0,0,0,coreR*7);
+  g.addColorStop(0, rgba(col, 0.5*pulse + coreFlash*0.3));
+  g.addColorStop(0.4, rgba(col, 0.12*pulse));
+  g.addColorStop(1, rgba(col, 0));
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,coreR*7,0,TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(0,0,coreR,0,TAU);
+  ctx.fillStyle=rgba([0.95,0.98,1.0], 0.85*pulse);
+  ctx.shadowColor=rgba(col,0.9); ctx.shadowBlur=18 + coreFlash*16;
+  ctx.fill();
+  ctx.restore(); ctx.shadowBlur=0;
+}
+
+// 떠다니는 세포 — 만질 물질. float=부드러운 막+핵, hover=발광↑, captured=중심으로 수축·흡수.
+function drawCells(now, dt){
+  const wcol = cellWorldColor();
+  for(let i=cells.length-1;i>=0;i--){
+    const c=cells[i];
+    // hover 보간
+    const want = (i===hoverCell || i===dragCell) ? 1 : 0;
+    c.hover += (want - c.hover) * Math.min(1, dt*8);
+
+    if(c.state==='captured'){
+      // 흡수 진행: 위치를 중심으로 당기고 크기 수축, 끝에서 보상 + 제거.
+      c.cap += dt/0.42;                 // 흡수 ~0.42s
+      const u=clamp(c.cap,0,1);
+      const e=easeOutCubic(u);
+      const x=lerp(c.capFromX, cx, e);
+      const y=lerp(c.capFromY, cy, e);
+      const sz=c.baseSz*(1-e*0.85);     // 수축
+      const br=(1-u)*0.9 + 0.3;
+      // 빨려들며 밝아지는 막 + 핵 (부드럽게)
+      glow(x,y, sz*1.5, wcol, br*0.6);
+      glow(x,y, sz*0.6, '220,236,214', br*0.5);
+      // 꼬리 — 중심 쪽으로 늘어나는 옅은 잔광
+      const tx=lerp(x,cx,0.4), ty=lerp(y,cy,0.4);
+      lineGlow([x,y,tx,ty], wcol, br*0.25, 2.0+sz*0.05);
+      if(u>=1){
+        // 보상 지급 (상태 변경 — 렌더에서 호출되지만 결정적·1회).
+        const rw=cellReward(c);
+        GAME.E += rw.e; GAME.C += rw.c; GAME.q += rw.q;
+        GAME.absorbed++;
+        coreFlash = Math.min(1.4, coreFlash + 0.7);
+        spawnAbsorbSparks(cx, cy, wcol);
+        // 흡수 알림 (작은 떠오르는 수치)
+        spawnFloatText(cx, cy-12, `+${fmt(rw.e)} E`, RES.E.color);
+        cells.splice(i,1);
+        cellRespawn = Math.min(cellRespawn, 0.0);  // 곧 새 세포
+        continue;
+      }
+      continue;
+    }
+
+    // float 상태
+    const p=cellPos(c);
+    const hov=c.hover;
+    const br=0.42 + 0.22*Math.sin(now*0.4+c.ph) + hov*0.5;
+    const grow=1 + 0.05*Math.sin(now*c.dsp+c.div) + hov*0.10;
+    const sz=c.sz*grow;
+    // 막(외피) — 부드러운 발광. hover면 더 따뜻하고 밝게(살아있다).
+    glow(p.x,p.y, sz*1.35, wcol, br*0.5);
+    glow(p.x,p.y, sz*0.62, wcol, br*0.22);
+    // 핵점 — 세포 안의 작은 코어 (흡수의 표적처럼 또렷)
+    glow(p.x+c.nx*sz, p.y+c.ny*sz, sz*0.30*c.nuc, '220,236,214', br*0.6);
+    // hover 링 — "잡을 수 있다"는 신호 (가는 빛 테. 번쩍임 아님)
+    if(hov>0.03){
+      ctx.beginPath(); ctx.arc(p.x,p.y, sz*1.15, 0, TAU);
+      ctx.strokeStyle=rgba([0.92,0.97,0.92], hov*0.32);
+      ctx.lineWidth=1.0; ctx.stroke();
+    }
+  }
+}
+
+// 흡수 잔광 파편 — 부드러운 점들이 퍼지며 사라짐.
+function drawSparks(dt){
+  for(let k=sparks.length-1;k>=0;k--){
+    const s=sparks[k]; s.t+=dt;
+    const u=clamp(s.t/s.dur,0,1);
+    if(u>=1){ sparks.splice(k,1); continue; }
+    s.x+=s.vx*dt; s.y+=s.vy*dt; s.vx*=0.93; s.vy*=0.93;
+    const a=(1-u)*0.7;
+    glow(s.x,s.y, s.sz*2.4, s.col, a*0.5);
+  }
+}
+
+// 작은 떠오르는 수치 (흡수 보상 알림) — 카드 아님, 발광 텍스트.
+let floatTexts = [];
+function spawnFloatText(x,y,str,col){ floatTexts.push({x,y,str,col,t:0,dur:1.1}); }
+function drawFloatTexts(dt){
+  if(floatTexts.length===0) return;
+  ctx.globalCompositeOperation='source-over';
+  ctx.save(); ctx.textAlign='center';
+  ctx.font="600 12px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.shadowColor="rgba(0,0,0,0.9)"; ctx.shadowBlur=8;
+  for(let k=floatTexts.length-1;k>=0;k--){
+    const f=floatTexts[k]; f.t+=dt;
+    const u=clamp(f.t/f.dur,0,1);
+    if(u>=1){ floatTexts.splice(k,1); continue; }
+    const y=f.y - u*26;
+    const a=(u<0.2? u/0.2 : 1-(u-0.2)/0.8)*0.85;
+    ctx.fillStyle=rgba(f.col, a);
+    ctx.fillText(f.str, f.x, y);
+  }
+  ctx.restore(); ctx.shadowBlur=0;
+  ctx.globalCompositeOperation='lighter';
+}
+
+// C(깊이) → 다음 세계 하강 게이트. 중심 둘레 옅은 진행 호(빛의 채움).
+function drawWorldGate(){
+  if(worldTrans) return;
+  if(curWorld+1 >= worlds.length) return;
+  const frac = clamp(GAME.C / GAME.worldThreshold, 0, 1);
+  if(frac<=0.001) return;
+  const col = worlds[curWorld+1].col.split(',').map(Number);
+  const r = shellRadius(SHELLS.length-1) + MINDIM*0.045;
+  ctx.save(); ctx.translate(cx,cy);
+  ctx.beginPath();
+  ctx.arc(0,0,r, -Math.PI/2, -Math.PI/2 + frac*TAU);
+  ctx.strokeStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.10 + 0.22*frac})`;
+  ctx.lineWidth = 1.0 + frac*1.6;
+  ctx.shadowColor = `rgba(${col[0]},${col[1]},${col[2]},${0.5*frac})`;
+  ctx.shadowBlur = 4 + frac*14;
+  ctx.lineCap='round'; ctx.stroke();
+  ctx.restore(); ctx.shadowBlur=0;
+  if(frac>0.8){
+    ctx.globalCompositeOperation='source-over';
+    ctx.save(); ctx.textAlign='center';
+    ctx.font="11px 'Spline Sans Mono', ui-monospace, monospace";
+    ctx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${(frac-0.8)/0.2*0.55})`;
+    ctx.shadowColor="rgba(0,0,0,0.9)"; ctx.shadowBlur=10;
+    ctx.fillText("더 깊은 곳이 열린다 — "+worlds[curWorld+1].name.split(' — ')[0], cx, cy + r + 20);
+    ctx.restore(); ctx.shadowBlur=0;
+    ctx.globalCompositeOperation='lighter';
+  }
+}
+
+// 세포 hover 주석 — "압축 → +E +C" 를 세포 옆에 작게.
+function drawCellHover(c){
+  if(c.state!=='float') return;
+  const p=cellPos(c);
+  const rw=cellReward(c);
+  ctx.globalCompositeOperation='source-over';
+  ctx.save(); ctx.textAlign='left';
+  ctx.shadowColor="rgba(0,0,0,0.9)"; ctx.shadowBlur=10;
+  const ax=p.x + c.sz*0.9 + 10, ay=p.y - 4;
+  ctx.font="600 12px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=rgba([0.90,0.95,0.90], 0.7);
+  ctx.fillText("압축", ax, ay);
+  ctx.font="11px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=rgba(RES.E.color, 0.7);
+  ctx.fillText(`+${fmt(rw.e)} E`, ax, ay+15);
+  ctx.fillStyle=rgba(RES.C.color, 0.62);
+  ctx.fillText(`+${fmt(rw.c)} C  ·  +1 양자`, ax, ay+29);
+  ctx.restore(); ctx.shadowBlur=0;
+  ctx.globalCompositeOperation='lighter';
+}
+
+// 껍질 hover 주석 — 그 켜의 결속·생산·결속비용을 공허에 띄움 (테두리 0).
+function drawShellHover(i){
+  const s=SHELLS[i], r=shellRadius(i), a=shellBloom[i];
+  if(a<0.05) return;
+  const ang=-Math.PI*0.32;
+  const ax=cx+Math.cos(ang)*(r+14), ay=cy+Math.sin(ang)*(r+14);
+  const can=maxAffordableBind(i), mode=buyCountForMode();
+  let count = mode===-1 ? Math.max(1,can) : mode;
+  if(mode>0 && can<count && can>0) count=can;
+  const cost=bindCost(i, Math.max(1,count));
+  const res=s.res, costCol=RES[COST_RES].color, affordable=can>=1;
+
+  ctx.globalCompositeOperation='source-over';
+  ctx.save(); ctx.translate(ax,ay); ctx.textAlign='left';
+  ctx.shadowColor="rgba(0,0,0,0.9)"; ctx.shadowBlur=10;
+  ctx.font="600 13px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=rgba(s.color, 0.5+0.45*a);
+  ctx.fillText(`${s.name} · ${s.sci}`, 0, 0);
+  ctx.font="11px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=`rgba(200,216,224,${0.38*a})`;
+  ctx.fillText(`T${i+1} · 결속 ${GAME.bound[i]} 양자`, 0, 17);
+  ctx.fillStyle=`rgba(180,200,210,${0.34*a})`;
+  ctx.fillText(`+${fmt(s.prod)} ${res}/양자  →  합 +${fmt(shellProduction(i))}/s`, 0, 32);
+  const costAlpha = affordable ? 0.85*a : 0.30*a;
+  ctx.font="600 12px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=rgba(costCol, costAlpha);
+  const label = mode===-1 ? `결속 ×${Math.max(1,can)}` : `결속 ×${count}`;
+  ctx.fillText(`${label}  −${fmt(cost)} ${COST_RES}`, 0, 49);
+  if(!affordable){
+    ctx.font="10px 'Spline Sans Mono', ui-monospace, monospace";
+    ctx.fillStyle=`rgba(150,168,178,${0.45*a})`;
+    const why = GAME.q<1 ? "자유 양자 부족 — 세포를 흡수하라" : `${COST_RES} 부족`;
+    ctx.fillText(why, 0, 63);
+  }
+  ctx.restore(); ctx.shadowBlur=0;
+  ctx.globalCompositeOperation='lighter';
+}
+
+// 자원 성표 주석 — 우상단 세로. 각자 탈채도색. 자유 양자(q)도 표시.
+function drawResourceAnnotations(dt){
+  const rates=productionRates();
+  disp.E += (GAME.E-disp.E)*Math.min(1,dt*4);
+  disp.C += (GAME.C-disp.C)*Math.min(1,dt*4);
+  disp.D += (GAME.D-disp.D)*Math.min(1,dt*4);
+  disp.q += (GAME.q-disp.q)*Math.min(1,dt*6);
+
+  ctx.globalCompositeOperation='source-over';
+  ctx.save(); ctx.textAlign='right';
+  ctx.shadowColor="rgba(0,0,0,0.92)"; ctx.shadowBlur=12;
+  const x=W-30; let y=72;
+  const items=[ {k:"E",v:disp.E,rate:rates.e}, {k:"C",v:disp.C,rate:rates.c}, {k:"D",v:disp.D,rate:rates.d} ];
+  for(const it of items){
+    const R=RES[it.k];
+    const discovered = it.v>0.01 || it.rate>0.001;
+    const baseA = discovered?1:0.18;
+    ctx.font="15px 'Spline Sans Mono', ui-monospace, monospace";
+    ctx.fillStyle=rgba(R.color, 0.72*baseA);
+    ctx.fillText(fmt(it.v), x, y);
+    ctx.font="600 13px 'Spline Sans Mono', ui-monospace, monospace";
+    ctx.fillStyle=rgba(R.color, 0.5*baseA);
+    ctx.fillText(R.label, x - ctx.measureText(fmt(it.v)).width - 8, y);
+    ctx.font="10px 'Spline Sans Mono', ui-monospace, monospace";
+    ctx.fillStyle=rgba(R.color, 0.34*baseA);
+    ctx.fillText(`+${fmt(it.rate)}/s`, x, y+14);
+    y += 42;
+  }
+  // 자유 양자 — 흡수의 통화. 흰빛(세계색 살짝). 결속의 재료임을 라벨로.
+  const qcol=[0.86,0.91,0.88];
+  const qA = GAME.q>0.5 ? 1 : 0.5;
+  ctx.font="15px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=rgba(qcol, 0.72*qA);
+  ctx.fillText(fmtInt(disp.q), x, y);
+  ctx.font="600 12px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=rgba(qcol, 0.5*qA);
+  ctx.fillText("양자", x - ctx.measureText(fmtInt(disp.q)).width - 8, y);
+  ctx.font="10px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=rgba(qcol, 0.34*qA);
+  ctx.fillText("결속 재료", x, y+14);
+  ctx.restore(); ctx.shadowBlur=0;
+  ctx.globalCompositeOperation='lighter';
+}
+
+// Tab-hold 전체 계기 오버레이 (글랜스 테스트). 어둠 위 8껍질 풀 HUD 페이드인.
+function drawHudOverlay(){
+  const a=overlayAmt;
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle=`rgba(2,4,7,${0.42*a})`;
+  ctx.fillRect(0,0,W,H);
+  ctx.save();
+  ctx.shadowColor="rgba(0,0,0,0.9)"; ctx.shadowBlur=8; ctx.textAlign='left';
+  const x=56; let y=H*0.5 - (SHELLS.length*30)/2;
+  ctx.font="10px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=`rgba(180,198,208,${0.45*a})`;
+  ctx.fillText("계기 오버레이 — 8 동심 껍질 (결속한 입자 = 엔진)", x, y-22);
+  ctx.fillStyle=`rgba(140,160,172,${0.35*a})`;
+  ctx.fillText(`자유 양자 ${fmtInt(GAME.q)} · 누적 흡수 ${fmtInt(GAME.absorbed)} 세포 · Tab 떼면 관조`, x, y-9);
+  for(let i=0;i<SHELLS.length;i++){
+    const s=SHELLS[i], can=maxAffordableBind(i), cost=bindCost(i,1), res=s.res, affordable=can>=1;
+    ctx.beginPath(); ctx.arc(x-14, y-4, 3.2, 0, TAU);
+    ctx.fillStyle=rgba(s.color, (GAME.bound[i]>0?0.85:0.4)*a); ctx.fill();
+    ctx.font="12px 'Spline Sans Mono', ui-monospace, monospace";
+    ctx.fillStyle=rgba(s.color, (0.55+0.3*(GAME.bound[i]>0?1:0))*a);
+    ctx.fillText(`T${i+1} ${s.name}`, x, y);
+    ctx.fillStyle=`rgba(210,224,232,${0.55*a})`;
+    ctx.fillText(`결속 ${GAME.bound[i]}`, x+128, y);
+    ctx.fillStyle=`rgba(170,190,200,${0.42*a})`;
+    ctx.fillText(`+${fmt(shellProduction(i))}/s ${res}`, x+205, y);
+    ctx.fillStyle=rgba(RES[COST_RES].color, (affordable?0.85:0.32)*a);
+    ctx.fillText(`${fmt(cost)} ${COST_RES}`, x+330, y);
+    if(affordable){ ctx.fillStyle=`rgba(230,242,248,${0.6*a})`; ctx.fillText(`▸ 최대 ×${can}`, x+440, y); }
+    y += 30;
+  }
+  const rates=productionRates();
+  const cFrac = clamp(GAME.C/GAME.worldThreshold, 0, 1);
+  ctx.font="11px 'Spline Sans Mono', ui-monospace, monospace";
+  ctx.fillStyle=`rgba(190,206,214,${0.5*a})`;
+  ctx.fillText(`생산  E +${fmt(rates.e)}  C +${fmt(rates.c)}  D +${fmt(rates.d)}  /s   ·   다음 세계 ${(cFrac*100).toFixed(0)}% (C ${fmt(GAME.C)} / ${fmt(GAME.worldThreshold)})`, x, y+16);
+  ctx.restore(); ctx.shadowBlur=0;
+  ctx.globalCompositeOperation='lighter';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ════  HUD (DOM) — r·층 이름 (조용한 갱신).  ═════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+const layerEl=document.getElementById('layer');
+const radiusNumEl=document.querySelector('#radius .num');
+let lastHudWorld=-1;
+function setWorldHUD(i){
+  lastHudWorld=i;
+  layerEl.textContent=worlds[i].name;
+  layerEl.style.color=`rgba(${worlds[i].col},0.62)`;
+  radiusNumEl.textContent=worlds[i].r.replace(/\s*m$/,'');
+  radiusNumEl.style.color=`rgba(${worlds[i].col},0.78)`;
+}
+setWorldHUD(0);
+// 세계가 바뀌면 새 세계의 물질(세포)로 교체 — 만질 대상도 세계 따라 달라짐.
+function onWorldChanged(i){ seedCells(); }
+
+// ═══════════════════════════════════════════════════════════════════════
+// ════  PART D — 입력  ════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// 능동: 세포 클릭/드래그 = 압축·흡수. 엔진: 껍질 클릭 = 결속.
+function tryGrabAt(mx,my){
+  mouseX=mx; mouseY=my; updateHover();
+  if(hoverCell>=0){
+    // 세포 잡음 → 흡수 시작
+    dragCell=hoverCell;
+    const c=cells[dragCell];
+    const p=cellPos(c);
+    c.state='captured'; c.cap=0; c.capFromX=p.x; c.capFromY=p.y;
+    return true;
+  }
+  if(hoverShell>=0){
+    bindShell(hoverShell);
+    return true;
+  }
+  return false;
+}
+cv.addEventListener('mousedown', (e)=>{
+  if(e.button!==0) return;
+  const rect=cv.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  if(e.shiftKey){ const saved=buyMode; buyMode="max"; tryGrabAt(mx,my); buyMode=saved; }
+  else tryGrabAt(mx,my);
+});
+// 드래그: 누른 채 움직이면 지나가는 세포를 연속 흡수(쓸어담기 손맛).
+cv.addEventListener('mousemove', (e)=>{
+  const rect=cv.getBoundingClientRect();
+  mouseX=e.clientX-rect.left; mouseY=e.clientY-rect.top;
+  if(mouseDown){
+    // 드래그 중 — 마우스 아래 float 세포를 잡아 흡수(연속).
+    for(let i=0;i<cells.length;i++){ const c=cells[i]; if(c.state!=='float') continue;
+      const p=cellPos(c); if(Math.hypot(mouseX-p.x, mouseY-p.y) < c.sz*0.9+8){
+        const pp=cellPos(c); c.state='captured'; c.cap=0; c.capFromX=pp.x; c.capFromY=pp.y; break; } }
+  }
+});
+let mouseDown=false;
+cv.addEventListener('mousedown', ()=>{ mouseDown=true; });
+window.addEventListener('mouseup', ()=>{ mouseDown=false; dragCell=-1; });
+window.addEventListener('blur', ()=>{ mouseDown=false; dragCell=-1; });
+cv.addEventListener('mouseleave', ()=>{ mouseX=-1; mouseY=-1; hoverCell=-1; hoverShell=-1; });
+
+// 터치 지원 (간단) — 탭=흡수/결속.
+cv.addEventListener('touchstart', (e)=>{
+  e.preventDefault();
+  const rect=cv.getBoundingClientRect(); const t=e.changedTouches[0];
+  tryGrabAt(t.clientX-rect.left, t.clientY-rect.top);
+}, {passive:false});
+
+window.addEventListener('keydown', (e)=>{
+  if(e.code==='Tab'){ e.preventDefault(); overlayHeld=true; }
+  else if(e.code==='Digit1') setBuyMode("1");
+  else if(e.code==='Digit2') setBuyMode("10");
+  else if(e.code==='Digit3' || e.code==='KeyM') setBuyMode("max");
+});
+window.addEventListener('keyup', (e)=>{
+  if(e.code==='Tab'){ e.preventDefault(); overlayHeld=false; }
+});
+
+const buyModeEl=document.getElementById('buymode');
+function setBuyMode(m){ buyMode=m;
+  buyModeEl.querySelectorAll('span[data-mode]').forEach(s=>
+    s.classList.toggle('on', s.getAttribute('data-mode')===m)); }
+buyModeEl.querySelectorAll('span[data-mode]').forEach(s=>
+  s.addEventListener('click', (ev)=>{ ev.stopPropagation(); setBuyMode(s.getAttribute('data-mode')); }));
+
+const hintEl=document.getElementById('hint');
+setTimeout(()=>hintEl.classList.add('fade'), 9000);
+
+// ═══════════════════════════════════════════════════════════════════════
+// ════  세포 보충 — 흡수로 줄면 가장자리에서 천천히 흘러듦 (관조 유지).  ═══
+// ═══════════════════════════════════════════════════════════════════════
+function updateCellSpawn(dt){
+  const floatCount = cells.reduce((n,c)=>n+(c.state==='float'?1:0),0);
+  if(floatCount < CELL_TARGET){
+    cellRespawn -= dt;
+    if(cellRespawn<=0){ spawnCell(true); cellRespawn = 0.5 + Math.random()*0.8; }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ════  메인 루프 — 상태 적분(렌더와 분리) → 세계 배경 → 게임 빛.  ════════
+// ═══════════════════════════════════════════════════════════════════════
+const SHOW_FPS=/[?&]fps/.test(location.search);
+const fpsEl=document.getElementById('fps');
+if(SHOW_FPS) fpsEl.style.display='block';
+let fpsFrames=0, fpsTimer=0, smoothFps=60;
+
+const start=performance.now();
+let prevNow=start;
+function frame(now){
+  const t=(now-start)/1000;
+  let dt=(now-prevNow)/1000; prevNow=now; if(dt>0.1) dt=0.1;  // 백그라운드 복귀 클램프
+
+  // ── 상태 적분 (passive 생산은 렌더와 분리) ──
+  const rates=productionRates();
+  GAME.E += rates.e*dt;
+  GAME.C += rates.c*dt;
+  GAME.D += rates.d*dt;
+  updateResonanceless(dt);   // (공명 제거 — 능동은 세포 만지기로 통합)
+  overlayAmt += ((overlayHeld?1:0)-overlayAmt)*Math.min(1,dt*7);
+  updateCellSpawn(dt);
+  updateHover();
+
+  // ── C(깊이) 임계 → 세계 하강 트리거 (진행=하강) ──
+  if(!worldTrans && curWorld+1<worlds.length && GAME.C>=GAME.worldThreshold){
+    if(descendWorld()) GAME.worldThreshold *= GAME.worldStep;
+  }
+
+  // ── 렌더: 세계 배경(source-over) → 게임 빛(lighter) ──
+  drawWorldBackground(t, dt);
+  renderForeground(now/1000, dt);
+  drawFloatTexts(dt);
+
+  // ── fps ──
+  if(SHOW_FPS){
+    fpsFrames++; fpsTimer+=dt;
+    if(fpsTimer>=0.5){ smoothFps=smoothFps*0.5 + (fpsFrames/fpsTimer)*0.5;
+      fpsEl.textContent=smoothFps.toFixed(0)+' fps · '+worlds[curWorld].name.split(' — ')[0]
+        +' · 세포 '+cells.length+' · 양자 '+fmtInt(GAME.q);
+      fpsFrames=0; fpsTimer=0; }
+  }
+  requestAnimationFrame(frame);
+}
+function updateResonanceless(dt){ /* 슬라이스: 능동은 세포 만지기로 일원화. */ }
+
+// 비침습 perf 프로브 — 세계 배경 + 전경의 합산 CPU 비용 측정. window.__bench().
+window.__bench=function(iters){
+  iters=iters||60; const out=[];
+  drawWorldBackground(0, 0.016); renderForeground(0, 0.016);
+  const t0=performance.now();
+  for(let k=0;k<iters;k++){ drawWorldBackground(k*0.016, 0.016); renderForeground(k*0.016, 0.016); }
+  const ms=(performance.now()-t0)/iters;
+  out.push({ scene:'world+game', msPerFrame:+ms.toFixed(2), estFps:Math.round(1000/ms),
+             world:worlds[curWorld].name.split(' — ')[0],
+             boundSum:GAME.bound.reduce((a,b)=>a+b,0), cells:cells.length });
+  return out;
+};
+// 검증 훅.
+window.__GAME=GAME;
+window.__descend=descendWorld;
+window.__addE=function(n){ GAME.E+=n; };
+window.__absorbAll=function(){ for(const c of cells){ if(c.state==='float'){ const p=cellPos(c); c.state='captured'; c.cap=0.0; c.capFromX=p.x; c.capFromY=p.y; } } };
+
+resize();
+seedCells();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

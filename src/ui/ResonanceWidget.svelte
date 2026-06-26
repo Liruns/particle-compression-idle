@@ -86,7 +86,6 @@
 <style>
   .resonance {
     width: 100%;
-    max-width: 460px;
     background: var(--canvas-layer);
     border: 1px solid var(--border);
     border-left: 2px solid var(--layer-accent);

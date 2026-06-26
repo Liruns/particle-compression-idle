@@ -86,9 +86,11 @@
 {/if}
 
 <style>
+  /* 상전이는 "모달감"으로 중앙 정렬(ux 매핑: CENTER 중앙). 하드코딩 460 해방 → 큰 캡 + auto 마진. */
   .prestige {
     width: 100%;
-    max-width: 460px;
+    max-width: 520px;
+    margin: 0 auto;
     background: var(--canvas-layer);
     border: 1px solid var(--border);
     border-radius: var(--rounded-md);

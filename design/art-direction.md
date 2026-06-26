@@ -1,8 +1,26 @@
 # 아트 디렉션 문서 (art-direction.md v0.1)
 
+> ## ⚠️ SUPERSEDED — 이 문서(v0.1 "계측기 미감")는 피벗되었다
+>
+> **현 권위 비주얼 문서: [`art-direction-cosmic.md`](art-direction-cosmic.md) (v1.0 "우주적 현미경").** 통합 방향: [`cosmic-direction.md`](cosmic-direction.md).
+>
+> **왜:** 본 v0.1의 "계측기/오실로스코프 그린" 룩이 실제 화면(`overhaul-desktop-wide.png`)에서 **"AI 느낌"**(무난한 선택의 합 = 무개성)으로 귀결됐다. 오너 피드백 → 전면 피벗. CRT 인광 그린·레이더 스크린 미감은 그 자체로 80년대 사이파이 디폴트라, **현미경/심해 광학 + 층별 탈채도 발광 + 색온도 아크**로 교체됐다.
+>
+> **무엇이 바뀌나 (cosmic 문서가 권위):**
+> - 단일 청록 `#3ecf8e` 편재 → **폐기.** 층마다 다른 탈채도 발광색(art-cosmic §2-C). 자원도 각자 색.
+> - 안전한 폰트 삼종(JetBrains/Inter/IBM Plex) → 폐기. Public Sans/Atkinson(본문)·Spline Sans Mono(수치)·Newsreader(내러티브).
+> - 화이트 플래시 + 스케일 파열 전환 → **연속 블렌드 "떨어짐"**(art-cosmic §5-B).
+> - 암묵적 대시보드 전제 → **관조 ↔ 공허에 손 뻗기 모델**(art-cosmic §4 / cosmic-direction §3).
+>
+> **무엇이 계승되나 (정신은 옳았음):** 다크 베이스·과학적 정합(필러②)·절제·층별 비주얼 언어 4축·두 언어 병기/과학 표기. art-direction-cosmic §10-A에 계승/피벗 명세.
+>
+> **이력 보존을 위해 본문은 삭제하지 않는다.** 아래 v0.1 내용은 *벗어나는 대상*(비주얼 회귀 "before")으로 참고하되, 구현·배치 결정 시 충돌하면 **반드시 art-direction-cosmic.md(C 비전)가 우선한다.**
+
+---
+
 - 작성: art-director
 - 기준 문서: `GDD.md` v0.3 / `ux.md` v0.1 / `narrative.md` v0.2 / `followup-bigcrunch-framing.md`
-- 상태: 비주얼 아이덴티티·층별 무드·스케일 연출·주스 가이드·스토어 후킹 컨셉 확정
+- 상태: ~~비주얼 아이덴티티·층별 무드·스케일 연출·주스 가이드·스토어 후킹 컨셉 확정~~ → **SUPERSEDED (위 배너 참조). art-direction-cosmic.md로 피벗.**
 - 작성일: 2026-06-25
 - 경계: graphics-programmer=구현, ux-designer=배치. 이 문서=방향.
 

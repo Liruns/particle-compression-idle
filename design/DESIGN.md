@@ -1,8 +1,36 @@
 ---
 # 형식 참조: kwakseongjae/oh-my-design DESIGN.md(웹) → 게임 적응
+#
+# ============================================================================
+# ⚠️ 색상 팔레트 SUPERSEDED — "우주적 현미경" 피벗 (2026-06-26)
+# ----------------------------------------------------------------------------
+# 아래 `colors`·`layer-palette`·`colorblind-palette`의 **색상 토큰은 피벗되었다.**
+# 현 권위: art-direction-cosmic.md §2 (cosmic-direction.md §2-B 요약).
+#
+# 무엇이 바뀌나:
+#  - 단일 브랜드색 `#3ecf8e`(primary/qf/col-glow-core) = 폐기. 이 게임에 하나의
+#    브랜드 컬러는 없다 — 층마다 다른 빛이 있을 뿐(art-cosmic §2-A).
+#  - 층별 accent(8bc34a/26c6da/7c4dff 등 쨍한 순색) = 전부 탈채도 발광색으로 교체.
+#    예) mol 8bc34a → 9fb89a, atom 26c6da → 7fb0b8, prn 7c4dff → 8a7fd0 …
+#    11층 색온도 아크(따뜻→차가움→무색)는 art-cosmic §2-C 표가 권위값.
+#  - 자원색도 각자 탈채도 발광체: E #d9b86a / C #7a9fc0 / D #9a8fc0 /
+#    QF = 현재 층 색을 따라감(고정색 없음). art-cosmic §2-D.
+#  - 발광 규칙: 채도 35~70%, 광원에서만(reflective 아님), near-black 공허 +
+#    radial vignette. 균일 플랫 다크 배경/네온 box-shadow 금지(art-cosmic §7 F8·F9).
+#
+# 색맹 보정 팔레트(colorblind-palette)는 새 탈채도 hex 기준으로 재매핑 필요
+#   (accessibility §1-C, art-cosmic §11). 아래 구 값은 구 순색 기준이라 무효.
+#
+# ★ 비색상 토큰(typography scale, spacing, motion, z-index 등)은 유효하되,
+#   typography family(JetBrains/Inter/IBM Plex)는 art-cosmic §3-B로 피벗
+#   (Public Sans/Atkinson + Spline Sans Mono + Newsreader). §130 family 참조.
+#
+# 이력 보존을 위해 구 토큰은 삭제하지 않는다. 신규 화면 색은 art-cosmic §2가 권위.
+# ============================================================================
 
 tokens:
   colors:
+    # ⚠️ 색상 토큰 SUPERSEDED → art-direction-cosmic.md §2 (위 배너). 구 값=비주얼 회귀 before.
     # --- 베이스 시맨틱 ---
     canvas:           "#080b0e"   # 최외곽 배경 (배경 딥)
     canvas-layer:     "#0e1418"   # 패널·카드 기본 (배경 레이어)
@@ -12,8 +40,8 @@ tokens:
     foreground-sub:   "#7a8f9e"   # 설명·보조 정보 (텍스트 보조)
     foreground-dim:   "#3d5162"   # 미해금·비활성 (텍스트 희미, 접근성 예외 — 비활성 의도적 저대비)
 
-    # --- 자원/기능 시맨틱 색 ---
-    primary:          "#3ecf8e"   # r 게이지 코어 글로우 / QF / 집중 서브층 강조
+    # --- 자원/기능 시맨틱 색 ---  ⚠️ 단일 #3ecf8e 편재 = 폐기. 자원별 탈채도 발광색 → art-cosmic §2-D
+    primary:          "#3ecf8e"   # SUPERSEDED: 단일 브랜드색 폐기 → 층별 발광(art-cosmic §2-C). 구 r코어/QF/강조
     energy:           "#f5c842"   # 압축 에너지 E ⚡
     depth:            "#5b9bd5"   # 압축 깊이 C ◎
     data:             "#9b72cf"   # 발견 데이터 D ▣
@@ -31,6 +59,8 @@ tokens:
     # layer-{slug}-accent / layer-{slug}-glow / layer-{slug}-bg 패턴
 
   # --- 층별 팔레트 시스템 (11층) ⭐ ---
+  # ⚠️ SUPERSEDED: 아래 쨍한 순색 accent = 전부 탈채도 발광색으로 교체. 색온도 아크(따뜻→차가움→무색)
+  #    권위값 = art-direction-cosmic.md §2-C 표. (mol 8bc34a→9fb89a, atom 26c6da→7fb0b8, prn 7c4dff→8a7fd0 …)
   layer-palette:
     # L1 분자층 (Molecular)
     protostar:
@@ -128,10 +158,11 @@ tokens:
       inf-accent:  "#16a085"   # 청백 → 청록
 
   typography:
+    # ⚠️ family SUPERSEDED → art-cosmic §3-B (안전한 삼종 = AI 중앙값 신호). scale/spacing은 유효.
     family:
-      numeric:   "'JetBrains Mono', 'IBM Plex Mono', monospace"   # 수치 (primary)
-      label:     "'Inter', 'IBM Plex Sans', sans-serif"             # 버튼·탭·레이블
-      narrative: "'IBM Plex Mono', 'JetBrains Mono', monospace"    # 내러티브·로그
+      numeric:   "'JetBrains Mono', 'IBM Plex Mono', monospace"   # SUPERSEDED → 'Spline Sans Mono'(art-cosmic §3-B)
+      label:     "'Inter', 'IBM Plex Sans', sans-serif"             # SUPERSEDED → 'Public Sans'/'Atkinson Hyperlegible'
+      narrative: "'IBM Plex Mono', 'JetBrains Mono', monospace"    # SUPERSEDED → 'Newsreader'/'Source Serif 4'(세리프)
 
     scale:
       # 수치 (numeric family 사용)
@@ -947,18 +978,26 @@ tokens:
   --layer-bg:     var(--layer-mol-bg);
 
   /* --- 타이포그래피 --- */
-  --font-numeric:   'JetBrains Mono', 'IBM Plex Mono', monospace;
-  --font-label:     'Inter', 'IBM Plex Sans', sans-serif;
-  --font-narrative: 'IBM Plex Mono', 'JetBrains Mono', monospace;
+  /* 한글 fallback 추가(visual-overhaul §2-A): IBM Plex Sans KR self-host(@fontsource). */
+  --font-numeric:   'JetBrains Mono', 'IBM Plex Mono', 'IBM Plex Sans KR', monospace;
+  --font-label:     'Inter', 'IBM Plex Sans KR', 'IBM Plex Sans', sans-serif;
+  --font-narrative: 'IBM Plex Mono', 'JetBrains Mono', 'IBM Plex Sans KR', monospace;
 
-  --text-num-xl:    20px;
+  /* 타입스케일 위계(visual-overhaul §2-B): r·자원값을 키우고 라벨을 낮춰 대비. */
+  --text-num-display: 34px;   /* r 값(게이지 주인공) */
+  --text-num-xl:    24px;     /* 자원 현재값(C/E) — 20→24 */
   --text-num-lg:    16px;
   --text-num-md:    13px;
   --text-label-lg:  15px;
   --text-label-md:  13px;
   --text-label-sm:  11px;
+  --text-label-xs:  10px;     /* overline/유닛 캡션 */
   --text-narr-md:   12px;
   --text-narr-sm:   11px;
+
+  /* --- 반응형 브레이크포인트(ux-overhaul §2-1) --- */
+  --bp-narrow: 720px;
+  --bp-wide:   1080px;
 
   /* --- 스페이싱 --- */
   --space-xs:    4px;

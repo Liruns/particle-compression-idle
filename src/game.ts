@@ -104,6 +104,14 @@ export interface LayerSnapshot {
   scaleM: string;
   /** 서사 decade 범위 [start,end]. */
   decadeRange: readonly [number, number];
+  /**
+   * decade 진행 바용 정규화 진행도 0~1(ux-overhaul §P1-3). **표시 전용 읽기 파생** — 로직/경제 불변.
+   *   현재 층 enterDec→다음 층 enterDec 구간에서 dec의 위치(decadeRange는 known층이 단일점이라 부적합).
+   *   마지막 층은 decadeRange 폭으로 폴백. 분모≤0이면 0.
+   */
+  decadeProgress: number;
+  /** decade 바 양끝 라벨용 [start,end] dec(진행도 분모와 동일 구간). 표시 전용. */
+  decadeBarRange: readonly [number, number];
   /** 알려진 입자 경계 근접(dec15+) — ux.md §5-6 신호. */
   nearBoundary: boolean;
 }
@@ -239,6 +247,16 @@ export interface GameSnapshot {
   mult: Decimal;
   /** dC/dt (= g1·mult), UI 생산율 표시용 (Decimal). */
   rateC: Decimal;
+  /**
+   * 렌더 전용 파생(읽기 전용): 생산 중인가(rateC>0). 게이지 맥동·파티클 활성 조건.
+   *   렌더러가 Decimal을 직접 만지지 않도록 snapshot 경계에서 boolean으로 환산(tech §6.2, V2-8).
+   */
+  rateCPositive: boolean;
+  /**
+   * 렌더 전용 파생(읽기 전용): log₁₀(rateC) (rateC≤0이면 0). 파티클 속도 로그압축 매핑용.
+   *   native 연산 금지 원칙 — log10은 Decimal 메서드, 결과 number만 노출(tech §2.2, V2-8).
+   */
+  rateCLog10: number;
   /** 8단 체인 각 티어 표시 정보. */
   tiers: TierSnapshot[];
   /** 현재 층(M1.3). */
@@ -268,6 +286,22 @@ type SnapshotListener = (snap: GameSnapshot) => void;
 
 /** 대량구매 모드: 1개 / 10개 / 100개 / Max(전액). (ui-flow §2-D, system-flows §2.1) */
 export type BuyMode = 1 | 10 | 100 | 'max';
+
+/**
+ * decade 진행 바 정규화(ux-overhaul §P1-3). **표시 전용 순수 파생** — 게임 상태·경제 불변.
+ *  진행 구간 = 현재 층 enterDec → 다음 층 enterDec. (decadeRange는 known층이 단일점이라 분모 0 → 부적합.)
+ *  마지막 층(다음 없음)은 decadeRange 폭으로 폴백, 그것도 0이면 +3 가상 폭. 분모≤0 가드.
+ *  @returns [progress(0~1), [barStart, barEnd]]
+ */
+function deriveDecadeProgress(def: LayerDefinition, dec: number): [number, readonly [number, number]] {
+  const start = def.enterDec;
+  const next = layerByIndex(def.index + 1);
+  let end = next ? next.enterDec : def.decadeRange[1];
+  if (end <= start) end = def.decadeRange[1] > start ? def.decadeRange[1] : start + 3;
+  const span = end - start;
+  const progress = span > 0 ? Math.min(1, Math.max(0, (dec - start) / span)) : 0;
+  return [progress, [start, end]];
+}
 
 export class Game {
   private readonly platform: PlatformAdapter;
@@ -947,6 +981,8 @@ export class Game {
     const dec = computeDec(s.resources.C);
     // 활성 층: 알려진 물리는 dec 파생, 미지(상전이 진입)는 currentIndex(프리온 등)가 진실.
     const def: LayerDefinition = this.activeLayer(dec);
+    // decade 진행 바(표시 전용 — 로직 불변, ux-overhaul §P1-3).
+    const [decadeProg, decadeBar] = deriveDecadeProgress(def, dec);
     const discovered = s.codex.discovered;
 
     // T1 첫 구매 가능 여부(FTUE 체인 노출 게이트).
@@ -1044,6 +1080,11 @@ export class Game {
     let rateC = owned[0].mul(displayMult);
     if (researchTierMult[0] !== 1) rateC = rateC.mul(researchTierMult[0]);
 
+    // 렌더 전용 파생(V2-8, 읽기 전용): 렌더러가 Decimal을 만지지 않도록 number/boolean로 환산.
+    //   rateCPositive=맥동·파티클 활성 조건, rateCLog10=파티클 속도 로그압축 매핑(log10 1회/프레임).
+    const rateCPositive = rateC.gt(0);
+    const rateCLog10 = rateCPositive ? rateC.log10().toNumber() : 0;
+
     return {
       C: s.resources.C,
       E: s.resources.E,
@@ -1053,6 +1094,8 @@ export class Game {
       r: computeRadius(s.resources.C),
       mult: displayMult,
       rateC,
+      rateCPositive,
+      rateCLog10,
       tiers,
       layer: {
         index: def.index,
@@ -1062,6 +1105,9 @@ export class Game {
         mechanismNameKo: def.mechanismNameKo,
         scaleM: def.scaleM,
         decadeRange: def.decadeRange,
+        // decade 진행 바(표시 전용 파생 — 로직 불변): 층 enterDec→다음 층 enterDec 구간 정규화.
+        decadeProgress: decadeProg,
+        decadeBarRange: decadeBar,
         nearBoundary: isNearKnownBoundary(dec),
       },
       codex: {
