@@ -15,6 +15,7 @@ import type { Renderer } from './index';
 import { ColorCache } from './color';
 import { Glow } from './glow';
 import { WorldRenderer } from './world-renderer';
+import { BoardRenderer } from './board';
 import { visualFor, RENDER_TOKEN_KEYS, type LayerVisual } from './layer-visuals';
 
 /** 렌더러가 읽는 snapshot 부분집합(읽기 전용 — Decimal/Set 미포함). 결합 최소화. */
@@ -42,6 +43,10 @@ export class CanvasRenderer implements Renderer {
   private glow: Glow;
   /** 배경 = 우주적 현미경 세계(층별 distinct + 전환 하강). 구 헤이즈/파티클 대체. */
   private world: WorldRenderer;
+  /** 전경 = 다이제틱 공허 게임판(2단계): 중심 코어 + 8 궤도 껍질 + 떠다니는 세포. 세계 위 lighter 합성. */
+  private board: BoardRenderer;
+  /** 게임판 애니메이션 누적 시간(초). bg dt를 적분 — 사인 위상 일관(world.t와 독립). */
+  private boardTime = 0;
 
   private currentVisual: LayerVisual = visualFor('mol');
   private input: RenderInput | null = null;
@@ -77,6 +82,7 @@ export class CanvasRenderer implements Renderer {
     this.colors = new ColorCache(opts.rootEl);
     this.glow = new Glow(this.colors);
     this.world = new WorldRenderer();
+    this.board = new BoardRenderer();
 
     this.dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
@@ -106,6 +112,16 @@ export class CanvasRenderer implements Renderer {
     return this.bgCtx != null || this.glowCtx != null;
   }
 
+  /** 전경 게임판 — App이 입력 주입·포인터 상호작용을 위해 접근(단방향: board는 히트테스트만). */
+  get gameBoard(): BoardRenderer {
+    return this.board;
+  }
+
+  /** 현재 세계 발광색('r,g,b', 전환 보간). DOM 성표 주석(QF=층색 §3-C)이 읽는다. */
+  get layerColorRGB(): string {
+    return this.world.currentColorRGB();
+  }
+
   /** App이 subscribe 콜백에서 호출 — 최신 snapshot 파생을 주입(읽기 전용 복사 불필요, 즉시 draw). */
   setSnapshot(input: RenderInput): void {
     this.input = input;
@@ -115,6 +131,7 @@ export class CanvasRenderer implements Renderer {
   setReducedMotion(v: boolean): void {
     this.reducedMotion = v;
     this.world.setReducedMotion(v);
+    this.board.setReducedMotion(v);
   }
 
   /**
@@ -134,6 +151,8 @@ export class CanvasRenderer implements Renderer {
     // 배경 세계: 부팅은 즉시, 층 변화는 전환 하강.
     if (immediate) this.world.setLayerImmediate(slug);
     else this.world.setLayerBySlug(slug);
+    // 층이 실제로 바뀌면(부팅 제외) 새 세계의 물질로 교체 — 만질 세포도 세계 따라 달라짐(§3-C).
+    if (!immediate) this.board.reseedCells();
     this.applied = true;
   }
 
@@ -199,7 +218,15 @@ export class CanvasRenderer implements Renderer {
     const ctx = this.bgCtx;
     if (!ctx || this.bgW <= 0 || this.bgH <= 0) return;
     ctx.clearRect(0, 0, this.bgW, this.bgH);
+    // 1) 세계 배경(source-over void + lighter 세계빛 + source-over 비네팅 — 자체 합성 복원).
     this.world.draw(ctx, this.bgW, this.bgH, dt);
+    // 2) 전경 게임판(같은 캔버스에 lighter 가산 — 세계 위 빛). 코어/자유빛은 현재 세계색을 따른다.
+    let d = dt;
+    if (d < 0) d = 0;
+    if (d > 0.1) d = 0.1;
+    if (!this.reducedMotion) this.boardTime += d;
+    this.board.setLayerColor(this.world.currentColorRGB());
+    this.board.draw(ctx, this.bgW, this.bgH, d, this.boardTime);
   }
 
   /** 게이지: 본체(동심원·외곽링) + 중심 글로우(코어/헤일로). */

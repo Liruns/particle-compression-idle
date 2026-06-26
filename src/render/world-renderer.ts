@@ -79,6 +79,21 @@ export class WorldRenderer {
   }
 
   /**
+   * 현재 세계 발광색('r,g,b'). 전환 중이면 from→to 보간(프로토타입 worldColorRGB 이식) — 코어·자유빛이
+   *  따라가 "지금 얼마나 깊은가"가 곧 빛(§3-C QF=층색). BoardRenderer가 매 프레임 읽는다(표현 전용).
+   */
+  currentColorRGB(): string {
+    if (!this.trans) return WORLDS[this.cur].col;
+    const a = WORLDS[this.trans.from].col.split(',').map(Number);
+    const b = WORLDS[this.trans.to].col.split(',').map(Number);
+    const k = Math.min(1, Math.max(0, (this.trans.p - 0.4) / 0.3));
+    const r = Math.round(a[0] + (b[0] - a[0]) * k);
+    const g = Math.round(a[1] + (b[1] - a[1]) * k);
+    const bb = Math.round(a[2] + (b[2] - a[2]) * k);
+    return `${r},${g},${bb}`;
+  }
+
+  /**
    * 배경 한 프레임. ctx=배경 캔버스(dpr setTransform 적용, CSS px 좌표). W,H=CSS px.
    *  nowMs=performance.now()(시간 적분), dt=호출자가 클램프한 delta(초, 추가로 여기서도 클램프).
    *  void(검정) 채움 → 세계(lighter 합성) → 비네팅(source-over). 읽기전용.
