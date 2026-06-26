@@ -1,18 +1,20 @@
 /**
- * render/CanvasRenderer — Renderer 계약 구현체(m2-render-plan §9·V2). 표현 레이어 전담.
- *  두 캔버스(배경 fx / 게이지 글로우)의 2D context를 소유하고, snapshot 파생(읽기 전용)만 읽어
- *  헤이즈·파티클·게이지 본체+글로우를 합성한다. 호출자(App subscribe 콜백) 무관 — draw는 읽기전용.
+ * render/CanvasRenderer — Renderer 계약 구현체(m2-render-plan §9·V2 → UI 마이그레이션 1단계).
+ *  두 캔버스(배경 fx / 게이지 글로우)의 2D context를 소유한다.
+ *   - 배경 fx = **우주적 현미경 세계**(WorldRenderer): 게임 현재 층 slug → distinct 세계 + 전환 하강.
+ *     (구 헤이즈·파티클·비네팅 합성을 교체 — art-direction-cosmic.md §2·prototypes/cosmic-layers.html.)
+ *   - 게이지 글로우 = 종전 그대로(Glow). 1단계에선 층 세계 배경이 주역, 게이지는 유지(2단계 정리).
+ *  호출자(App subscribe 콜백) 무관 — draw는 읽기전용.
  *
  *  와이어링(V2-4): App subscribe(s) 콜백에서 setSnapshot(s) → draw() 연달아. 자체 rAF 없음.
  *  읽기전용 규율(V2-7): snapshot에서 dec(number)·rateCLog10(number)·rateCPositive(bool)·layer.slug(string)만.
  *   live discovered(Set)·Decimal(C/rateC/r/mult) 직접 접근 금지(결정성·세이브 보호).
- *  프레임당 추가 힙 할당 0(풀·타일·gradient 사전할당/재사용 — V2-5).
+ *  프레임당 추가 힙 할당: 세계 배치는 init 1회 사전생성, 게이지 gradient는 프레임당 소수(코어·헤일로) — V2-5 정신 유지.
  */
 import type { Renderer } from './index';
 import { ColorCache } from './color';
 import { Glow } from './glow';
-import { Haze } from './haze';
-import { ParticleSystem } from './particles';
+import { WorldRenderer } from './world-renderer';
 import { visualFor, RENDER_TOKEN_KEYS, type LayerVisual } from './layer-visuals';
 
 /** 렌더러가 읽는 snapshot 부분집합(읽기 전용 — Decimal/Set 미포함). 결합 최소화. */
@@ -38,12 +40,14 @@ export class CanvasRenderer implements Renderer {
 
   private colors: ColorCache;
   private glow: Glow;
-  private haze: Haze;
-  private particles: ParticleSystem;
+  /** 배경 = 우주적 현미경 세계(층별 distinct + 전환 하강). 구 헤이즈/파티클 대체. */
+  private world: WorldRenderer;
 
   private currentVisual: LayerVisual = visualFor('mol');
   private input: RenderInput | null = null;
   private reducedMotion = false;
+  /** 첫 onLayerChange(부팅 슬러그)는 즉시 스냅 → 이후 변화만 전환 하강. */
+  private applied = false;
 
   // 시간(앰비언트 모션 자체 적분 — 로직 tick 무관). dt 클램프(복귀 점프 방지 V2-6).
   private lastTime = -1;
@@ -72,14 +76,13 @@ export class CanvasRenderer implements Renderer {
 
     this.colors = new ColorCache(opts.rootEl);
     this.glow = new Glow(this.colors);
-    this.haze = new Haze();
-    this.particles = new ParticleSystem();
+    this.world = new WorldRenderer();
 
     this.dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
-    // 색 캐시 초기 읽기 + 초기 층(mol) 설정.
+    // 색 캐시 초기 읽기 + 초기 층(mol) 설정(전환 없이 즉시 — 부팅 슬러그).
     this.colors.read(RENDER_TOKEN_KEYS);
-    this.applyLayer('mol');
+    this.applyLayer('mol', true);
     this.resize(); // 초기 백버퍼 설정(0이면 스킵)
 
     // dpr 변경(모니터 이동) → 백버퍼 재설정. (V2-7 M6)
@@ -108,33 +111,30 @@ export class CanvasRenderer implements Renderer {
     this.input = input;
   }
 
-  /** reduced-motion 토글(스토어 구독 → App에서 주입). */
+  /** reduced-motion 토글(스토어 구독 → App에서 주입). 세계 구동기에도 전파(전환 즉시 스냅). */
   setReducedMotion(v: boolean): void {
     this.reducedMotion = v;
+    this.world.setReducedMotion(v);
   }
 
-  /** 층 전환(slug 변화 시 App에서 호출). config 교체 + 색 캐시 재읽기 + 서브시스템 재설정. */
+  /**
+   * 층 전환(slug 변화 시 App에서 호출). 게이지 색·glowBlend 갱신 + **세계 전환 하강 재생**.
+   *  첫 호출(부팅 슬러그)은 즉시 스냅(전환 없음), 이후 slug 변화는 떨어짐 전환(art §5-B).
+   */
   onLayerChange(layerSlug: string): void {
-    this.applyLayer(layerSlug);
+    this.applyLayer(layerSlug, !this.applied);
   }
 
-  private applyLayer(slug: string): void {
+  /** immediate=true면 세계를 즉시 맞춤(부팅·강제), false면 전환 하강. */
+  private applyLayer(slug: string, immediate: boolean): void {
     this.currentVisual = visualFor(slug);
-    // 색 캐시 재읽기(data-layer가 이미 바뀐 상태 가정 — App이 setProperty 후 호출).
+    // 색 캐시 재읽기(data-layer가 이미 바뀐 상태 가정 — App이 setProperty 후 호출). 게이지 글로우용.
     this.colors.read(RENDER_TOKEN_KEYS);
     this.glow.onLayerChange(this.currentVisual.glowBlend);
-    // 헤이즈·파티클 config 적용(색은 토큰 캐시에서).
-    const hazeCfg = this.currentVisual.haze;
-    this.haze.setConfig(
-      hazeCfg,
-      hazeCfg ? this.colors.get(hazeCfg.colorToken) : { r: 139, g: 195, b: 74 },
-    );
-    const pCfg = this.currentVisual.particles;
-    this.particles.setConfig(
-      pCfg,
-      pCfg ? this.colors.get(pCfg.colorToken) : { r: 139, g: 195, b: 74 },
-    );
-    this.particles.setSize(this.bgW, this.bgH);
+    // 배경 세계: 부팅은 즉시, 층 변화는 전환 하강.
+    if (immediate) this.world.setLayerImmediate(slug);
+    else this.world.setLayerBySlug(slug);
+    this.applied = true;
   }
 
   /**
@@ -154,7 +154,6 @@ export class CanvasRenderer implements Renderer {
         this.bgCanvas.width = Math.round(w * this.dpr);
         this.bgCanvas.height = Math.round(h * this.dpr);
         this.bgCtx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-        this.particles.setSize(w, h);
       }
     }
     // 글로우 캔버스.
@@ -191,38 +190,16 @@ export class CanvasRenderer implements Renderer {
     this.drawGauge(input, now, dt);
   }
 
-  /** 배경 fx: 차가운 배경(L6 비네팅) → 헤이즈 → 파티클. */
-  private drawBackground(input: RenderInput, dt: number): void {
+  /**
+   * 배경 fx = 우주적 현미경 세계(WorldRenderer): 현재 층 distinct 세계 + 전환 하강 + 비네팅.
+   *  void 채움·lighter 합성·source-over 비네팅은 WorldRenderer가 자체 관리(합성 상태 복원 포함).
+   *  input은 미사용(세계는 slug로만 결정 — onLayerChange가 이미 반영). 읽기전용.
+   */
+  private drawBackground(_input: RenderInput, dt: number): void {
     const ctx = this.bgCtx;
     if (!ctx || this.bgW <= 0 || this.bgH <= 0) return;
     ctx.clearRect(0, 0, this.bgW, this.bgH);
-
-    // (V2-3) 차가운 최소 배경 — 비네팅(L6 등). 헤이즈와 동급 비용 1개.
-    const bg = this.currentVisual.bg;
-    if (bg && bg.kind === 'vignette') {
-      const col = this.colors.get(bg.colorToken);
-      const cx = this.bgW / 2;
-      const cy = this.bgH / 2;
-      const rOuter = Math.max(this.bgW, this.bgH) * 0.75;
-      const g = ctx.createRadialGradient(cx, cy, rOuter * 0.4, cx, cy, rOuter);
-      g.addColorStop(0, `rgba(${col.r},${col.g},${col.b},0)`);
-      g.addColorStop(1, `rgba(${col.r},${col.g},${col.b},${bg.alpha})`);
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, this.bgW, this.bgH);
-    }
-
-    // 헤이즈(L1) — update(드리프트) 후 draw(타일링).
-    if (this.haze.active) {
-      this.haze.update(dt, this.reducedMotion);
-      this.haze.draw(ctx, this.bgW, this.bgH);
-    }
-
-    // 파티클 — 위상 신호(regen) → update → draw. 항상 source-over(부드러운 점/아크).
-    if (this.particles.active) {
-      if (input.phaseState) this.particles.signalPhase(input.phaseState);
-      this.particles.update(dt, input.rateCLog10, this.reducedMotion);
-      this.particles.draw(ctx);
-    }
+    this.world.draw(ctx, this.bgW, this.bgH, dt);
   }
 
   /** 게이지: 본체(동심원·외곽링) + 중심 글로우(코어/헤일로). */
@@ -248,10 +225,8 @@ export class CanvasRenderer implements Renderer {
     );
   }
 
-  /** 정리(누수 방지). 풀·타일 해제·dpr 리스너 제거. */
+  /** 정리(누수 방지). dpr 리스너 제거 + 입력 참조 해제(세계는 외부 리소스 없음 — 플레인 상태). */
   dispose(): void {
-    this.haze.destroy();
-    this.particles.destroy();
     if (this.dprMql && this.onDprChange && typeof this.dprMql.removeEventListener === 'function') {
       this.dprMql.removeEventListener('change', this.onDprChange);
     }
