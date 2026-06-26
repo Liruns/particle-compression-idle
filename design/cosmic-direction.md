@@ -168,6 +168,8 @@
   - **미사용 컴포넌트 6종 삭제:** `ResonanceWidget`·`PhaseWidget`·`HarmonicsWidget`(메커니즘 위젯, 다이제틱으로 대체) + `ChainTable`·`LayerCard`·`RightPanelStatus`(대시보드 잔재). svelte-check 0 — dangling import 없음.
   - **콘텐츠 뷰 cosmic 리스타일:** 연구·도감·상전이 뷰(`CodexView`/`ResearchView`/`PrestigeView`)가 쓰던 구 대시보드 네온 토큰(#3ecf8e 등)을 `.bloom-panel`에서 **탈채도 공허 팔레트로 remap**(custom property 캐스케이드 — 뷰 구조 불변, 색 토큰만). 네온 녹 제거·카드 테두리 약화(§7-C#2). check 0 / test 257.
   - **분자층 배경 후퇴(혼탁 해소):** L1 `MoleculeWorld`가 1단계에선 가득 찬 세포+막(cosmic-layers 버전)을 그렸는데, 2단계 전경 *만질 세포*(BoardRenderer)와 같은 sage 모티프라 겹쳐 혼탁했다 → 프로토타입(`cosmic-particle-game.html` worlds[0])대로 **옅은 조직 헤이즈(7 blob, α0.035)로 후퇴** → 전경 세포가 또렷이 도드라짐. 배경(분위기)/전경(상호작용) 분리 = 프로토타입 검증 룩 정합.
+  - **서체 교체(art-direction-cosmic §3·금지목록 F2 이행):** "개발자 디폴트 삼종"(JetBrains/Inter/IBM Plex = AI 중앙값 신호) 폐기 → **수치=Spline Sans Mono, 본문=Public Sans, 내러티브=Newsreader, 한글=Gothic A1**(korean subset 명시 import). main.ts·tokens.css·board.ts(캔버스 텍스트)·App.svelte 일괄. 프로토타입의 "연구자의 손·천문 카탈로그" 톤과 정합.
+  - **오버레이 위치·팝업 cosmic화:** 토스트가 자원 성표(우상)와 충돌하던 것을 **상단 중앙 발광 텍스트(테두리·카드 0)**로 이전(§3-A). 오프라인 모달도 `.bloom-panel`과 동일 탈채도 토큰 remap. → 캔버스 위 DOM 레이어(성표·메뉴·토스트·팝업) 서체·위치가 공허 룩으로 일관.
 - **2단계 후속(다음 패스):** 사운드·내러티브 보이스·게임필 정합(정거장2 졸업), 6층 전체 확장(정거장3).
 
 ### 7-C. 2단계 착수 전 체크 (game-director 가드)

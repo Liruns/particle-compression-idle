@@ -107,6 +107,21 @@
     flex-direction: column;
     gap: var(--space-base);
     box-shadow: 0 8px 32px color-mix(in srgb, #000 50%, transparent);
+    /* 공허 팔레트 오버라이드(§7-C#2 — .bloom-panel과 동일 정책): 구 네온 토큰을 탈채도 cosmic로 remap. */
+    --canvas-layer: #0b1016;
+    --surface: #121a22;
+    --border: #1c2733;
+    --foreground: #e2eef4;
+    --foreground-sub: #8ba0ad;
+    --foreground-dim: #4b5d69;
+    --primary: #a6b8cc;
+    --qf: #a8c4b6;
+    --layer-accent: #a6b8cc;
+    --energy: #d9b86a;
+    --depth: #7a9fc0;
+    --data: #9a8fc0;
+    --col-keep: #7faf96;
+    --col-partial: #c4a06a;
   }
   .om-head {
     display: flex;

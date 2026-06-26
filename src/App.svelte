@@ -500,7 +500,7 @@
     inset: 0;
     z-index: 2;
     pointer-events: none; /* 기본 비차단 — 상호작용 요소만 auto */
-    font-family: var(--font-numeric, 'IBM Plex Mono', ui-monospace, monospace);
+    font-family: var(--font-numeric, 'Spline Sans Mono', ui-monospace, monospace);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.04em;
   }
@@ -613,13 +613,13 @@
   .whisper .hint {
     font-size: 12px;
     color: rgba(150, 168, 178, 0.7);
-    font-family: var(--font-narrative, 'IBM Plex Sans KR', sans-serif);
+    font-family: var(--font-narrative, 'Newsreader', 'Gothic A1', serif);
     margin-bottom: 6px;
   }
   .whisper .murmur {
     font-size: 11px;
     color: rgba(110, 126, 134, 0.42);
-    font-family: var(--font-narrative, 'IBM Plex Sans KR', sans-serif);
+    font-family: var(--font-narrative, 'Newsreader', 'Gothic A1', serif);
   }
 
   /* 하단 중앙 디바이스 독 — 잠든 빛. hover/on에서 피어남. */
@@ -780,7 +780,7 @@
     align-items: center;
     justify-content: center;
     color: rgba(150, 166, 174, 0.6);
-    font-family: var(--font-narrative, 'IBM Plex Sans KR', sans-serif);
+    font-family: var(--font-narrative, 'Newsreader', 'Gothic A1', serif);
   }
 
   /* 좁은 화면(모바일/세로): 주석 크라우딩 완화 — 폰트·여백 축소, 속삭임 숨김(공허 우선). */

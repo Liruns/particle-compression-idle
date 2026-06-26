@@ -999,15 +999,15 @@ export class BoardRenderer {
       const isCurrent = node.state === ph.state;
       const isHover = this.hoverPhase === node.state;
       const labA = isCurrent ? 0.85 : isHover ? 0.7 : 0.4;
-      ctx.font = "600 12px 'IBM Plex Sans KR', sans-serif";
+      ctx.font = "600 12px 'Public Sans', 'Gothic A1', sans-serif";
       ctx.fillStyle = `rgba(${col},${labA})`;
       ctx.fillText(`${node.nameKo}${node.found ? ' ✓' : ''}`, p.x, p.y + 30);
-      ctx.font = "10px 'IBM Plex Sans KR', sans-serif";
+      ctx.font = "10px 'Public Sans', 'Gothic A1', sans-serif";
       ctx.fillStyle = `rgba(200,206,224,${labA * 0.7})`;
       ctx.fillText(node.effect, p.x, p.y + 44);
       // 호버 — 배율 + 핀/해제 비용 힌트.
       if (isHover) {
-        ctx.font = "10px 'IBM Plex Mono', monospace";
+        ctx.font = "10px 'Spline Sans Mono', monospace";
         ctx.fillStyle = `rgba(${col},0.8)`;
         const action =
           isCurrent && ph.pinned ? '클릭: 해제(무료)' : `클릭: 고정 −${ph.pinCostLabel} E`;
@@ -1047,7 +1047,7 @@ export class BoardRenderer {
       ctx.textAlign = 'center';
       ctx.shadowColor = 'rgba(0,0,0,0.9)';
       ctx.shadowBlur = 8;
-      ctx.font = "10px 'IBM Plex Mono', monospace";
+      ctx.font = "10px 'Spline Sans Mono', monospace";
       ctx.fillStyle = `rgba(${HARMONIC_COLOR},0.5)`;
       ctx.fillText(`공명 ${h.totalResonances} · 다음 T${h.nextTier}`, this.cx, this.cy + r + 28);
       ctx.restore();
@@ -1076,7 +1076,7 @@ export class BoardRenderer {
       ctx.globalCompositeOperation = 'source-over';
       ctx.save();
       ctx.textAlign = 'center';
-      ctx.font = "11px 'IBM Plex Sans KR', sans-serif";
+      ctx.font = "11px 'Public Sans', 'Gothic A1', sans-serif";
       ctx.fillStyle = `rgba(${col},${((frac - 0.8) / 0.2) * 0.5})`;
       ctx.shadowColor = 'rgba(0,0,0,0.9)';
       ctx.shadowBlur = 10;
@@ -1098,10 +1098,10 @@ export class BoardRenderer {
     ctx.shadowBlur = 10;
     const ax = p.x + c.sz * 0.9 + 10;
     const ay = p.y - 2;
-    ctx.font = "600 12px 'IBM Plex Mono', ui-monospace, monospace";
+    ctx.font = "600 12px 'Spline Sans Mono', ui-monospace, monospace";
     ctx.fillStyle = 'rgba(228,242,228,0.72)';
     ctx.fillText('압축 — 만져서 흡수', ax, ay);
-    ctx.font = "11px 'IBM Plex Mono', ui-monospace, monospace";
+    ctx.font = "11px 'Spline Sans Mono', ui-monospace, monospace";
     ctx.fillStyle = 'rgba(217,184,106,0.62)';
     ctx.fillText('+E · +C', ax, ay + 15);
     ctx.restore();
@@ -1126,19 +1126,19 @@ export class BoardRenderer {
     ctx.textAlign = 'left';
     ctx.shadowColor = 'rgba(0,0,0,0.9)';
     ctx.shadowBlur = 10;
-    ctx.font = "600 13px 'IBM Plex Sans KR', 'IBM Plex Mono', sans-serif";
+    ctx.font = "600 13px 'Public Sans', 'Gothic A1', sans-serif";
     ctx.fillStyle = `rgba(${col},${0.5 + 0.45 * a})`;
     ctx.fillText(s.nameKo, 0, 0);
-    ctx.font = "11px 'IBM Plex Mono', ui-monospace, monospace";
+    ctx.font = "11px 'Spline Sans Mono', ui-monospace, monospace";
     ctx.fillStyle = `rgba(200,216,224,${0.36 * a})`;
     ctx.fillText(s.rateLabel, 0, 17);
-    ctx.font = "600 12px 'IBM Plex Mono', ui-monospace, monospace";
+    ctx.font = "600 12px 'Spline Sans Mono', ui-monospace, monospace";
     ctx.fillStyle = s.affordable
       ? `rgba(217,184,106,${0.85 * a})`
       : `rgba(217,184,106,${0.3 * a})`;
     ctx.fillText(s.costLabel, 0, 34);
     if (!s.affordable) {
-      ctx.font = "10px 'IBM Plex Sans KR', sans-serif";
+      ctx.font = "10px 'Public Sans', 'Gothic A1', sans-serif";
       ctx.fillStyle = `rgba(150,168,178,${0.5 * a})`;
       ctx.fillText('E 부족', 0, 48);
     }
@@ -1152,7 +1152,7 @@ export class BoardRenderer {
     ctx.globalCompositeOperation = 'source-over';
     ctx.save();
     ctx.textAlign = 'center';
-    ctx.font = "600 12px 'IBM Plex Mono', ui-monospace, monospace";
+    ctx.font = "600 12px 'Spline Sans Mono', ui-monospace, monospace";
     ctx.shadowColor = 'rgba(0,0,0,0.9)';
     ctx.shadowBlur = 8;
     for (let k = this.floatTexts.length - 1; k >= 0; k--) {

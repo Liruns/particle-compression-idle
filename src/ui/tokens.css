@@ -98,12 +98,12 @@
   --layer-glow:   var(--layer-mol-glow);
   --layer-bg:     var(--layer-mol-bg);
 
-  /* --- 타이포그래피 --- */
-  /* 한글 fallback 추가(visual §2-A): Inter/Plex Mono엔 한글 글리프 없어 OS fallback으로 빠지던 문제 해결.
-     IBM Plex Sans KR을 모든 패밀리의 한글 폴백으로(수치도 한글 단위 동반 시). 수치 본체는 Latin이므로 mono 유지. */
-  --font-numeric:   'JetBrains Mono', 'IBM Plex Mono', 'IBM Plex Sans KR', monospace;
-  --font-label:     'Inter', 'IBM Plex Sans KR', 'IBM Plex Sans', sans-serif;
-  --font-narrative: 'IBM Plex Mono', 'JetBrains Mono', 'IBM Plex Sans KR', monospace;
+  /* --- 타이포그래피 (우주적 현미경, art-direction-cosmic §3) ---
+     "개발자 디폴트 삼종"(JetBrains/Inter/IBM Plex = AI 중앙값) 폐기. 연구자의 손·천문 카탈로그 톤.
+     한글 글리프는 Gothic A1로 폴백(라틴 후보엔 한글 없음 — 단위·라벨 한글 동반 시). */
+  --font-numeric:   'Spline Sans Mono', 'Gothic A1', ui-monospace, monospace;
+  --font-label:     'Public Sans', 'Gothic A1', sans-serif;
+  --font-narrative: 'Newsreader', 'Gothic A1', Georgia, serif;
 
   /* 타입스케일 위계(visual §2-B): 측정 주인공(r·자원값)을 키우고 라벨을 더 낮춰 대비를 만든다. */
   --text-num-display: 34px;   /* r 값(게이지 주인공) — 화면에서 가장 큰 수치 */
