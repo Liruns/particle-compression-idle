@@ -118,6 +118,7 @@ export class AudioEngine {
       'achievement_earned',
       'prestige_ready',
       'prestige',
+      'bigCrunch',
       'offlineApplied',
     ] as const;
     for (const name of names) {

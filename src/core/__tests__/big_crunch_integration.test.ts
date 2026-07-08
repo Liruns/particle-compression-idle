@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { Game } from '../../game';
 import { getState, setState, createInitialState } from '../state';
 import { D } from '../bignum';
+import { bus } from '../events';
 
 describe('game.executeBigCrunch 배선', () => {
   it('6벽 소진 + 플랑크 dec26 상태에서 재하강 리셋 반영', () => {
@@ -24,8 +25,14 @@ describe('game.executeBigCrunch 배선', () => {
     s.codex.discovered.add('water_molecule');
     setState(s);
 
+    // 오디오/서사가 물릴 bigCrunch 이벤트가 실제로 발행되는지(무음 방지 계약).
+    let crunchPayload: { runIndex?: number } | null = null;
+    const off = bus.on('bigCrunch', (p) => (crunchPayload = p));
     const ok = g.executeBigCrunch();
+    off();
     expect(ok).toBe(true);
+    expect(crunchPayload).not.toBeNull();
+    expect(crunchPayload!.runIndex).toBe(1);
 
     const a = getState();
     // 재하강 리셋

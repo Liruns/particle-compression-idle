@@ -54,6 +54,7 @@ describe('voiceForEvent — 순수성·발음 분기', () => {
       'codexDiscover',
       'layerEnter',
       'prestige',
+      'bigCrunch',
       'offlineApplied',
     ]) {
       expect(voiceForEvent(name, {}, CTX).length).toBeGreaterThan(0);
@@ -87,6 +88,25 @@ describe('voiceForEvent — 순수성·발음 분기', () => {
     expect(first[0].gain).toBeGreaterThan(later[0].gain);
   });
 
+  it('빅 크런치는 프레스티지보다 웅장(보이스 더 많고 꼬리 더 김) + 붕괴→재탄생 구조', () => {
+    const crunch = voiceForEvent('bigCrunch', { runIndex: 1 }, CTX);
+    const prestige = voiceForEvent('prestige', { count: 1 }, CTX);
+    // 더 풍성한 화음(보이스 수).
+    expect(crunch.length).toBeGreaterThan(prestige.length);
+    // 재탄생 스웰이 늦게 들어와 총 길이가 더 김(delay+dur 최대).
+    const tail = (vs: typeof crunch) => Math.max(...vs.map((v) => (v.delay ?? 0) + v.dur));
+    expect(tail(crunch)).toBeGreaterThan(tail(prestige));
+    // 붕괴(초반 즉시 시작) + 재탄생(지연 스웰) 둘 다 존재.
+    expect(crunch.some((v) => (v.delay ?? 0) < 0.1)).toBe(true);
+    expect(crunch.some((v) => (v.delay ?? 0) > 0.8)).toBe(true);
+  });
+
+  it('첫 빅 크런치는 이후보다 크게(웅장함 체감)', () => {
+    const first = voiceForEvent('bigCrunch', { runIndex: 1 }, CTX);
+    const later = voiceForEvent('bigCrunch', { runIndex: 3 }, CTX);
+    expect(Math.max(...first.map((v) => v.gain))).toBeGreaterThan(Math.max(...later.map((v) => v.gain)));
+  });
+
   it('하모닉 공명 티어가 높을수록 음고 상승', () => {
     const t1 = voiceForEvent('harmonic_resonance', { tier: 1 }, CTX)[0].freq;
     const t5 = voiceForEvent('harmonic_resonance', { tier: 5 }, CTX)[0].freq;
@@ -100,8 +120,8 @@ describe('voiceForEvent — 순수성·발음 분기', () => {
   });
 
   it('모든 보이스는 유효 파라미터(양수 freq/dur/gain, 유한)', () => {
-    for (const name of ['manual_compress', 'prestige', 'layerEnter', 'chain_purchased']) {
-      for (const v of voiceForEvent(name, { count: 3 }, { layerIndex: 6 })) {
+    for (const name of ['manual_compress', 'prestige', 'bigCrunch', 'layerEnter', 'chain_purchased']) {
+      for (const v of voiceForEvent(name, { count: 3, runIndex: 1 }, { layerIndex: 6 })) {
         expect(v.freq).toBeGreaterThan(0);
         expect(Number.isFinite(v.freq)).toBe(true);
         expect(v.dur).toBeGreaterThan(0);

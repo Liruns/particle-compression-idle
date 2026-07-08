@@ -160,6 +160,22 @@ export function voiceForEvent(
       ];
     }
 
+    case 'bigCrunch': {
+      // 빅 크런치 — 붕괴(고역→저역 수축) 후 재탄생(저역에서 피어오르는 스웰).
+      //  프레스티지보다 크고 길게, 단 절제(느낌표 1회 정신). 첫 크런치가 가장 웅장.
+      const first = payload.runIndex === 1;
+      const g = first ? 0.24 : 0.2;
+      return [
+        // 수축: 넓은 고역에서 깊은 저역으로 빨려드는 하강(밀도 최대점으로).
+        { wave: 'sine', freq: semi(base, 19), dur: 1.0, gain: g * 0.7, attack: 0.02, glideTo: base / 2 },
+        { wave: 'sine', freq: semi(base, 12), dur: 1.1, gain: g * 0.6, attack: 0.03, glideTo: base / 3, delay: 0.05 },
+        // 재탄생: 정지점 이후 깊은 저역에서 위로 피어오르는 느린 스웰(재하강의 시작).
+        { wave: 'sine', freq: base / 3, dur: 1.7, gain: g, attack: 0.25, glideTo: base, delay: 0.92 },
+        { wave: 'sine', freq: base / 2, dur: 1.5, gain: g * 0.7, attack: 0.3, glideTo: semi(base, 7), delay: 1.02 },
+        { wave: 'sine', freq: base, dur: 1.4, gain: g * 0.5, attack: 0.35, glideTo: semi(base, 12), delay: 1.12 },
+      ];
+    }
+
     case 'offlineApplied':
       // 오프라인 복귀 — 낮고 따뜻한 귀환음(자리비움을 채워 넣음).
       return [
