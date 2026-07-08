@@ -1,12 +1,17 @@
 # Claude Code / oh-my-claudecode 로컬 툴링 상태 (세션·오케스트레이션 — 커밋 금지)
 .claude/
 .omc/
+.gjc/
 
 # Node / Vite 빌드 산출물
 node_modules/
 dist/
 *.tsbuildinfo
 .vite/
+
+# 로컬 dev 서버 로그(nohup vite 실행 산출물 — 커밋 금지)
+devlog*.txt
+nohup.out
 
 # Python 빌드 산출물 (design/sim)
 __pycache__/

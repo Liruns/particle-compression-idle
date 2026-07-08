@@ -53,6 +53,8 @@ export interface GameEvents {
   harmonic_resonance: { tier: number };
   /** 연구 노드 구매 성공(M1.7, system-flows §9.1) — UI 트리 갱신·로그. */
   research_purchased: { nodeId: string; branch: string };
+  /** 관측 목표(업적) 달성 — UI 토스트·사운드·Steam 매핑(M3.7) 후보. */
+  achievement_earned: { id: string };
 }
 
 export type EventName = keyof GameEvents;

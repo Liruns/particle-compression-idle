@@ -14,6 +14,7 @@ import { Decimal, toStore, fromStore, ZERO } from '../bignum';
 import {
   type GameState,
   type SettingsState,
+  type StatsState,
   createInitialState,
   CHAIN_TIERS,
 } from '../state';
@@ -62,6 +63,10 @@ export interface SaveData {
   research?: {
     purchased: string[];
   };
+  /** 관측 목표 달성 ID 배열(Set → array). 옵셔널 추가 — 구버전 없음 → 빈 배열. */
+  achievements?: {
+    earned: string[];
+  };
   /**
    * M1.4 추가. 층별 메커니즘 직렬화 상태(§1.1 R7 — 메커니즘이 .serialize()로 평문화).
    * 구버전(없음) → deserialize에서 새 인스턴스 기본값. 각 메커니즘 형태는 모듈이 책임(불투명).
@@ -74,6 +79,8 @@ export interface SaveData {
     harmonics?: unknown;
   };
   settings: SettingsState;
+  /** 누적 통계(옵셔널 추가 — 구버전 세이브엔 없음 → deserialize에서 0 기본). */
+  stats?: Partial<StatsState>;
   /** validate가 채운 누락 필드 흔적 등 후속 확장 자리. */
   [extra: string]: unknown;
 }
@@ -105,6 +112,7 @@ export function serializeState(s: GameState): SaveData {
     // Set → 정렬된 배열(결정적 직렬화 — 동일 상태 → 동일 봉투 → 체크섬 안정).
     codex: { discovered: [...s.codex.discovered].sort() },
     research: { purchased: [...s.research.purchased].sort() },
+    achievements: { earned: [...s.achievements.earned].sort() },
     // 메커니즘은 각자 .serialize()로 평문화(§1.1 R7 — save는 형태를 모름, 불투명 값 그대로).
     mechanics: {
       orbital: s.mechanics.orbital.serialize(),
@@ -112,6 +120,7 @@ export function serializeState(s: GameState): SaveData {
       harmonics: s.mechanics.harmonics.serialize(),
     },
     settings: { ...s.settings },
+    stats: { ...s.stats },
   };
 }
 
@@ -131,7 +140,8 @@ export function deserializeState(data: SaveData): GameState {
       build: data.meta?.build ?? init.meta.build,
       createdAt: data.meta?.createdAt ?? init.meta.createdAt,
       lastSave: data.meta?.lastSave ?? init.meta.lastSave,
-      totalPlaytime: data.meta?.totalPlaytime ?? 0,
+      // 손상/악성 import 방어: 유한·음수 아님만 채택(stats와 동일 규율 — §1.3).
+      totalPlaytime: safeNonNeg(data.meta?.totalPlaytime),
     },
     resources: {
       E: fromStore(data.resources?.E),
@@ -143,8 +153,9 @@ export function deserializeState(data: SaveData): GameState {
     },
     chain: { bought, produced },
     prestige: {
-      count: data.prestige?.count ?? 0,
-      runIndex: data.prestige?.runIndex ?? 0,
+      // 방어: prestige.count·runIndex는 벽 카운팅·QF 계산에 직접 쓰이므로 유한·음수 아닌 정수만.
+      count: safeCount(data.prestige?.count),
+      runIndex: safeCount(data.prestige?.runIndex),
       qfClaimed: fromStore(data.prestige?.qfClaimed),
       focusSublayer: data.prestige?.focusSublayer ?? null,
       offlineBonusPending: data.prestige?.offlineBonusPending ?? false,
@@ -161,6 +172,10 @@ export function deserializeState(data: SaveData): GameState {
       // 구매 노드 ID 배열 → Set. 문자열 아닌 값은 무시(§1.3 방어). 구버전 없음 → 빈 집합.
       purchased: normalizeDiscovered(data.research?.purchased),
     },
+    achievements: {
+      // 달성 ID 배열 → Set. 구버전(없음)·손상 → 빈 집합.
+      earned: normalizeDiscovered(data.achievements?.earned),
+    },
     mechanics: {
       // 새 인스턴스 + 저장 상태 복원(§1.3 — deserialize가 누락/손상을 기본값으로 방어).
       orbital: restoreOrbital(data.mechanics?.orbital),
@@ -169,12 +184,30 @@ export function deserializeState(data: SaveData): GameState {
     },
     settings: {
       offlinePrecise: data.settings?.offlinePrecise ?? init.settings.offlinePrecise,
-      notation: data.settings?.notation ?? init.settings.notation,
+      notation: safeNotation(data.settings?.notation),
       colorblind: data.settings?.colorblind ?? init.settings.colorblind,
+    },
+    stats: {
+      // 구버전(없음)·손상 → 0. 유한 음수 아닌 정수만 채택(§1.3 방어).
+      manualCompresses: safeCount(data.stats?.manualCompresses),
+      totalBinds: safeCount(data.stats?.totalBinds),
+      maxDec: safeNonNeg(data.stats?.maxDec),
     },
   };
 }
 
+/** 통계 카운터 정규화: 유한·음수 아님·정수(구버전/손상 → 0). */
+function safeCount(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+}
+/** 통계 실수(maxDec) 정규화: 유한·음수 아님(구버전/손상 → 0). */
+function safeNonNeg(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+}
+/** 표기법 정규화: 유효 3종만 채택(구버전/손상/악성 → 기본 scientific). */
+function safeNotation(v: unknown): 'scientific' | 'engineering' | 'standard' {
+  return v === 'engineering' || v === 'standard' ? v : 'scientific';
+}
 /** 체인 보유 배열을 항상 길이 CHAIN_TIERS로 정규화(구버전 길이 변화 방어). */
 function normalizeBought(arr: number[]): number[] {
   const out = new Array<number>(CHAIN_TIERS).fill(0);

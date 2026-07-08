@@ -86,26 +86,20 @@ export function deriveFtue(input: FtueInput): FtueState {
   const showCodexTab = discoveredCount > 0;
   const showMechanismSlot = layerIndex >= 2;
 
-  // 힌트(ux.md §3-1 단계별 1줄). 강요 아님 — 정보 제공.
-  //   ★카피는 공허 게임판 패러다임 정합(2단계): 버튼 폐기 → 떠다니는 물질을 만지고, 궤도 껍질을 누른다.
+  // 힌트(ux.md §3-1). 강요 아님 — 정보 제공. ★**액션 신호 기반**(stage 아님): 물 분자가 t=0에
+  //   자동 발견돼 stage가 즉시 'codex'로 뛰므로, stage로 힌트를 정하면 "결속하라"가 살 수 없는
+  //   초반 내내 뜬다(첫 T1 ≈ base_1·growth_1 E). → 살 수 없으면 "압축", 살 수 있으면 "결속",
+  //   결속 후엔 "가속", 층 진입 후엔 내러티브에 양보. 카피는 공허 게임판 패러다임(만지기·궤도 껍질).
   let hint: string | null = null;
-  switch (stage) {
-    case 'click':
-      hint = '떠다니는 물질을 만져 압축하라.';
-      break;
-    case 'firstTier':
-      hint = '궤도 껍질을 눌러 압축기를 결속 — 자동 압축이 시작된다.';
-      break;
-    case 'automating':
-      hint = '압축기가 스스로 작동한다. 더 작아진다.';
-      break;
-    case 'codex':
-      // 발견 자체는 토스트가 알림 — 힌트는 분자층 내내 보이므로 다음 행동을 안내(만지기→껍질 결속).
-      hint = '물질을 만져 압축하고, 궤도 껍질을 눌러 결속하라.';
-      break;
-    case 'layering':
-      hint = null; // 층 진입 비트가 내러티브를 담당(중복 방지).
-      break;
+  if (!hasBoughtAnyTier) {
+    // 첫 결속 전엔 층과 무관하게 안내 — 첫 T1이 원자층 진입 뒤에야 여유될 수 있어(rate 1/s) 층 게이트를 안 씀.
+    hint = canAffordFirstTier
+      ? '궤도 껍질을 눌러 압축기를 결속 — 자동 압축이 시작된다.'
+      : '떠다니는 물질을 만져 압축하라.';
+  } else if (layerIndex >= 2) {
+    hint = null; // 학습 완료 + 층 진입 → 층 전환 비트·메커니즘 안내에 양보(중복 방지).
+  } else {
+    hint = '압축기가 스스로 작동한다. 더 결속할수록 빨라진다.';
   }
 
   return {

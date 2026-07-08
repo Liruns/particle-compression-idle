@@ -17,7 +17,7 @@
 import { Decimal, D, ZERO, add, sub } from './core/bignum';
 import { getState, setState, createInitialState, CHAIN_TIERS, type GameState } from './core/state';
 import type { SlotPhase, PhaseState } from './core/layers/mechanics';
-import { PhaseOverlap, Harmonics } from './core/layers/mechanics';
+import { OrbitalResonance, PhaseOverlap, Harmonics } from './core/layers/mechanics';
 import { MANUAL_COMPRESS, PHASE_OVERLAP, RESONANCE } from './data/constants';
 import { GameLoop, Scheduler } from './core/loop';
 import { SaveManager, type LoadResult } from './core/save';
@@ -41,15 +41,19 @@ import {
   LAST_KNOWN_LAYER_INDEX,
   type LayerDefinition,
 } from './core/layers';
-import { formatNumber } from './core/format';
+import { formatNumber, setDefaultNotation, type NotationKind } from './core/format';
 import {
   previewPrestige,
   applyPrestigeReset,
   nextPrestigeIndex,
+  isBigCrunchAvailable,
+  previewBigCrunch,
+  applyBigCrunchReset,
   type PrestigePreview,
+  type BigCrunchPreview,
 } from './core/prestige';
 import { seedBought } from './core/state';
-import { prestigeBeat, prestigeExecLog } from './data/narrative';
+import { prestigeBeat, prestigeExecLog, bigCrunchExecLog, BIG_CRUNCH_BEAT } from './data/narrative';
 import {
   evaluateDiscoveries,
   evaluateMechDiscoveries,
@@ -69,6 +73,11 @@ import {
   isResearchUnlocked,
   type ResearchView,
 } from './core/research';
+import {
+  evaluateAchievements,
+  ACHIEVEMENT_TOTAL,
+  type AchievementContext,
+} from './core/achievements';
 
 /** 한 티어의 표시용 스냅샷(ui-flow §2-D 체인 테이블 한 행). */
 export interface TierSnapshot {
@@ -207,6 +216,8 @@ export interface PrestigeSnapshot {
   targetLayerEn: string;
   /** 첫 상전이(PT1) 여부 — UI 특별 강조 연출(딥 퍼플, 2줄 내러티브, ui-flow §5-B). */
   isFirst: boolean;
+  /** 빅 크런치(PT7)인가 — true면 재하강 프레이밍(종착점 언어 금지). targetLayer=분자층. */
+  isBigCrunch: boolean;
   /** 상전이 횟수(N_prestige). */
   count: number;
 }
@@ -230,6 +241,37 @@ export interface OfflineSnapshot {
   dE: Decimal;
   /** 지급된 D 증분(공명 방치 기본 — 0일 수 있음). */
   dD: Decimal;
+}
+
+/** 통계(기록) 표시용 스냅샷(§stats). 진행 로직 비관여 — 표시 전용 집계. */
+export interface StatsSnapshot {
+  /** 수동 압축 누적 횟수. */
+  manualCompresses: number;
+  /** 결속(구매) 누적 수량. */
+  totalBinds: number;
+  /** 전 생애 최대 dec. */
+  maxDec: number;
+  /** 총 플레이타임(초). */
+  playtimeSeconds: number;
+  /** 상전이 횟수 / 재하강 run index. */
+  prestigeCount: number;
+  runIndex: number;
+  /** 누적 압축 깊이 C(전 런) / 누적 발견 데이터 D. */
+  lifetimeC: Decimal;
+  lifetimeD: Decimal;
+  /** 구매한 연구 노드 수. */
+  researchCount: number;
+  /** 도달 최대 층 index. */
+  maxLayerIndex: number;
+}
+
+/** 관측 목표(업적) 표시용 스냅샷. 달성 집합 + 분모(뷰가 ACHIEVEMENTS 정의와 결합). */
+export interface AchievementsSnapshot {
+  /** 달성한 목표 ID 집합. */
+  earned: Set<string>;
+  /** 달성 수 / 전체 수. */
+  count: number;
+  total: number;
 }
 
 /** UI가 읽는 표시용 스냅샷(읽기 전용). Decimal 그대로 — format은 UI에서. */
@@ -279,6 +321,12 @@ export interface GameSnapshot {
   offline: OfflineSnapshot | null;
   totalTicks: number;
   loadKind: LoadResult['kind'];
+  /** 현재 표기법 설정(설정 패널 표시용). */
+  notation: NotationKind;
+  /** 통계(기록 패널). */
+  stats: StatsSnapshot;
+  /** 관측 목표(업적 패널). */
+  achievements: AchievementsSnapshot;
 }
 
 /** snapshot 구독자(Svelte가 등록). */
@@ -336,6 +384,8 @@ export class Game {
     const result = await this.save.load();
     this.loadKind = result.kind;
     setState(result.state);
+    // 저장된 표기법 설정을 표시 계층에 주입(formatNumber 전역 기본). 표시 전용 — 로직 불변.
+    setDefaultNotation(result.state.settings.notation);
 
     // 오프라인 복귀(M1.7, system-flows §7.1). 로드 직후 단 한 번 — meta.lastSave로부터 elapsed
     //   계산 → 끊긴 시점 rate × 유효시간 일괄 지급(economy §3.1 하한). 새 게임(lastSave≈now)은 0.
@@ -664,6 +714,9 @@ export class Game {
   private processProgression(dec: number): void {
     const s = getState();
 
+    // 전 생애 최대 dec 갱신(상전이 C 리셋을 넘어 유지 — 통계 "가장 깊이"). 표시 전용, 경제 불변.
+    if (dec > s.stats.maxDec) s.stats.maxDec = dec;
+
     // 층 진입(알려진 물리). 오프라인 점프로 여러 층을 건너뛰어도 각 진입을 순서대로 발행.
     const entered = layersEnteredSince(s.layers.currentIndex, dec);
     if (entered.length > 0) {
@@ -684,21 +737,22 @@ export class Game {
     //   상전이 후 C 리셋(dec=0)이라 dec 게이트 부적합 → 메커니즘 상태가 발견 경로(필러 ④ 미지 첫 결).
     this.evaluateUnknownDiscoveries(dec);
 
+    // 관측 목표(업적) 판정 — 영속 상태 파생. 새로 달성분만 집합 추가 + 이벤트 발행(멱등).
+    this.evaluateAchievementProgress();
+
     // 상전이 가능 판정(M1.5). 미지 벽(dec19~26) 도달 + 미실행 상전이가 있으면 점등.
     //   prestige_ready는 가능 상태 진입 순간 1회만(UI 탭 점등·사운드). 멱등 — 매 tick 재발화 안 함.
     const pIndex = nextPrestigeIndex(dec, s.prestige.count);
-    if (pIndex >= 1) {
+    const bigCrunch = pIndex < 1 && isBigCrunchAvailable(dec, s.prestige.count);
+    if (pIndex >= 1 || bigCrunch) {
       if (!this.prestigeReadyEmitted) {
         this.prestigeReadyEmitted = true;
-        const preview = previewPrestige(
-          dec,
-          s.prestige.count,
-          s.resources.lifetime_C,
-          s.prestige.qfClaimed,
-        );
+        const previewQF = bigCrunch
+          ? previewBigCrunch(dec, s.prestige.count, s.prestige.runIndex, s.resources.lifetime_C, s.prestige.qfClaimed)?.qfGain
+          : previewPrestige(dec, s.prestige.count, s.resources.lifetime_C, s.prestige.qfClaimed)?.qfGain;
         bus.emit('prestige_ready', {
-          prestigeIndex: pIndex,
-          previewQF: (preview ? preview.qfGain : ZERO).toString(),
+          prestigeIndex: bigCrunch ? 7 : pIndex,
+          previewQF: (previewQF ?? ZERO).toString(),
         });
       }
     } else {
@@ -730,6 +784,34 @@ export class Game {
     for (const id of newly) {
       s.codex.discovered.add(id);
       bus.emit('codexDiscover', { particleId: id });
+    }
+  }
+
+  /**
+   * 관측 목표(업적) 판정. 영속 상태로 컨텍스트를 만들어 새로 달성된 목표만 집합에 추가·발행(멱등).
+   *  ★순수 인정형 — 생산·경제 미관여(§13 가드레일). 큰 수는 log10(number)로 환산해 전달(Decimal 미유입).
+   */
+  private evaluateAchievementProgress(): void {
+    const s = getState();
+    const c = s.resources.lifetime_C;
+    const d = s.resources.D_lifetime;
+    const ctx: AchievementContext = {
+      maxDec: s.stats.maxDec,
+      maxLayerIndex: s.layers.currentIndex,
+      prestigeCount: s.prestige.count,
+      runIndex: s.prestige.runIndex,
+      codexCollected: discoverableCollected(s.codex.discovered),
+      codexCompletion: codexCompletion(s.codex.discovered),
+      researchCount: s.research.purchased.size,
+      manualCompresses: s.stats.manualCompresses,
+      totalBinds: s.stats.totalBinds,
+      lifetimeCLog10: c.gt(0) ? c.log10().toNumber() : 0,
+      lifetimeDLog10: d.gt(0) ? d.log10().toNumber() : 0,
+    };
+    const newly = evaluateAchievements(ctx, s.achievements.earned);
+    for (const id of newly) {
+      s.achievements.earned.add(id);
+      bus.emit('achievement_earned', { id });
     }
   }
 
@@ -792,6 +874,7 @@ export class Game {
     // 원자적 적용(§2.1 단계 3): E 차감 → bought 증가.
     s.resources.E = sub(s.resources.E, plan.cost);
     s.chain.bought[idx] = owned + plan.count;
+    s.stats.totalBinds += plan.count; // 통계: 누적 결속 수(표시 전용).
 
     bus.emit('chain_purchased', { tier, count: plan.count });
     this.notify();
@@ -825,6 +908,7 @@ export class Game {
     s.resources.lifetime_C = add(s.resources.lifetime_C, bump);
     // 클릭으로 dec가 임계를 넘었을 수 있음 — 층/도감 동기화.
     this.processProgression(computeDec(s.resources.C));
+    s.stats.manualCompresses += 1; // 통계: 누적 수동 압축(표시 전용).
     bus.emit('manual_compress', {});
     this.notify();
   }
@@ -940,6 +1024,73 @@ export class Game {
   }
 
   /**
+   * 빅 크런치(PT7) 실행 = 재하강(economy §4.4·§7.3·§7.4). 플레이어가 재하강 확인 시.
+   *   1. 미리보기(K=1.05 QF). 불가면 무시(이중 클릭 방어).
+   *   2. 재하강 리셋(applyBigCrunchReset): E·C·체인·**층(→분자)**·**count(→0)** 리셋 /
+   *      lifetime_C·QF(가산)·도감·연구·D_lifetime 보존 / **D_current × 회차곡선** / runIndex+1.
+   *   3. 모든 층별 메커니즘 리셋(오비탈 포함 — 분자층 재시작이므로 오비탈도 초기화).
+   *   4. bigCrunch 이벤트 + 재하강 비트(종착점 언어 금지 — "다시 내려간다").
+   * @returns 실행 성공 여부(UI 패널 닫기 분기).
+   */
+  executeBigCrunch(): boolean {
+    const s = getState();
+    const dec = computeDec(s.resources.C);
+    const preview: BigCrunchPreview | null = previewBigCrunch(
+      dec,
+      s.prestige.count,
+      s.prestige.runIndex,
+      s.resources.lifetime_C,
+      s.prestige.qfClaimed,
+    );
+    if (!preview) return false;
+
+    const reset = applyBigCrunchReset(
+      preview,
+      s.resources.QF,
+      s.resources.D_current,
+      s.prestige.runIndex,
+      seedBought,
+    );
+
+    // 리셋: E·C·체인·층(→분자)·count(→0, 벽 재통과).
+    s.resources.E = reset.E;
+    s.resources.C = reset.C;
+    s.chain.bought = reset.bought;
+    s.chain.produced = reset.produced;
+    s.layers.currentIndex = reset.layerIndex; // 분자층 dec0 재시작
+    s.prestige.count = reset.count;
+    s.prestige.runIndex = reset.runIndex;
+
+    // 보존·확정: QF 가산, qfClaimed 확정(K=1.05), D_current 회차곡선 보존(lifetime_C·D_lifetime·도감·연구 불변).
+    s.resources.QF = reset.QF;
+    s.prestige.qfClaimed = reset.qfClaimed;
+    s.resources.D_current = reset.dCurrent;
+
+    // 전 메커니즘 리셋(분자층 재시작 — 오비탈/위상/하모닉 전부 새 인스턴스).
+    s.mechanics.orbital = new OrbitalResonance();
+    s.mechanics.phase = new PhaseOverlap();
+    s.mechanics.harmonics = new Harmonics();
+
+    s.prestige.offlineBonusPending = true; // §3.3 재하강 직후 첫 오프라인 modifier=1.0
+    this.prestigeReadyEmitted = false;
+
+    // 진행 동기화(dec0 재시작 — 분자 재발견은 멱등, 이미 도감 보존).
+    this.processProgression(computeDec(s.resources.C));
+
+    bus.emit('bigCrunch', { runIndex: reset.runIndex });
+    // 재하강 비트(종착점 언어 금지, narrative §5-B — "재압축/유지/더 작은 것"). 첫 빅 크런치는 legendary.
+    bus.emit('prestige_beat', {
+      prestigeIndex: 7,
+      execLine: bigCrunchExecLog(formatNumber(preview.qfGain, 0), reset.runIndex),
+      beatLines: [...BIG_CRUNCH_BEAT],
+      isFirst: reset.runIndex === 1,
+    });
+
+    this.notify();
+    return true;
+  }
+
+  /**
    * 결정적 시간 전진(초). 테스트·오프라인·dev 검증용 — rAF 없이 고정 dt tick을 직접 돌린다.
    * (백그라운드 탭에서 rAF가 스로틀돼도 동일 로직을 재현. system-flows §12.1 결정성.)
    */
@@ -1050,7 +1201,11 @@ export class Game {
     if (phaseActive && phase.multiplier > 1) displayMult = displayMult.mul(phase.multiplier);
 
     // 상전이 스냅샷(M1.5). 미지 벽 도달 시만 점등. 미리보기로 QF 획득량·진입 층 계산.
+    //   빅 크런치(PT7)는 6벽 소진 + 플랑크 dec26 재도달 시 — 재하강 프레이밍(targetLayer=분자층, K=1.05).
     const preview = this.currentPreview(dec);
+    const bcPreview = preview
+      ? null
+      : previewBigCrunch(dec, s.prestige.count, s.prestige.runIndex, s.resources.lifetime_C, s.prestige.qfClaimed);
     const prestige: PrestigeSnapshot = preview
       ? {
           available: true,
@@ -1062,19 +1217,34 @@ export class Game {
           targetLayerKo: preview.targetLayer.nameKo,
           targetLayerEn: preview.targetLayer.nameEn,
           isFirst: s.prestige.count === 0, // 첫 상전이(아직 0회) → 특별 연출.
+          isBigCrunch: false,
           count: s.prestige.count,
         }
-      : {
-          available: false,
-          prestigeIndex: 0,
-          qfGain: ZERO,
-          qfTotal: s.prestige.qfClaimed,
-          nextMult: mult,
-          targetLayerKo: '',
-          targetLayerEn: '',
-          isFirst: s.prestige.count === 0,
-          count: s.prestige.count,
-        };
+      : bcPreview
+        ? {
+            available: true,
+            prestigeIndex: 7,
+            qfGain: bcPreview.qfGain,
+            qfTotal: bcPreview.qfTotal,
+            nextMult: productionMult(bcPreview.qfTotal),
+            targetLayerKo: layerByIndex(1)?.nameKo ?? '분자층',
+            targetLayerEn: layerByIndex(1)?.nameEn ?? 'Molecule',
+            isFirst: s.prestige.runIndex === 0, // 첫 빅 크런치 특별 연출.
+            isBigCrunch: true,
+            count: s.prestige.count,
+          }
+        : {
+            available: false,
+            prestigeIndex: 0,
+            qfGain: ZERO,
+            qfTotal: s.prestige.qfClaimed,
+            nextMult: mult,
+            targetLayerKo: '',
+            targetLayerEn: '',
+            isFirst: s.prestige.count === 0,
+            isBigCrunch: false,
+            count: s.prestige.count,
+          };
 
     // 표시 dC/dt: 전역 displayMult × 연구 T1 배율(체인 내부 — 실제 C 생산율과 일치).
     let rateC = owned[0].mul(displayMult);
@@ -1127,6 +1297,24 @@ export class Game {
       offline: this.offlineSnapshot,
       totalTicks: this.loop.totalTicks,
       loadKind: this.loadKind,
+      notation: s.settings.notation,
+      stats: {
+        manualCompresses: s.stats.manualCompresses,
+        totalBinds: s.stats.totalBinds,
+        maxDec: s.stats.maxDec,
+        playtimeSeconds: s.meta.totalPlaytime,
+        prestigeCount: s.prestige.count,
+        runIndex: s.prestige.runIndex,
+        lifetimeC: s.resources.lifetime_C,
+        lifetimeD: s.resources.D_lifetime,
+        researchCount: s.research.purchased.size,
+        maxLayerIndex: s.layers.currentIndex,
+      },
+      achievements: {
+        earned: s.achievements.earned,
+        count: s.achievements.earned.size,
+        total: ACHIEVEMENT_TOTAL,
+      },
     };
   }
 
@@ -1158,6 +1346,19 @@ export class Game {
   importSave(raw: string): void {
     const next: GameState = this.save.importSave(raw);
     setState(next);
+    this.notify();
+  }
+
+  /**
+   * 표기법 설정 변경(설정 패널). state.settings에 기록 + 표시 전역 기본 갱신 + 즉시 저장·통지.
+   *   표시 전용 — 경제·수식 불변. 저장으로 다음 로드에도 유지.
+   */
+  setNotation(n: NotationKind): void {
+    const s = getState();
+    if (s.settings.notation === n) return;
+    s.settings.notation = n;
+    setDefaultNotation(n);
+    void this.persist();
     this.notify();
   }
 

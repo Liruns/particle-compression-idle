@@ -9,16 +9,25 @@
   import { LAYERS } from '../core/layers';
   import { particlesByLayer, type Particle } from '../data/particles';
   import { holographicMultiplier, layerCompletion } from '../core/codex';
+  import { formatScale } from '../core/format';
 
   export let codex: GameSnapshot['codex'];
 
-  /** 등급 → 한 글자 표식. */
+  /** 등급 → 한 글자 표식(흔/희/전 — 흔함·희귀·전설). */
   const rarityBadge: Record<Particle['rarity'], string> = {
-    COMMON: '알',
-    UNCOMMON: '알',
-    RARE: '가',
-    EPIC: '가',
+    COMMON: '흔',
+    UNCOMMON: '흔',
+    RARE: '희',
+    EPIC: '희',
     LEGENDARY: '전',
+  };
+  /** 등급 → 전체 이름(뱃지 title 툴팁). */
+  const rarityKo: Record<Particle['rarity'], string> = {
+    COMMON: '흔함',
+    UNCOMMON: '드묾',
+    RARE: '희귀',
+    EPIC: '영웅',
+    LEGENDARY: '전설',
   };
 
   let selectedLayer = 1;
@@ -98,13 +107,13 @@
     {#each selectedParticles as p (p.id)}
       {@const found = discovered.has(p.id)}
       <li class="cx-row" class:found class:legendary={found && p.rarity === 'LEGENDARY'}>
-        <span class="cx-badge">{rarityBadge[p.rarity]}</span>
+        <span class="cx-badge" title={rarityKo[p.rarity]}>{rarityBadge[p.rarity]}</span>
         <span class="cx-name">{found ? p.nameKo : '██████'}</span>
         <span class="cx-phys">
           {#if found}
             {#if p.charge !== null}<span>q{p.charge > 0 ? '+' : ''}{p.charge}</span>{/if}
             {#if p.spin !== null}<span>s{p.spin}</span>{/if}
-            <span class="cx-scale">{p.scaleM} m</span>
+            <span class="cx-scale">{formatScale(p.scaleM)}</span>
           {/if}
         </span>
         <span class="cx-flavor">{found ? p.flavorKo : lockHint(p)}</span>

@@ -106,6 +106,15 @@ export interface ResearchState {
 }
 
 /**
+ * achievements: 관측 목표 달성 집합(영구 보존, 상전이/재하강 불변). codex/research와 동형.
+ *  메모리 Set<string>, 저장 시 정렬 배열. 순수 인정형 — 생산 배율 없음(§13 가드레일, 경제 불변).
+ */
+export interface AchievementsState {
+  /** 달성한 관측 목표 ID 집합. */
+  earned: Set<string>;
+}
+
+/**
  * mechanics: 층별 메커니즘 모듈의 **살아있는 인스턴스**(tech-arch §1.1·§4.4 자기완결).
  *  Decimal 필드와 같은 규칙: 메모리에선 live 객체, 저장 시 save 모듈이 .serialize()로 평문화.
  *  M1.4: 오비탈 공명(원자층 L2). M1.6: 위상 겹침(프리온 L6) + 진동 하모닉스(끈 L7).
@@ -132,6 +141,19 @@ export interface SettingsState {
 }
 
 /**
+ * stats: 누적 통계(§1.1 "정확 카운터 = native 정수"). 진행 로직엔 안 쓰이는 표시 전용 집계.
+ *  세이브 봉투에 옵셔널로 실려 보존(구버전=deserialize 기본 0). 상전이/재하강에도 리셋 안 함(전 생애 누적).
+ */
+export interface StatsState {
+  /** 수동 압축(세포 만지기) 누적 횟수. */
+  manualCompresses: number;
+  /** 압축기 결속(구매) 누적 수량. */
+  totalBinds: number;
+  /** 전 생애 도달 최대 dec(상전이 C 리셋을 넘어 유지 — "가장 깊이 내려간 곳"). */
+  maxDec: number;
+}
+
+/**
  * GameState — 중앙 단일 상태. 메모리 표현(Decimal 살아있음).
  * 후속 확장 자리: layers / codex / research / stats / events 구독 상태 등.
  */
@@ -144,8 +166,9 @@ export interface GameState {
   codex: CodexState; // M1.3: 발견 입자 ID 집합(영구 보존)
   mechanics: MechanicsState; // M1.4: 층별 메커니즘 살아있는 인스턴스(오비탈 공명)
   research: ResearchState; // M1.7: 구매 연구 노드 ID 집합(영구 보존)
+  achievements: AchievementsState; // 관측 목표 달성 집합(영구 보존, 순수 인정형)
   settings: SettingsState;
-  // TODO(M3+): stats     — 누적 통계(정확 카운터 = native 정수), D_total 텔레메트리(R8)
+  stats: StatsState; // 누적 통계(표시 전용, 전 생애 보존)
 }
 
 /** 8단 체인. */
@@ -201,10 +224,18 @@ export function createInitialState(now: number = Date.now()): GameState {
     research: {
       purchased: new Set<string>(),
     },
+    achievements: {
+      earned: new Set<string>(),
+    },
     settings: {
       offlinePrecise: false,
       notation: 'scientific',
       colorblind: null,
+    },
+    stats: {
+      manualCompresses: 0,
+      totalBinds: 0,
+      maxDec: 0,
     },
   };
 }

@@ -22,13 +22,20 @@
   import { CanvasRenderer } from './render';
   import type { BoardInput, BoardShell, BoardPhase, BoardHarmonics, BoardPhaseState } from './render/board';
   import { PHASE_OVERLAP } from './data/constants';
-  import { reducedMotion } from './ui/stores/reduced-motion';
+  import { prefs, effectiveReducedMotion, type Prefs } from './ui/stores/prefs';
+  import { AudioEngine } from './core/audio';
+  import type { NotationKind } from './core/format';
   import { particleById } from './data/particles';
-  import { layerEntryBeat } from './data/narrative';
+  import { layerEntryBeat, FIRST_SCREEN_LINES, WHISPER } from './data/narrative';
   import CodexView from './ui/CodexView.svelte';
   import ResearchView from './ui/ResearchView.svelte';
   import PrestigeView from './ui/PrestigeView.svelte';
   import OfflineModal from './ui/OfflineModal.svelte';
+  import SettingsView from './ui/SettingsView.svelte';
+  import StatsView from './ui/StatsView.svelte';
+  import AchievementsView from './ui/AchievementsView.svelte';
+  import HelpView from './ui/HelpView.svelte';
+  import { achievementById } from './core/achievements';
   import Toast from './ui/Toast.svelte';
 
   let snap: GameSnapshot | null = null;
@@ -41,9 +48,21 @@
   let bgCanvas: HTMLCanvasElement | null = null;
   let renderer: CanvasRenderer | null = null;
   let lastSlug = '';
+  /** 미지 층(index≥6)에 이미 들어와 봤는가 — 첫 진입만 머니샷. 로드 세이브가 미지면 start 후 true. */
+  let seenUnknown = false;
   let rmUnsub: (() => void) | null = null;
   let bgResizeObserver: ResizeObserver | null = null;
   let onWindowResize: (() => void) | null = null;
+
+  /** 첫 화면 인트로(신규 게임 부팅 시 1회, narrative §5-D "물질이 있다. 압축하라."). 잠깐 뜨고 사라짐. */
+  let showIntro = false;
+  let introTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // 절차적 사운드(M2.4). 첫 포인터/키 제스처에서 unlock(브라우저 자동재생 정책).
+  let audio: AudioEngine | null = null;
+  let audioUnlocked = false;
+  let prefsUnsub: (() => void) | null = null;
+  let curPrefs: Prefs = { muted: false, volume: 0.7, motion: 'auto', ambient: true };
 
   /** 결속(구매) 수량 모드 — 공허 좌상단 셀렉터. */
   let buyMode: BuyMode = 1;
@@ -55,7 +74,7 @@
   ];
 
   /** 부른 디바이스(개입 bloom 오버레이). null=관조. */
-  type Panel = 'research' | 'codex' | 'prestige';
+  type Panel = 'research' | 'codex' | 'prestige' | 'settings' | 'stats' | 'achievements' | 'help';
   let activePanel: Panel | null = null;
 
   /** 포인터 드래그(누른 채 쓸어담기) 상태. */
@@ -70,6 +89,9 @@
   let prevPhase = false;
   let prevHarmonics = false;
 
+  /** 업적 토스트 게이트 — 부팅/로드 catch-up 달성(구세이브 다수 동시 달성)은 조용히 흡수. */
+  let achievementsReady = false;
+
   onMount(async () => {
     game = new Game();
     unsub = game.subscribe((s) => {
@@ -79,7 +101,17 @@
     installUnloadSave(game);
 
     setupRenderer();
-    rmUnsub = reducedMotion.subscribe((v) => renderer?.setReducedMotion(v));
+    rmUnsub = effectiveReducedMotion.subscribe((v) => renderer?.setReducedMotion(v));
+
+    // 사운드 엔진 — 이벤트 버스 구독(읽기 전용). 층 인덱스로 음역 결정. prefs로 mute/volume 반영.
+    audio = new AudioEngine({ getLayerIndex: () => snap?.layer.index ?? 1 });
+    audio.bind(bus);
+    prefsUnsub = prefs.subscribe((p) => {
+      curPrefs = p;
+      audio?.setMuted(p.muted);
+      audio?.setVolume(p.volume);
+      audio?.setAmbientEnabled(p.ambient);
+    });
 
     if (import.meta.env.DEV) {
       (window as unknown as { forceLayer: (slug: string) => void }).forceLayer = (slug: string) => {
@@ -94,6 +126,8 @@
         if (!p) return;
         const kind = p.rarity === 'LEGENDARY' ? 'legendary' : 'discover';
         toast?.push(kind, [`${p.nameKo} — 도감에 기록됨`]);
+        // 발견 종소리 — 등급(legendary)은 App만 알기에 직접 cue(엔진 자동구독 제외).
+        audio?.cue('codexDiscover', { legendary: kind === 'legendary' });
       }),
     );
     busUnsubs.push(
@@ -108,15 +142,37 @@
         toast?.push(isFirst ? 'legendary' : 'beat', lines);
       }),
     );
+    busUnsubs.push(
+      bus.on('achievement_earned', ({ id }) => {
+        if (!achievementsReady) return; // 부팅/로드 catch-up 억제
+        const a = achievementById(id);
+        if (a) toast?.push('discover', [`관측 목표 달성 — ${a.nameKo}`]);
+      }),
+    );
 
     await game.start();
+    // ★ 반응형 snap은 첫 루프 틱 전까지 초기 스냅샷(loadKind 기본 'fresh')에 머문다(setState가 리스너를
+    //   동기 통지 안 함). 부팅 판단은 권위 있는 post-load 스냅샷을 직접 읽어야 정확하다(손상/복구·활성 메커니즘).
+    const boot = game.snapshot();
     // 부팅·로드 동안 활성된 메커니즘은 안내 발화 안 함 — 시작 후의 실제 진입 전이만 가르친다.
-    if (snap) {
-      prevResonance = snap.resonance.active;
-      prevPhase = snap.phase.active;
-      prevHarmonics = snap.harmonics.active;
-    }
+    prevResonance = boot.resonance.active;
+    prevPhase = boot.phase.active;
+    prevHarmonics = boot.harmonics.active;
     mechIntroEnabled = true;
+    achievementsReady = true;
+    // 로드된 세이브가 이미 미지 층이면 머니샷 소진 처리(재방문엔 안 뜸). 알려진 물리/새 게임이면 false 유지.
+    seenUnknown = boot.layer.index >= 6;
+    // 신규 게임(세이브 없음) 첫 부팅 → 오프닝 비트(FIRST_SCREEN_LINES)를 잠깐 표시 후 페이드(게임성 첫 훅).
+    if (boot.loadKind === 'fresh' && boot.stats.playtimeSeconds < 2) {
+      showIntro = true;
+      introTimer = setTimeout(() => (showIntro = false), 4200);
+    }
+    // 세이브 손상/복구를 사용자에게 통지(save LoadResult가 구분해 둔 신호 — 조용한 데이터 유실 방지).
+    if (boot.loadKind === 'recovered') {
+      toast?.push('notice', ['세이브가 손상되어 백업에서 복구했습니다.', '최근 진행의 일부가 유실될 수 있습니다.']);
+    } else if (boot.loadKind === 'corrupt') {
+      toast?.push('notice', ['세이브를 읽을 수 없어 새로 시작합니다.', '손상된 원본은 안전하게 보존해 두었습니다.']);
+    }
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game;
   });
 
@@ -140,7 +196,10 @@
     unsub?.();
     for (const u of busUnsubs) u();
     rmUnsub?.();
+    prefsUnsub?.();
+    audio?.dispose();
     if (savedTimer) clearTimeout(savedTimer);
+    if (introTimer) clearTimeout(introTimer);
     bgResizeObserver?.disconnect();
     if (onWindowResize) window.removeEventListener('resize', onWindowResize);
     renderer?.dispose();
@@ -152,7 +211,7 @@
     if (!bgCanvas) return;
     // 단일 풀스크린 캔버스(세계 배경 + 전경 게임판 합성). 구 게이지 글로우 캔버스는 폐기됨.
     renderer = new CanvasRenderer({ bgCanvas });
-    renderer.setReducedMotion($reducedMotion);
+    renderer.setReducedMotion($effectiveReducedMotion);
     if (snap) {
       lastSlug = snap.layer.slug;
       renderer.onLayerChange(snap.layer.slug);
@@ -173,8 +232,14 @@
   function pushRender(s: GameSnapshot): void {
     if (!renderer) return;
     if (s.layer.slug !== lastSlug) {
+      const first = lastSlug !== ''; // 부팅 첫 슬러그(빈 lastSlug)는 즉시 스냅 — 전환 아님
       lastSlug = s.layer.slug;
-      renderer.onLayerChange(s.layer.slug); // 세계·게임판 색은 렌더러가 slug로 직접 구동(data-layer 불요)
+      // 머니샷: 미지 층(index≥6)으로 *처음* 넘는 순간(쿼크→프리온 첫 상전이) = 색온도 식는 머니샷(art-cosmic §6).
+      const enteringUnknown = s.layer.index >= 6;
+      const moneyShot = first && enteringUnknown && !seenUnknown;
+      if (enteringUnknown) seenUnknown = true;
+      renderer.onLayerChange(s.layer.slug, moneyShot); // 세계·게임판 색은 렌더러가 slug로 직접 구동
+      audio?.setLayer(s.layer.index); // 앰비언트 사운드스케이프 층 크로스페이드(사운드 2차)
     }
     renderer.gameBoard.setInput(buildBoardInput(s));
     layerRgb = renderer.layerColorRGB;
@@ -269,6 +334,7 @@
 
   function onPointerDown(e: PointerEvent): void {
     if (!renderer || !game || !snap || e.button !== 0) return;
+    unlockAudio();
     pointerDown = true;
     const { x, y } = canvasXY(e);
     renderer.gameBoard.setPointer(x, y);
@@ -336,7 +402,23 @@
       return;
     }
     lastFocused = (document.activeElement as HTMLElement) ?? null;
+    unlockAudio();
     activePanel = p;
+  }
+
+  /** 첫 사용자 제스처에서 사운드 unlock(자동재생 정책) + 현재 prefs 재적용(ctx 지연 생성). */
+  function unlockAudio(): void {
+    // 첫 제스처 시 오프닝 인트로도 즉시 소거(만지려는 플레이어를 안 막음).
+    if (showIntro) {
+      showIntro = false;
+      if (introTimer) clearTimeout(introTimer);
+    }
+    if (audioUnlocked || !audio) return;
+    audioUnlocked = true;
+    audio.unlock();
+    audio.setMuted(curPrefs.muted);
+    audio.setVolume(curPrefs.volume);
+    audio.setAmbientEnabled(curPrefs.ambient);
   }
   function closePanel(): void {
     activePanel = null;
@@ -380,12 +462,47 @@
       },
     };
   }
+  /** 입력 필드(가져오기 textarea 등)에 포커스면 게임 단축키 억제 — 타이핑 보호. */
+  function isTypingTarget(el: EventTarget | null): boolean {
+    const t = el as HTMLElement | null;
+    if (!t) return false;
+    const tag = t.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable;
+  }
   function onKeydown(e: KeyboardEvent): void {
+    unlockAudio();
+    if (isTypingTarget(e.target)) return; // 텍스트 입력 중엔 단축키 무시
     if (e.key === 'Escape' && activePanel) closePanel();
-    else if (e.key === '1') buyMode = 1;
+    else if (e.key === '?') {
+      e.preventDefault();
+      openPanel('help');
+    } else if (e.key === ' ' && !activePanel) {
+      // 스페이스 = 압축(관조 중, 포커스가 캔버스/바디일 때만 — 버튼 활성화와 충돌 방지).
+      const el = document.activeElement;
+      if (!el || el === document.body || (el as HTMLElement).classList?.contains('game-canvas')) {
+        e.preventDefault();
+        game?.manualCompress();
+      }
+    } else if (e.key === '1') buyMode = 1;
     else if (e.key === '2') buyMode = 10;
     else if (e.key === '3') buyMode = 100;
     else if (e.key === '4' || e.key.toLowerCase() === 'm') buyMode = 'max';
+  }
+
+  // --- 설정(game 위임) ----------------------------------------------------------
+  function onNotation(n: NotationKind) {
+    game?.setNotation(n);
+  }
+  function onExport(): string {
+    return game?.exportSave() ?? '';
+  }
+  function onImport(raw: string): void {
+    // 검증 실패 시 game.importSave가 throw → SettingsView가 잡아 인라인 오류.
+    game?.importSave(raw);
+  }
+  function onReset(): void {
+    game?.resetToFresh();
+    closePanel();
   }
 
   // --- game 위임(오버레이 뷰) ---------------------------------------------------
@@ -405,8 +522,9 @@
     savedTimer = setTimeout(() => (justSaved = false), 1500);
   }
   function onPrestige() {
-    const result = game?.executePrestige();
-    if (result) closePanel(); // 실행 성공 → 관조로 복귀(새 층 하강).
+    // 빅 크런치(재하강)는 별도 실행 경로. 스냅샷 isBigCrunch로 분기(단방향).
+    const ok = snap?.prestige.isBigCrunch ? game?.executeBigCrunch() : game?.executePrestige();
+    if (ok) closePanel(); // 실행 성공 → 관조로 복귀(새 층 하강/재하강).
   }
   function onPrestigeContinue() {
     closePanel();
@@ -415,14 +533,37 @@
   // --- 파생(FTUE 점진 공개·점등 — 정보 로직 보존 §7-C#3) ------------------------
   $: showCodexNode = snap?.ftue.showCodexTab ?? false;
   $: codexCount = snap?.codex.collected ?? 0;
+  $: achieveCount = snap?.achievements.count ?? 0;
   $: showResearchNode = snap?.ftue.showResearchTab ?? false;
   $: showPrestigeNode = snap?.prestige.available ?? false;
   $: prestigeFirst = (snap?.prestige.available && snap?.prestige.isFirst) ?? false;
+  $: prestigeBig = snap?.prestige.isBigCrunch ?? false;
   // 노드가 사라졌는데 그 패널이 열려 있으면 닫음(점등 해소·로드 직후 방어).
   $: if (activePanel === 'prestige' && !showPrestigeNode) activePanel = null;
   $: if (activePanel === 'research' && !showResearchNode) activePanel = null;
   // QF 성표는 층 발광색을 따른다(§3-C). layerRgb는 pushRender에서 renderer.layerColorRGB로 갱신.
   $: qfStyle = `color: rgba(${layerRgb}, 0.82);`;
+  // 열린 패널의 접근명(role=dialog aria-label — 스크린리더가 "이름 없는 dialog"로 읽지 않게).
+  $: panelTitle =
+    activePanel === 'research'
+      ? '연구'
+      : activePanel === 'codex'
+        ? '도감'
+        : activePanel === 'prestige'
+          ? prestigeBig
+            ? '빅 크런치'
+            : prestigeFirst
+              ? '미지 진입'
+              : '상전이'
+          : activePanel === 'stats'
+            ? '기록'
+            : activePanel === 'achievements'
+              ? '관측 목표'
+              : activePanel === 'settings'
+                ? '설정'
+                : activePanel === 'help'
+                  ? '관측 안내'
+                  : '';
 </script>
 
 <svelte:window on:keydown={onKeydown} on:pointerup={endPointer} on:blur={endPointer} />
@@ -436,12 +577,22 @@
   on:pointerdown={onPointerDown}
   on:pointermove={onPointerMove}
   on:pointerleave={onPointerLeave}
+  on:pointercancel={onPointerLeave}
   aria-label="공허 게임판 — 떠다니는 물질을 만져 압축, 궤도 껍질을 눌러 결속"
 ></canvas>
 
 <!-- 오프라인 복귀 모달(ui-flow §10, 정보 로직 보존). -->
 {#if snap?.offline}
   <OfflineModal offline={snap.offline} onDismiss={onDismissOffline} />
+{/if}
+
+<!-- 오프닝 인트로(신규 게임 1회, narrative §5-D) — 공허 중앙에 잠깐 떠오르는 첫 비트. 상호작용 비차단. -->
+{#if showIntro}
+  <div class="intro" class:reduced={$effectiveReducedMotion} aria-hidden="true">
+    {#each FIRST_SCREEN_LINES as line, i}
+      <div class="intro-line" style="animation-delay: {i * 0.7}s">{line}</div>
+    {/each}
+  </div>
 {/if}
 
 {#if snap}
@@ -464,7 +615,7 @@
       </div>
       <div class="res res-c">
         <span class="r-sym">C</span><span class="r-val">{formatNumber(snap.C, 2)}</span>
-        <span class="r-rate">{#if snap.rateC.gt(0)}+{formatNumber(snap.rateC, 2)}/s{/if}</span>
+        <span class="r-rate">깊이</span>
       </div>
       {#if snap.ftue.showResourceD}
         <div class="res res-d">
@@ -478,9 +629,11 @@
           <span class="r-rate">영구</span>
         </div>
       {/if}
-      <div class="res res-mult">
-        <span class="r-sym">배율</span><span class="r-val">×{formatNumber(snap.mult, 3)}</span>
-      </div>
+      {#if snap.mult.gt(1)}
+        <div class="res res-mult">
+          <span class="r-sym">배율</span><span class="r-val">×{formatNumber(snap.mult, 3)}</span>
+        </div>
+      {/if}
     </div>
 
     <!-- 좌하단: r(반경) + 층 — 성표 주석. 작아질수록 더 광막(작음=숭고 §2-A). -->
@@ -492,29 +645,57 @@
     <!-- 우하단: 힌트(FTUE) + 속삭임. -->
     <div class="annot whisper">
       {#if snap.ftue.hint}<div class="hint">{snap.ftue.hint}</div>{/if}
-      <div class="murmur">물질 속으로, 영원히 천천히 떨어진다.</div>
+      <div class="murmur">{snap.stats.runIndex > 0 ? WHISPER : '물질 속으로, 영원히 천천히 떨어진다.'}</div>
     </div>
 
     <!-- 하단 중앙: 잠든 디바이스 노드(개입). 부르면 bloom. (§3-B 가장자리 발광 노드) -->
     <div class="dock">
-      {#if showResearchNode}
-        <button class="node" class:on={activePanel === 'research'} on:click={() => openPanel('research')}
-          >연구</button>
-      {/if}
-      {#if showCodexNode}
-        <button class="node" class:on={activePanel === 'codex'} on:click={() => openPanel('codex')}>
-          도감{#if codexCount > 0}<span class="badge">{codexCount}</span>{/if}
-        </button>
-      {/if}
-      {#if showPrestigeNode}
+      <!-- 다이제틱 장치(게임 진행): 어둠에서 피어나는 노드 (§3-B). -->
+      <span class="dock-group">
+        {#if showResearchNode}
+          <button class="node" class:on={activePanel === 'research'} on:click={() => openPanel('research')}
+            >연구</button>
+        {/if}
+        {#if showCodexNode}
+          <button class="node" class:on={activePanel === 'codex'} on:click={() => openPanel('codex')}>
+            도감{#if codexCount > 0}<span class="badge">{codexCount}</span>{/if}
+          </button>
+        {/if}
+        {#if showPrestigeNode}
+          <button
+            class="node node-prestige"
+            class:on={activePanel === 'prestige'}
+            class:first={prestigeFirst || prestigeBig}
+            on:click={() => openPanel('prestige')}
+            >{prestigeBig ? '빅 크런치' : prestigeFirst ? '미지 진입' : '상전이'}</button>
+        {/if}
+      </span>
+      <span class="dock-sep" aria-hidden="true"></span>
+      <!-- 시스템 유틸(관조 밖 도구): 조용한 톤. -->
+      <span class="dock-group dock-sys">
+        <button class="node node-quiet" class:saved={justSaved} on:click={onSave} title="저장"
+          >{justSaved ? '저장됨 ✓' : '저장'}</button>
         <button
-          class="node node-prestige"
-          class:on={activePanel === 'prestige'}
-          class:first={prestigeFirst}
-          on:click={() => openPanel('prestige')}>{prestigeFirst ? '미지 진입' : '상전이'}</button>
-      {/if}
-      <button class="node node-quiet" class:saved={justSaved} on:click={onSave} title="저장"
-        >{justSaved ? '저장됨 ✓' : '저장'}</button>
+          class="node node-quiet"
+          class:on={activePanel === 'stats'}
+          on:click={() => openPanel('stats')}
+          title="기록">기록</button>
+        <button
+          class="node node-quiet"
+          class:on={activePanel === 'achievements'}
+          on:click={() => openPanel('achievements')}
+          title="관측 목표">목표<span class="badge badge-quiet">{achieveCount}</span></button>
+        <button
+          class="node node-quiet"
+          class:on={activePanel === 'settings'}
+          on:click={() => openPanel('settings')}
+          title="설정">설정</button>
+        <button
+          class="node node-quiet"
+          class:on={activePanel === 'help'}
+          on:click={() => openPanel('help')}
+          title="관측 안내 (? 키)">안내</button>
+      </span>
     </div>
   </div>
 
@@ -528,7 +709,7 @@
       on:click={closePanel}
       on:keydown={(e) => e.key === 'Enter' && closePanel()}>
     </div>
-    <div class="bloom-panel" role="dialog" aria-modal="true" tabindex="-1" use:focusTrap>
+    <div class="bloom-panel" role="dialog" aria-modal="true" aria-label={panelTitle} tabindex="-1" use:focusTrap>
       <button class="bloom-close" on:click={closePanel} aria-label="닫기">✕</button>
       <div class="bloom-body">
         {#if activePanel === 'research'}
@@ -537,6 +718,19 @@
           <CodexView codex={snap.codex} />
         {:else if activePanel === 'prestige'}
           <PrestigeView prestige={snap.prestige} onPrestige={onPrestige} onContinue={onPrestigeContinue} />
+        {:else if activePanel === 'settings'}
+          <SettingsView
+            notation={snap.notation}
+            {onNotation}
+            {onExport}
+            {onImport}
+            {onReset} />
+        {:else if activePanel === 'stats'}
+          <StatsView stats={snap.stats} />
+        {:else if activePanel === 'achievements'}
+          <AchievementsView achievements={snap.achievements} />
+        {:else if activePanel === 'help'}
+          <HelpView />
         {/if}
       </div>
     </div>
@@ -700,9 +894,32 @@
     bottom: 18px;
     transform: translateX(-50%);
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 10px;
     pointer-events: auto;
     position: fixed;
+  }
+  /* 두 그룹: 다이제틱 장치 | 시스템 유틸. 사이 미묘한 구분(평범한 버튼바 회피). */
+  .dock-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .dock-group:empty {
+    display: none;
+  }
+  /* 구분선 — 아주 옅은 세로 획(어둠 위 성긴 빛). 장치 그룹이 비면 숨김. */
+  .dock-sep {
+    width: 1px;
+    height: 14px;
+    background: rgba(150, 166, 174, 0.16);
+  }
+  .dock-group:empty + .dock-sep {
+    display: none;
+  }
+  /* 시스템 유틸은 한 톤 더 물러나게(관조 밖 도구 — 게임 장치보다 조용히). */
+  .dock-sys {
+    opacity: 0.82;
   }
   .node {
     background: none;
@@ -765,6 +982,12 @@
     padding: 0 5px;
     min-width: 15px;
     text-align: center;
+  }
+  /* 목표 노드 배지 — 조용한 QF 톤(도감 보라 badge와 구분, 관조 팔레트). */
+  .badge-quiet {
+    color: rgba(200, 214, 220, 0.7);
+    background: rgba(120, 134, 142, 0.28);
+    margin-left: 4px;
   }
 
   /* 개입 bloom 오버레이 — 어둠이 깊어지고 디바이스가 피어난다. */
@@ -859,6 +1082,55 @@
     font-family: var(--font-narrative, 'Newsreader', 'Gothic A1', serif);
   }
 
+  /* 오프닝 인트로(신규 게임 1회) — 공허 중앙, 하강하는 첫 문장. 상호작용 비차단, 팝업 아래(z5). */
+  .intro {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+    animation: intro-out 4.2s ease-in forwards;
+  }
+  .intro-line {
+    font-family: var(--font-narrative, 'Newsreader', 'Gothic A1', serif);
+    font-size: clamp(20px, 3.4vw, 34px);
+    letter-spacing: 0.06em;
+    color: rgba(224, 238, 244, 0.9);
+    text-shadow: 0 0 24px rgba(0, 0, 0, 0.9);
+    opacity: 0;
+    animation: intro-in 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes intro-in {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes intro-out {
+    0%,
+    78% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  /* 모션 최소: 애니메이션 없이 정적 표시(타이머가 제거). */
+  .intro.reduced,
+  .intro.reduced .intro-line {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
   /* 좁은 화면(모바일/세로): 주석 크라우딩 완화 — 폰트·여백 축소, 속삭임 숨김(공허 우선). */
   @media (max-width: 600px) {
     .buymode {
@@ -879,25 +1151,31 @@
     }
     .vitals {
       left: 14px;
-      bottom: 60px; /* 하단 독과 겹치지 않게 위로 */
+      bottom: 118px; /* 하단 독(모바일 최대 3줄 접힘) 위로 — 겹침 방지 */
     }
     .vitals .v-r {
       font-size: 13px;
     }
     .whisper {
       right: 14px;
-      bottom: 58px;
-      max-width: 52vw;
+      bottom: 118px;
+      max-width: 46vw;
     }
     .whisper .murmur {
       display: none; /* 좁은 화면에선 속삭임 생략 — 힌트만 */
     }
     .dock {
       bottom: 12px;
-      gap: 2px;
+      gap: 6px;
       flex-wrap: wrap;
       justify-content: center;
       max-width: 96vw;
+    }
+    .dock-group {
+      display: contents; /* 모바일: 그룹 평탄화 — 8노드가 한 흐름으로 균일 접힘(중첩 wrap 회피) */
+    }
+    .dock-sep {
+      display: none; /* 좁은 화면: 그룹이 줄바꿈되므로 세로 구분선 생략 */
     }
     .node {
       padding: 6px 9px;

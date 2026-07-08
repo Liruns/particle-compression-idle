@@ -359,11 +359,16 @@ export class BoardRenderer {
     return { x: this.cx + Math.cos(ang) * rad, y: this.cy + Math.sin(ang) * rad, r: rad };
   }
 
-  /** 위상 상태 노드 좌표(삼각 배치, 외곽 — 껍질 바깥). index 0..2 = coherent/dispersed/resonant. */
+  /**
+   * 위상 상태 노드 좌표(삼각 배치, 외곽 — 껍질 바깥). index 0..2 = coherent/dispersed/resonant.
+   *  위상장 중심을 화면 중앙보다 살짝 아래로 내리고(0.08) 반경을 줄여(0.40), 상단 노드(응집)가
+   *  최상단 토스트 밴드에 가리지 않고 하단 두 노드도 dock/코너 주석과 겹치지 않게 한다(플레이테스트).
+   */
   private phasePos(index: number): { x: number; y: number } {
-    const rad = this.minDim * 0.46; // 외곽 껍질(0.44) 바깥 — 엔진과 분리된 "위상장"
+    const rad = this.minDim * 0.4;
+    const cyField = this.cy + this.minDim * 0.08; // 위상장 중심 하강(토스트 회피)
     const ang = -Math.PI / 2 + (index * TAU) / 3; // 위·우하·좌하 삼각
-    return { x: this.cx + Math.cos(ang) * rad, y: this.cy + Math.sin(ang) * rad };
+    return { x: this.cx + Math.cos(ang) * rad, y: cyField + Math.sin(ang) * rad };
   }
 
   /** 마우스 아래 무엇? 세포(능동) → 공명 전자(타이밍) → 위상 노드(상태) → 껍질(엔진). */
@@ -722,9 +727,10 @@ export class BoardRenderer {
         ctx.stroke();
       }
     }
-    // 최적(다음 구매 추천) 티어 — 구매 가능 여부와 무관하게 껍질 정상(12시)에 옅은 안내 비드.
+    // 최적(다음 구매 추천) 티어 — ★결속 가능할 때만 넛지 비드(껍질 정상 12시).
     //   구 ChainTable ▶ 넛지(FTUE 넛지3 "최적 구매 티어")를 다이제틱으로 보존 — 아이콘 없이 빛 하나로.
-    if (s.best) {
+    //   E 부족이면 넛지 끔("사라 → 못 사"의 모순 회피 — 온보딩 첫 구매 대기 구간). costLabel이 목표를 계속 보여줌.
+    if (s.best && s.affordable) {
       const bb = this.reducedMotion ? 0.7 : 0.55 + 0.45 * Math.sin(now * 2.2);
       this.glow(ctx, 0, -r, 6, col, 0.26 * bb);
       ctx.beginPath();

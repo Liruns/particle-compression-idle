@@ -18,8 +18,6 @@
  *   flavorKo는 codex flavor_brief(narrative §3 보이스) 요약 — 최종 플레이버는 locale 패스(M3).
  */
 
-import { layerById } from './layers';
-
 /** 희귀도 등급(codex.md §1, data-spec §2-A). LEGENDARY = 층 완성 보너스(자동 해금, discoverable=false). */
 export type Rarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'EPIC' | 'LEGENDARY';
 
@@ -736,10 +734,4 @@ export function particleById(id: string): Particle | undefined {
 /** 층 index(1..11)의 입자 목록(unlockDec 오름차순). */
 export function particlesByLayer(layerIndex: number): Particle[] {
   return PARTICLES.filter((p) => p.layer === layerIndex).sort((a, b) => a.unlockDec - b.unlockDec);
-}
-
-/** 층 id의 입자 목록. */
-export function particlesByLayerId(layerId: string): Particle[] {
-  const def = layerById(layerId);
-  return def ? particlesByLayer(def.index) : [];
 }

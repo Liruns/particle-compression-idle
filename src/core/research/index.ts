@@ -124,11 +124,6 @@ export function chainTierMultipliers(purchased: ReadonlySet<string>): number[] {
   return mults;
 }
 
-/** 구매한 노드 중 효과가 있는지(전부 1이면 false — game.ts가 곱 생략 가능). */
-export function hasAnyResearchEffect(purchased: ReadonlySet<string>): boolean {
-  return purchased.size > 0;
-}
-
 // --- UI 스냅샷 (ui-flow §3) ----------------------------------------------------
 
 /** 연구 노드 1개의 표시 상태(ui-flow §3-B 노드 카드). */

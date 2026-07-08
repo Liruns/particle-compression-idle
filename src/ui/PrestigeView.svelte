@@ -17,20 +17,29 @@
   // 리셋/보존(systems §5-2). 두 갈래 원장으로 분리.
   const resetItems = ['압축 에너지 E', '압축 깊이 C', '압축기 체인', '발견 데이터 D'];
   const keepItems = ['양자 거품 QF', '입자 도감', '연구 트리', '발견 누적'];
+  // 빅 크런치(재하강, systems §5-2 / economy §7.3): 층까지 분자로 리셋, D_current는 회차곡선 부분 보존.
+  const bcResetItems = ['압축 에너지 E', '압축 깊이 C', '압축기 체인', '층 · 미지 진행'];
+  const bcKeepItems = ['양자 거품 QF', '입자 도감', '연구 트리', '발견 데이터 일부'];
+
+  $: bc = prestige.isBigCrunch;
+  $: reset = bc ? bcResetItems : resetItems;
+  $: keep = bc ? bcKeepItems : keepItems;
 </script>
 
 {#if prestige.available}
-  <section class="prestige" class:first={prestige.isFirst}>
+  <section class="prestige" class:first={prestige.isFirst} class:bigcrunch={bc}>
     <header class="pt-head">
-      <span class="pt-eyebrow">{prestige.isFirst ? '알려진 물리의 마지막 문턱' : '상전이'}</span>
+      <span class="pt-eyebrow"
+        >{bc ? '압축 한계 — 재압축' : prestige.isFirst ? '알려진 물리의 마지막 문턱' : '상전이'}</span>
       <span class="pt-title">
-        {#if prestige.isFirst}쿼크층 → {prestige.targetLayerKo}{:else}{prestige.targetLayerKo} 진입{/if}
+        {#if bc}빅 크런치 · 재하강{:else if prestige.isFirst}쿼크층 → {prestige.targetLayerKo}{:else}{prestige.targetLayerKo} 진입{/if}
       </span>
     </header>
 
     <!-- QF 획득 — 발광 중심 수치(카드 박스 폐기). -->
     <div class="pt-qf">
-      <span class="pt-qf-label">{prestige.isFirst ? '양자 거품 첫 획득' : '양자 거품 획득'}</span>
+      <span class="pt-qf-label"
+        >{bc ? '최종 양자 거품 폭발' : prestige.isFirst ? '양자 거품 첫 획득' : '양자 거품 획득'}</span>
       <span class="pt-qf-gain">+{formatNumber(prestige.qfGain, 0)}<span class="pt-qf-unit"> QF</span></span>
       <span class="pt-qf-mult">다음 런 생산 ×{formatNumber(prestige.nextMult, 3)}</span>
     </div>
@@ -39,25 +48,29 @@
     <div class="pt-ledger">
       <div class="pt-col pt-reset">
         <span class="pt-col-head">리셋</span>
-        {#each resetItems as it}<span class="pt-item">{it}</span>{/each}
+        {#each reset as it}<span class="pt-item">{it}</span>{/each}
       </div>
       <div class="pt-divider" aria-hidden="true"></div>
       <div class="pt-col pt-keep">
         <span class="pt-col-head">보존</span>
-        {#each keepItems as it}<span class="pt-item">{it}</span>{/each}
+        {#each keep as it}<span class="pt-item">{it}</span>{/each}
       </div>
     </div>
 
-    {#if prestige.isFirst}
+    {#if bc}
+      <p class="pt-narrative">
+        이전 관측은 남는다. 양자 거품은 남는다.<br />더 작은 것이 있다. 다시 내려간다.
+      </p>
+    {:else if prestige.isFirst}
       <p class="pt-narrative">
         알려진 물리의 경계를 넘는다.<br />여기서부터 지도는 없다.
       </p>
     {/if}
 
     <div class="pt-actions">
-      <button class="pt-continue" on:click={onContinue}>압축 계속</button>
+      <button class="pt-continue" on:click={onContinue}>{bc ? '아직 압축' : '압축 계속'}</button>
       <button class="pt-go" on:click={onPrestige}
-        >{prestige.isFirst ? '미지 영역으로 →' : '다음 층으로 →'}</button>
+        >{bc ? '재하강 →' : prestige.isFirst ? '미지 영역으로 →' : '다음 층으로 →'}</button>
     </div>
   </section>
 {:else}
@@ -235,6 +248,24 @@
   }
   .prestige.first .pt-go:hover {
     box-shadow: 0 0 22px color-mix(in srgb, var(--layer-prn-accent) 45%, transparent);
+  }
+
+  /* 빅 크런치(재하강) — QF 민트 톤의 무게(첫 상전이 보라와 구분, 종착점 아닌 시작점). */
+  .prestige.bigcrunch .pt-eyebrow {
+    color: color-mix(in srgb, var(--qf) 70%, var(--foreground-dim));
+  }
+  .prestige.bigcrunch .pt-title {
+    color: var(--qf);
+    text-shadow: 0 0 20px color-mix(in srgb, var(--qf) 45%, transparent);
+  }
+  .prestige.bigcrunch .pt-narrative {
+    color: color-mix(in srgb, var(--qf) 28%, var(--foreground-sub));
+  }
+  .prestige.bigcrunch .pt-go {
+    box-shadow: 0 0 14px color-mix(in srgb, var(--qf) 30%, transparent);
+  }
+  .prestige.bigcrunch .pt-go:hover {
+    box-shadow: 0 0 24px color-mix(in srgb, var(--qf) 45%, transparent);
   }
 
   .pt-locked {
