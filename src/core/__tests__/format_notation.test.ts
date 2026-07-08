@@ -8,7 +8,7 @@
  *  - 작은 정수는 표기법 무관 콤마(사람 친화) 유지.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { formatNumber, formatScale, setDefaultNotation, getDefaultNotation } from '../format';
+import { formatNumber, formatScale, formatDuration, setDefaultNotation, getDefaultNotation } from '../format';
 
 // 각 테스트 후 전역 기본 복구(다른 테스트 오염 방지).
 afterEach(() => setDefaultNotation('scientific'));
@@ -108,5 +108,22 @@ describe('formatNumber 경계값(방어 — 화면 garbage/거짓 0 방지)', ()
     expect(parseFloat(s)).not.toBe(0);
     // 소수 2자리로 표현 가능한 작은 값은 그대로 소수.
     expect(formatNumber(0.25, 2)).toBe('0.25');
+  });
+});
+
+describe('formatDuration — 복합 2단위 + 방어(스텁 소수-단위 제거)', () => {
+  it('초/분/시간/일 복합, 하위 0 단위 생략', () => {
+    expect(formatDuration(45)).toBe('45초');
+    expect(formatDuration(90)).toBe('1분 30초');
+    expect(formatDuration(300)).toBe('5분');
+    expect(formatDuration(3600)).toBe('1시간');
+    expect(formatDuration(9240)).toBe('2시간 34분');
+    expect(formatDuration(93600)).toBe('1일 2시간');
+    expect(formatDuration(86400)).toBe('1일');
+  });
+  it('음수·NaN·Infinity → 0초(방어)', () => {
+    expect(formatDuration(-5)).toBe('0초');
+    expect(formatDuration(NaN)).toBe('0초');
+    expect(formatDuration(Infinity)).toBe('0초');
   });
 });

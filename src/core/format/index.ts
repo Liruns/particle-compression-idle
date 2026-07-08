@@ -160,10 +160,26 @@ export function formatScale(scaleM: string | null | undefined): string {
   return `${lt ? '<' : ''}${formatNumber(d, 2, 'scientific')} m`;
 }
 
-/** 시간(초) → 사람이 읽는 문자열. 오프라인 복귀·페이싱 표시용 헬퍼 스텁. */
+/**
+ * 시간(초) → 사람이 읽는 문자열. 오프라인 복귀·총 플레이시간 표시(§game 230 "N시간 N분" 정신).
+ *  복합 2단위(예: "2시간 34분", "5일 7시간") — 소수-단위("3.4시간")의 스텁틱함 제거. 하위 단위 0이면 생략.
+ *  방어: 음수·NaN·Infinity는 0으로 클램프.
+ */
 export function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.floor(seconds)}초`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}분`;
-  if (seconds < 86400) return `${(seconds / 3600).toFixed(1)}시간`;
-  return `${(seconds / 86400).toFixed(1)}일`;
+  if (!Number.isFinite(seconds) || seconds < 0) seconds = 0;
+  const s = Math.floor(seconds);
+  if (s < 60) return `${s}초`;
+  const m = Math.floor(s / 60);
+  if (m < 60) {
+    const rs = s % 60;
+    return rs > 0 ? `${m}분 ${rs}초` : `${m}분`;
+  }
+  const h = Math.floor(m / 60);
+  if (h < 24) {
+    const rm = m % 60;
+    return rm > 0 ? `${h}시간 ${rm}분` : `${h}시간`;
+  }
+  const d = Math.floor(h / 24);
+  const rh = h % 24;
+  return rh > 0 ? `${d}일 ${rh}시간` : `${d}일`;
 }
