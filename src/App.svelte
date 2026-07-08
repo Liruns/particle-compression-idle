@@ -595,45 +595,52 @@
 
     <!-- 하단 중앙: 잠든 디바이스 노드(개입). 부르면 bloom. (§3-B 가장자리 발광 노드) -->
     <div class="dock">
-      {#if showResearchNode}
-        <button class="node" class:on={activePanel === 'research'} on:click={() => openPanel('research')}
-          >연구</button>
-      {/if}
-      {#if showCodexNode}
-        <button class="node" class:on={activePanel === 'codex'} on:click={() => openPanel('codex')}>
-          도감{#if codexCount > 0}<span class="badge">{codexCount}</span>{/if}
-        </button>
-      {/if}
-      {#if showPrestigeNode}
+      <!-- 다이제틱 장치(게임 진행): 어둠에서 피어나는 노드 (§3-B). -->
+      <span class="dock-group">
+        {#if showResearchNode}
+          <button class="node" class:on={activePanel === 'research'} on:click={() => openPanel('research')}
+            >연구</button>
+        {/if}
+        {#if showCodexNode}
+          <button class="node" class:on={activePanel === 'codex'} on:click={() => openPanel('codex')}>
+            도감{#if codexCount > 0}<span class="badge">{codexCount}</span>{/if}
+          </button>
+        {/if}
+        {#if showPrestigeNode}
+          <button
+            class="node node-prestige"
+            class:on={activePanel === 'prestige'}
+            class:first={prestigeFirst || prestigeBig}
+            on:click={() => openPanel('prestige')}
+            >{prestigeBig ? '빅 크런치' : prestigeFirst ? '미지 진입' : '상전이'}</button>
+        {/if}
+      </span>
+      <span class="dock-sep" aria-hidden="true"></span>
+      <!-- 시스템 유틸(관조 밖 도구): 조용한 톤. -->
+      <span class="dock-group dock-sys">
+        <button class="node node-quiet" class:saved={justSaved} on:click={onSave} title="저장"
+          >{justSaved ? '저장됨 ✓' : '저장'}</button>
         <button
-          class="node node-prestige"
-          class:on={activePanel === 'prestige'}
-          class:first={prestigeFirst || prestigeBig}
-          on:click={() => openPanel('prestige')}
-          >{prestigeBig ? '빅 크런치' : prestigeFirst ? '미지 진입' : '상전이'}</button>
-      {/if}
-      <button class="node node-quiet" class:saved={justSaved} on:click={onSave} title="저장"
-        >{justSaved ? '저장됨 ✓' : '저장'}</button>
-      <button
-        class="node node-quiet"
-        class:on={activePanel === 'stats'}
-        on:click={() => openPanel('stats')}
-        title="기록">기록</button>
-      <button
-        class="node node-quiet"
-        class:on={activePanel === 'achievements'}
-        on:click={() => openPanel('achievements')}
-        title="관측 목표">목표<span class="badge badge-quiet">{achieveCount}</span></button>
-      <button
-        class="node node-quiet"
-        class:on={activePanel === 'settings'}
-        on:click={() => openPanel('settings')}
-        title="설정">설정</button>
-      <button
-        class="node node-quiet"
-        class:on={activePanel === 'help'}
-        on:click={() => openPanel('help')}
-        title="관측 안내 (? 키)">안내</button>
+          class="node node-quiet"
+          class:on={activePanel === 'stats'}
+          on:click={() => openPanel('stats')}
+          title="기록">기록</button>
+        <button
+          class="node node-quiet"
+          class:on={activePanel === 'achievements'}
+          on:click={() => openPanel('achievements')}
+          title="관측 목표">목표<span class="badge badge-quiet">{achieveCount}</span></button>
+        <button
+          class="node node-quiet"
+          class:on={activePanel === 'settings'}
+          on:click={() => openPanel('settings')}
+          title="설정">설정</button>
+        <button
+          class="node node-quiet"
+          class:on={activePanel === 'help'}
+          on:click={() => openPanel('help')}
+          title="관측 안내 (? 키)">안내</button>
+      </span>
     </div>
   </div>
 
@@ -832,9 +839,32 @@
     bottom: 18px;
     transform: translateX(-50%);
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 10px;
     pointer-events: auto;
     position: fixed;
+  }
+  /* 두 그룹: 다이제틱 장치 | 시스템 유틸. 사이 미묘한 구분(평범한 버튼바 회피). */
+  .dock-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .dock-group:empty {
+    display: none;
+  }
+  /* 구분선 — 아주 옅은 세로 획(어둠 위 성긴 빛). 장치 그룹이 비면 숨김. */
+  .dock-sep {
+    width: 1px;
+    height: 14px;
+    background: rgba(150, 166, 174, 0.16);
+  }
+  .dock-group:empty + .dock-sep {
+    display: none;
+  }
+  /* 시스템 유틸은 한 톤 더 물러나게(관조 밖 도구 — 게임 장치보다 조용히). */
+  .dock-sys {
+    opacity: 0.82;
   }
   .node {
     background: none;
@@ -1017,25 +1047,31 @@
     }
     .vitals {
       left: 14px;
-      bottom: 60px; /* 하단 독과 겹치지 않게 위로 */
+      bottom: 118px; /* 하단 독(모바일 최대 3줄 접힘) 위로 — 겹침 방지 */
     }
     .vitals .v-r {
       font-size: 13px;
     }
     .whisper {
       right: 14px;
-      bottom: 58px;
-      max-width: 52vw;
+      bottom: 118px;
+      max-width: 46vw;
     }
     .whisper .murmur {
       display: none; /* 좁은 화면에선 속삭임 생략 — 힌트만 */
     }
     .dock {
       bottom: 12px;
-      gap: 2px;
+      gap: 6px;
       flex-wrap: wrap;
       justify-content: center;
       max-width: 96vw;
+    }
+    .dock-group {
+      display: contents; /* 모바일: 그룹 평탄화 — 8노드가 한 흐름으로 균일 접힘(중첩 wrap 회피) */
+    }
+    .dock-sep {
+      display: none; /* 좁은 화면: 그룹이 줄바꿈되므로 세로 구분선 생략 */
     }
     .node {
       padding: 6px 9px;

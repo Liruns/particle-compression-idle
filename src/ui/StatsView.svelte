@@ -5,14 +5,15 @@
    *  로직 불변 — snapshot만 읽는다(단방향 §4.1).
    */
   import type { StatsSnapshot } from '../game';
-  import { formatNumber, formatDuration } from '../core/format';
+  import { formatNumber, formatDuration, formatRadius } from '../core/format';
+  import { D, Decimal } from '../core/bignum';
   import { layerByIndex } from '../core/layers';
 
   export let stats: StatsSnapshot;
 
   $: layerName = layerByIndex(stats.maxLayerIndex)?.nameKo ?? '분자층';
-  // dec → 반경 r 근사(표시용, r = 1e-9 · 10^-dec m). 통계엔 "가장 깊이"를 r로도 보여준다.
-  $: deepestR = 1e-9 * Math.pow(10, -stats.maxDec);
+  // dec → 반경 r(표시용, r = 1e-9 · 10^-dec m). Decimal로 계산해 게임 전체와 동일한 위첨자 표기(밤티 회피).
+  $: deepestR = D('1e-9').mul(Decimal.pow(10, -stats.maxDec));
 
   interface Row {
     label: string;
@@ -22,7 +23,7 @@
   $: rows = [
     { label: '총 플레이 시간', value: formatDuration(stats.playtimeSeconds), tone: 'plain' },
     { label: '가장 깊이 (dec)', value: stats.maxDec.toFixed(2), tone: 'depth' },
-    { label: '가장 깊이 (반경)', value: `${deepestR.toExponential(2)} m`, tone: 'depth' },
+    { label: '가장 깊이 (반경)', value: formatRadius(deepestR), tone: 'depth' },
     { label: '도달 최대 층', value: layerName, tone: 'plain' },
     { label: '누적 압축 깊이 C', value: formatNumber(stats.lifetimeC, 2), tone: 'depth' },
     { label: '누적 발견 데이터 D', value: formatNumber(stats.lifetimeD, 2), tone: 'data' },

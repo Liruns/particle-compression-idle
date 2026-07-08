@@ -18,8 +18,8 @@
   const resetItems = ['압축 에너지 E', '압축 깊이 C', '압축기 체인', '발견 데이터 D'];
   const keepItems = ['양자 거품 QF', '입자 도감', '연구 트리', '발견 누적'];
   // 빅 크런치(재하강, systems §5-2 / economy §7.3): 층까지 분자로 리셋, D_current는 회차곡선 부분 보존.
-  const bcResetItems = ['압축 에너지 E', '압축 깊이 C', '압축기 체인', '미지 진행(→ 분자층)'];
-  const bcKeepItems = ['양자 거품 QF(+K 1.05)', '입자 도감', '연구 트리', '발견 누적 · D 일부'];
+  const bcResetItems = ['압축 에너지 E', '압축 깊이 C', '압축기 체인', '층 · 미지 진행'];
+  const bcKeepItems = ['양자 거품 QF', '입자 도감', '연구 트리', '발견 데이터 일부'];
 
   $: bc = prestige.isBigCrunch;
   $: reset = bc ? bcResetItems : resetItems;
