@@ -36,6 +36,12 @@ describe('capByPriority', () => {
     expect(kept.length).toBe(2);
   });
 
+  it('notice(시스템 통지)가 전설보다도 최우선 — 세이브 손상/복구 알림이 절대 밀리지 않음', () => {
+    const items = [item(0, 'legendary'), item(1, 'beat'), item(2, 'discover'), item(3, 'notice')];
+    const kept = capByPriority(items, 1);
+    expect(kept.map((t) => t.id)).toEqual([3]); // notice만 생존
+  });
+
   it('동일 중요도는 최신 우선', () => {
     const items = [item(0, 'discover'), item(1, 'discover'), item(2, 'discover')];
     expect(capByPriority(items, 2).map((t) => t.id)).toEqual([1, 2]);

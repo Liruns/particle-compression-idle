@@ -91,3 +91,35 @@ describe('신규 필드 봉투 왕복 (stats·achievements)', () => {
     expect(loaded.state.achievements.earned.has('dec_quark_limit')).toBe(true);
   });
 });
+
+describe('손상/복구 로드 분류 (LoadResult — UI 통지의 근거)', () => {
+  it('메인 체크섬 불일치 + 백업 없음 → corrupt + 원본 보존(.corrupt.bak)', async () => {
+    const ad = new MemoryAdapter();
+    const m = new SaveManager(ad);
+    // 유효 봉투를 만든 뒤 data를 변조 → 체크섬 불일치(편집/손상 탐지 §1.7-1).
+    const env = JSON.parse(m.buildEnvelope(createInitialState())) as { data: string };
+    env.data = env.data.replace(/\}$/, ',"__tamper":1}');
+    ad.store.set(SAVE_KEY, JSON.stringify({ version: CURRENT_SCHEMA_VERSION, ...env }));
+    const res = await m.load();
+    expect(res.kind).toBe('corrupt');
+    expect(res.state.resources.E.eq(0)).toBe(true); // 새 게임 상태로 복귀
+    expect(ad.store.has(`${SAVE_KEY}.corrupt.bak`)).toBe(true); // 원본 침묵 삭제 금지
+  });
+
+  it('메인 손상 + 유효 백업 → recovered(백업에서 복원)', async () => {
+    const ad = new MemoryAdapter();
+    const m = new SaveManager(ad);
+    const s = createInitialState();
+    s.stats.manualCompresses = 777;
+    ad.store.set(SAVE_KEY, '!!! not a valid envelope !!!'); // 메인 손상
+    ad.store.set(`${SAVE_KEY}.bak.1`, m.buildEnvelope(s)); // 백업 유효
+    const res = await m.load();
+    expect(res.kind).toBe('recovered');
+    expect(res.state.stats.manualCompresses).toBe(777); // 백업 진행 복원
+  });
+
+  it('세이브 없음 → fresh(손상 아님)', async () => {
+    const res = await new SaveManager(new MemoryAdapter()).load();
+    expect(res.kind).toBe('fresh');
+  });
+});

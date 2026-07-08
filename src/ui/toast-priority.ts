@@ -6,7 +6,7 @@
  *  해결: **우선순위(legendary>beat>discover)로 CAP개를 고르되, 표시 순서는 삽입 순 유지**(읽기 흐름 보존).
  */
 
-export type ToastKind = 'discover' | 'beat' | 'legendary';
+export type ToastKind = 'discover' | 'beat' | 'legendary' | 'notice';
 
 export interface ToastItem {
   id: number;
@@ -17,8 +17,8 @@ export interface ToastItem {
 /** 동시 표시 상한(ui-flow §11-C). */
 export const TOAST_CAP = 3;
 
-/** 종류별 중요도(높을수록 유지 우선). 전설(첫 상전이·전설 발견) > 비트(서사) > 발견(업적·입자). */
-const PRIORITY: Record<ToastKind, number> = { legendary: 3, beat: 2, discover: 1 };
+/** 종류별 중요도(높을수록 유지 우선). 통지(세이브 손상/복구 등 시스템) > 전설 > 비트(서사) > 발견. */
+const PRIORITY: Record<ToastKind, number> = { notice: 4, legendary: 3, beat: 2, discover: 1 };
 
 /**
  * items 중 유지할 것을 고른다: **중요도 내림차순 → 최신(id 큰) 순**으로 cap개 선택 후, 원래 삽입 순서로 복원.

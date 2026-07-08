@@ -151,20 +151,27 @@
     );
 
     await game.start();
+    // ★ 반응형 snap은 첫 루프 틱 전까지 초기 스냅샷(loadKind 기본 'fresh')에 머문다(setState가 리스너를
+    //   동기 통지 안 함). 부팅 판단은 권위 있는 post-load 스냅샷을 직접 읽어야 정확하다(손상/복구·활성 메커니즘).
+    const boot = game.snapshot();
     // 부팅·로드 동안 활성된 메커니즘은 안내 발화 안 함 — 시작 후의 실제 진입 전이만 가르친다.
-    if (snap) {
-      prevResonance = snap.resonance.active;
-      prevPhase = snap.phase.active;
-      prevHarmonics = snap.harmonics.active;
-    }
+    prevResonance = boot.resonance.active;
+    prevPhase = boot.phase.active;
+    prevHarmonics = boot.harmonics.active;
     mechIntroEnabled = true;
     achievementsReady = true;
     // 로드된 세이브가 이미 미지 층이면 머니샷 소진 처리(재방문엔 안 뜸). 알려진 물리/새 게임이면 false 유지.
-    seenUnknown = (snap?.layer.index ?? 1) >= 6;
+    seenUnknown = boot.layer.index >= 6;
     // 신규 게임(세이브 없음) 첫 부팅 → 오프닝 비트(FIRST_SCREEN_LINES)를 잠깐 표시 후 페이드(게임성 첫 훅).
-    if (snap?.loadKind === 'fresh' && (snap?.stats.playtimeSeconds ?? 0) < 2) {
+    if (boot.loadKind === 'fresh' && boot.stats.playtimeSeconds < 2) {
       showIntro = true;
       introTimer = setTimeout(() => (showIntro = false), 4200);
+    }
+    // 세이브 손상/복구를 사용자에게 통지(save LoadResult가 구분해 둔 신호 — 조용한 데이터 유실 방지).
+    if (boot.loadKind === 'recovered') {
+      toast?.push('notice', ['세이브가 손상되어 백업에서 복구했습니다.', '최근 진행의 일부가 유실될 수 있습니다.']);
+    } else if (boot.loadKind === 'corrupt') {
+      toast?.push('notice', ['세이브를 읽을 수 없어 새로 시작합니다.', '손상된 원본은 안전하게 보존해 두었습니다.']);
     }
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game;
   });

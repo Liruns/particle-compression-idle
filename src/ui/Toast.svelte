@@ -33,8 +33,8 @@
     const keepIds = new Set(next.map((t) => t.id));
     for (const t of items) if (!keepIds.has(t.id)) clearTimer(t.id);
     items = next;
-    // 비트(여러 줄)는 길게, 발견은 짧게.
-    const ttl = kind === 'beat' ? 4200 : kind === 'legendary' ? 3600 : 2200;
+    // 통지(세이브 손상/복구)는 놓치면 안 되니 가장 길게, 비트는 길게, 발견은 짧게.
+    const ttl = kind === 'notice' ? 7000 : kind === 'beat' ? 4200 : kind === 'legendary' ? 3600 : 2200;
     timers.set(
       id,
       setTimeout(() => dismiss(id), ttl),
@@ -115,6 +115,10 @@
   }
   .toast-legendary .toast-line {
     color: rgba(216, 196, 137, 0.92); /* 옅은 금(전설) */
+  }
+  .toast-notice .toast-line {
+    color: rgba(228, 202, 148, 0.96); /* 따뜻한 모래빛 — 시스템 통지(주목하되 경보 아님) */
+    letter-spacing: 0.03em;
   }
 
   @keyframes toast-in {
