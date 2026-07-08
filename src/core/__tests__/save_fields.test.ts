@@ -1,0 +1,93 @@
+/**
+ * 세이브 신규 필드 파이프라인 검증 (F1 강건성 — stats·achievements 추가 필드).
+ *
+ * serialize.test류(serialize↔deserialize)는 이미 있으나, **전체 봉투 경로**(buildEnvelope→parseEnvelope,
+ *  = checksum·version·마이그레이션 디스패치 포함)에서 신규 옵셔널 필드가 살아남는지 + 구버전 세이브(필드 없음)가
+ *  깨끗이 로드되는지 + export/import 왕복이 보존하는지는 미커버였다. F1은 로드-베어링이라 여기서 못 박는다.
+ */
+import { describe, it, expect } from 'vitest';
+import { SaveManager, SAVE_KEY, CURRENT_SCHEMA_VERSION } from '../save';
+import { checksum } from '../save/checksum';
+import { createInitialState } from '../state';
+import type { StorageAdapter } from '../save/adapters';
+
+class MemoryAdapter implements StorageAdapter {
+  store = new Map<string, string>();
+  async read(k: string) {
+    return this.store.get(k) ?? null;
+  }
+  async write(k: string, v: string) {
+    this.store.set(k, v);
+  }
+  async exists(k: string) {
+    return this.store.has(k);
+  }
+  async backup(k: string) {
+    const cur = this.store.get(k);
+    if (cur != null) this.store.set(`${k}.bak.1`, cur);
+  }
+}
+
+const mgr = new SaveManager(new MemoryAdapter());
+
+describe('신규 필드 봉투 왕복 (stats·achievements)', () => {
+  it('buildEnvelope→parseEnvelope가 stats·achievements 보존', () => {
+    const s = createInitialState();
+    s.stats.manualCompresses = 321;
+    s.stats.totalBinds = 88;
+    s.stats.maxDec = 21.5;
+    s.achievements.earned.add('first_compress');
+    s.achievements.earned.add('dec_first_wall');
+    const back = mgr.parseEnvelope(mgr.buildEnvelope(s));
+    expect(back.stats.manualCompresses).toBe(321);
+    expect(back.stats.totalBinds).toBe(88);
+    expect(back.stats.maxDec).toBeCloseTo(21.5, 6);
+    expect(back.achievements.earned.has('first_compress')).toBe(true);
+    expect(back.achievements.earned.has('dec_first_wall')).toBe(true);
+    expect(back.achievements.earned.size).toBe(2);
+  });
+
+  it('구버전 세이브(stats·achievements 없음) → 체크섬 유효 + 기본값 로드', () => {
+    // 신규 필드가 없던 시절의 봉투를 재현: serialize된 data에서 필드 삭제 후 체크섬 재계산.
+    const s = createInitialState();
+    const env = JSON.parse(mgr.buildEnvelope(s)) as { version: number; data: string; checksum: string };
+    const data = JSON.parse(env.data) as Record<string, unknown>;
+    delete data.stats;
+    delete data.achievements;
+    const legacyData = JSON.stringify(data);
+    const legacyEnv = JSON.stringify({
+      version: CURRENT_SCHEMA_VERSION,
+      data: legacyData,
+      checksum: checksum(legacyData),
+    });
+    const back = mgr.parseEnvelope(legacyEnv); // 체크섬 유효 → 통과, 필드는 기본값 보충
+    expect(back.stats.manualCompresses).toBe(0);
+    expect(back.stats.totalBinds).toBe(0);
+    expect(back.stats.maxDec).toBe(0);
+    expect(back.achievements.earned.size).toBe(0);
+  });
+
+  it('export/import 왕복 — 신규 필드 보존', () => {
+    const s = createInitialState();
+    s.stats.manualCompresses = 12;
+    s.achievements.earned.add('prestige_1');
+    const raw = mgr.exportSave(s);
+    const back = mgr.importSave(raw);
+    expect(back.stats.manualCompresses).toBe(12);
+    expect(back.achievements.earned.has('prestige_1')).toBe(true);
+  });
+
+  it('save→load 통합(어댑터 경유)에서 신규 필드 보존', async () => {
+    const adapter = new MemoryAdapter();
+    const m = new SaveManager(adapter);
+    const s = createInitialState();
+    s.stats.maxDec = 9.5;
+    s.achievements.earned.add('dec_quark_limit');
+    await m.save(s);
+    expect(adapter.store.has(SAVE_KEY)).toBe(true);
+    const loaded = await m.load();
+    expect(loaded.kind).toBe('loaded');
+    expect(loaded.state.stats.maxDec).toBeCloseTo(9.5, 6);
+    expect(loaded.state.achievements.earned.has('dec_quark_limit')).toBe(true);
+  });
+});
