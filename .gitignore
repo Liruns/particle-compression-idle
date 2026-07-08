@@ -9,6 +9,10 @@ dist/
 *.tsbuildinfo
 .vite/
 
+# 로컬 dev 서버 로그(nohup vite 실행 산출물 — 커밋 금지)
+devlog*.txt
+nohup.out
+
 # Python 빌드 산출물 (design/sim)
 __pycache__/
 *.py[cod]
