@@ -69,6 +69,11 @@ import {
   isResearchUnlocked,
   type ResearchView,
 } from './core/research';
+import {
+  evaluateAchievements,
+  ACHIEVEMENT_TOTAL,
+  type AchievementContext,
+} from './core/achievements';
 
 /** 한 티어의 표시용 스냅샷(ui-flow §2-D 체인 테이블 한 행). */
 export interface TierSnapshot {
@@ -254,6 +259,15 @@ export interface StatsSnapshot {
   maxLayerIndex: number;
 }
 
+/** 관측 목표(업적) 표시용 스냅샷. 달성 집합 + 분모(뷰가 ACHIEVEMENTS 정의와 결합). */
+export interface AchievementsSnapshot {
+  /** 달성한 목표 ID 집합. */
+  earned: Set<string>;
+  /** 달성 수 / 전체 수. */
+  count: number;
+  total: number;
+}
+
 /** UI가 읽는 표시용 스냅샷(읽기 전용). Decimal 그대로 — format은 UI에서. */
 export interface GameSnapshot {
   C: Decimal;
@@ -305,6 +319,8 @@ export interface GameSnapshot {
   notation: NotationKind;
   /** 통계(기록 패널). */
   stats: StatsSnapshot;
+  /** 관측 목표(업적 패널). */
+  achievements: AchievementsSnapshot;
 }
 
 /** snapshot 구독자(Svelte가 등록). */
@@ -715,6 +731,9 @@ export class Game {
     //   상전이 후 C 리셋(dec=0)이라 dec 게이트 부적합 → 메커니즘 상태가 발견 경로(필러 ④ 미지 첫 결).
     this.evaluateUnknownDiscoveries(dec);
 
+    // 관측 목표(업적) 판정 — 영속 상태 파생. 새로 달성분만 집합 추가 + 이벤트 발행(멱등).
+    this.evaluateAchievementProgress();
+
     // 상전이 가능 판정(M1.5). 미지 벽(dec19~26) 도달 + 미실행 상전이가 있으면 점등.
     //   prestige_ready는 가능 상태 진입 순간 1회만(UI 탭 점등·사운드). 멱등 — 매 tick 재발화 안 함.
     const pIndex = nextPrestigeIndex(dec, s.prestige.count);
@@ -761,6 +780,34 @@ export class Game {
     for (const id of newly) {
       s.codex.discovered.add(id);
       bus.emit('codexDiscover', { particleId: id });
+    }
+  }
+
+  /**
+   * 관측 목표(업적) 판정. 영속 상태로 컨텍스트를 만들어 새로 달성된 목표만 집합에 추가·발행(멱등).
+   *  ★순수 인정형 — 생산·경제 미관여(§13 가드레일). 큰 수는 log10(number)로 환산해 전달(Decimal 미유입).
+   */
+  private evaluateAchievementProgress(): void {
+    const s = getState();
+    const c = s.resources.lifetime_C;
+    const d = s.resources.D_lifetime;
+    const ctx: AchievementContext = {
+      maxDec: s.stats.maxDec,
+      maxLayerIndex: s.layers.currentIndex,
+      prestigeCount: s.prestige.count,
+      runIndex: s.prestige.runIndex,
+      codexCollected: discoverableCollected(s.codex.discovered),
+      codexCompletion: codexCompletion(s.codex.discovered),
+      researchCount: s.research.purchased.size,
+      manualCompresses: s.stats.manualCompresses,
+      totalBinds: s.stats.totalBinds,
+      lifetimeCLog10: c.gt(0) ? c.log10().toNumber() : 0,
+      lifetimeDLog10: d.gt(0) ? d.log10().toNumber() : 0,
+    };
+    const newly = evaluateAchievements(ctx, s.achievements.earned);
+    for (const id of newly) {
+      s.achievements.earned.add(id);
+      bus.emit('achievement_earned', { id });
     }
   }
 
@@ -1172,6 +1219,11 @@ export class Game {
         lifetimeD: s.resources.D_lifetime,
         researchCount: s.research.purchased.size,
         maxLayerIndex: s.layers.currentIndex,
+      },
+      achievements: {
+        earned: s.achievements.earned,
+        count: s.achievements.earned.size,
+        total: ACHIEVEMENT_TOTAL,
       },
     };
   }

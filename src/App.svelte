@@ -33,6 +33,8 @@
   import OfflineModal from './ui/OfflineModal.svelte';
   import SettingsView from './ui/SettingsView.svelte';
   import StatsView from './ui/StatsView.svelte';
+  import AchievementsView from './ui/AchievementsView.svelte';
+  import { achievementById } from './core/achievements';
   import Toast from './ui/Toast.svelte';
 
   let snap: GameSnapshot | null = null;
@@ -65,7 +67,7 @@
   ];
 
   /** 부른 디바이스(개입 bloom 오버레이). null=관조. */
-  type Panel = 'research' | 'codex' | 'prestige' | 'settings' | 'stats';
+  type Panel = 'research' | 'codex' | 'prestige' | 'settings' | 'stats' | 'achievements';
   let activePanel: Panel | null = null;
 
   /** 포인터 드래그(누른 채 쓸어담기) 상태. */
@@ -79,6 +81,9 @@
   let prevResonance = false;
   let prevPhase = false;
   let prevHarmonics = false;
+
+  /** 업적 토스트 게이트 — 부팅/로드 catch-up 달성(구세이브 다수 동시 달성)은 조용히 흡수. */
+  let achievementsReady = false;
 
   onMount(async () => {
     game = new Game();
@@ -129,6 +134,13 @@
         toast?.push(isFirst ? 'legendary' : 'beat', lines);
       }),
     );
+    busUnsubs.push(
+      bus.on('achievement_earned', ({ id }) => {
+        if (!achievementsReady) return; // 부팅/로드 catch-up 억제
+        const a = achievementById(id);
+        if (a) toast?.push('discover', [`관측 목표 달성 — ${a.nameKo}`]);
+      }),
+    );
 
     await game.start();
     // 부팅·로드 동안 활성된 메커니즘은 안내 발화 안 함 — 시작 후의 실제 진입 전이만 가르친다.
@@ -138,6 +150,7 @@
       prevHarmonics = snap.harmonics.active;
     }
     mechIntroEnabled = true;
+    achievementsReady = true;
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game;
   });
 
@@ -466,6 +479,7 @@
   // --- 파생(FTUE 점진 공개·점등 — 정보 로직 보존 §7-C#3) ------------------------
   $: showCodexNode = snap?.ftue.showCodexTab ?? false;
   $: codexCount = snap?.codex.collected ?? 0;
+  $: achieveCount = snap?.achievements.count ?? 0;
   $: showResearchNode = snap?.ftue.showResearchTab ?? false;
   $: showPrestigeNode = snap?.prestige.available ?? false;
   $: prestigeFirst = (snap?.prestige.available && snap?.prestige.isFirst) ?? false;
@@ -573,6 +587,11 @@
         title="기록">기록</button>
       <button
         class="node node-quiet"
+        class:on={activePanel === 'achievements'}
+        on:click={() => openPanel('achievements')}
+        title="관측 목표">목표<span class="badge badge-quiet">{achieveCount}</span></button>
+      <button
+        class="node node-quiet"
         class:on={activePanel === 'settings'}
         on:click={() => openPanel('settings')}
         title="설정">설정</button>
@@ -607,6 +626,8 @@
             {onReset} />
         {:else if activePanel === 'stats'}
           <StatsView stats={snap.stats} />
+        {:else if activePanel === 'achievements'}
+          <AchievementsView achievements={snap.achievements} />
         {/if}
       </div>
     </div>
@@ -835,6 +856,12 @@
     padding: 0 5px;
     min-width: 15px;
     text-align: center;
+  }
+  /* 목표 노드 배지 — 조용한 QF 톤(도감 보라 badge와 구분, 관조 팔레트). */
+  .badge-quiet {
+    color: rgba(200, 214, 220, 0.7);
+    background: rgba(120, 134, 142, 0.28);
+    margin-left: 4px;
   }
 
   /* 개입 bloom 오버레이 — 어둠이 깊어지고 디바이스가 피어난다. */

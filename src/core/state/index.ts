@@ -106,6 +106,15 @@ export interface ResearchState {
 }
 
 /**
+ * achievements: 관측 목표 달성 집합(영구 보존, 상전이/재하강 불변). codex/research와 동형.
+ *  메모리 Set<string>, 저장 시 정렬 배열. 순수 인정형 — 생산 배율 없음(§13 가드레일, 경제 불변).
+ */
+export interface AchievementsState {
+  /** 달성한 관측 목표 ID 집합. */
+  earned: Set<string>;
+}
+
+/**
  * mechanics: 층별 메커니즘 모듈의 **살아있는 인스턴스**(tech-arch §1.1·§4.4 자기완결).
  *  Decimal 필드와 같은 규칙: 메모리에선 live 객체, 저장 시 save 모듈이 .serialize()로 평문화.
  *  M1.4: 오비탈 공명(원자층 L2). M1.6: 위상 겹침(프리온 L6) + 진동 하모닉스(끈 L7).
@@ -157,6 +166,7 @@ export interface GameState {
   codex: CodexState; // M1.3: 발견 입자 ID 집합(영구 보존)
   mechanics: MechanicsState; // M1.4: 층별 메커니즘 살아있는 인스턴스(오비탈 공명)
   research: ResearchState; // M1.7: 구매 연구 노드 ID 집합(영구 보존)
+  achievements: AchievementsState; // 관측 목표 달성 집합(영구 보존, 순수 인정형)
   settings: SettingsState;
   stats: StatsState; // 누적 통계(표시 전용, 전 생애 보존)
 }
@@ -213,6 +223,9 @@ export function createInitialState(now: number = Date.now()): GameState {
     },
     research: {
       purchased: new Set<string>(),
+    },
+    achievements: {
+      earned: new Set<string>(),
     },
     settings: {
       offlinePrecise: false,

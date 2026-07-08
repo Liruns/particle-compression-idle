@@ -19,6 +19,7 @@ const MIN_INTERVAL_MS: Record<string, number> = {
   resonance_slot_open: 400,
   codexDiscover: 90, // 층 진입 시 동시 발견 다발 — 아르페지오처럼 벌린다
   chain_purchased: 40,
+  achievement_earned: 140, // 동시 다발(첫 상전이 등) — 아르페지오처럼 벌린다
   phase_cycled: 100000, // 사실상 무음(voices도 빈 배열이지만 이중 가드)
 };
 
@@ -96,7 +97,7 @@ export class AudioEngine {
       'harmonic_resonance',
       'research_purchased',
       'layerEnter',
-      'layerEnter',
+      'achievement_earned',
       'prestige_ready',
       'prestige',
       'offlineApplied',

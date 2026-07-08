@@ -167,6 +167,13 @@ export function voiceForEvent(
         { wave: 'sine', freq: semi(base / 2, 7), dur: 0.6, gain: 0.07, attack: 0.08, delay: 0.05 },
       ];
 
+    case 'achievement_earned':
+      // 관측 목표 달성 — 또렷한 확인 2음(4도+옥타브 상승). 발견의 만족감, 절제.
+      return [
+        { wave: 'sine', freq: semi(base, 7), dur: 0.28, gain: 0.13, attack: 0.004 },
+        { wave: 'sine', freq: semi(base, 12), dur: 0.34, gain: 0.12, attack: 0.004, delay: 0.07 },
+      ];
+
     default:
       // saved(오토세이브 주기 소음)·phase_cycled·resonance_auto 등 자동/방치 이벤트 = 무음.
       return [];
