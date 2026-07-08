@@ -500,8 +500,9 @@
     savedTimer = setTimeout(() => (justSaved = false), 1500);
   }
   function onPrestige() {
-    const result = game?.executePrestige();
-    if (result) closePanel(); // 실행 성공 → 관조로 복귀(새 층 하강).
+    // 빅 크런치(재하강)는 별도 실행 경로. 스냅샷 isBigCrunch로 분기(단방향).
+    const ok = snap?.prestige.isBigCrunch ? game?.executeBigCrunch() : game?.executePrestige();
+    if (ok) closePanel(); // 실행 성공 → 관조로 복귀(새 층 하강/재하강).
   }
   function onPrestigeContinue() {
     closePanel();
@@ -514,6 +515,7 @@
   $: showResearchNode = snap?.ftue.showResearchTab ?? false;
   $: showPrestigeNode = snap?.prestige.available ?? false;
   $: prestigeFirst = (snap?.prestige.available && snap?.prestige.isFirst) ?? false;
+  $: prestigeBig = snap?.prestige.isBigCrunch ?? false;
   // 노드가 사라졌는데 그 패널이 열려 있으면 닫음(점등 해소·로드 직후 방어).
   $: if (activePanel === 'prestige' && !showPrestigeNode) activePanel = null;
   $: if (activePanel === 'research' && !showResearchNode) activePanel = null;
@@ -606,8 +608,9 @@
         <button
           class="node node-prestige"
           class:on={activePanel === 'prestige'}
-          class:first={prestigeFirst}
-          on:click={() => openPanel('prestige')}>{prestigeFirst ? '미지 진입' : '상전이'}</button>
+          class:first={prestigeFirst || prestigeBig}
+          on:click={() => openPanel('prestige')}
+          >{prestigeBig ? '빅 크런치' : prestigeFirst ? '미지 진입' : '상전이'}</button>
       {/if}
       <button class="node node-quiet" class:saved={justSaved} on:click={onSave} title="저장"
         >{justSaved ? '저장됨 ✓' : '저장'}</button>

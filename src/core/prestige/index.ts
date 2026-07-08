@@ -131,11 +131,110 @@ export function isPrestigeAvailable(dec: number, prestigeCount: number): boolean
 }
 
 /**
- * 빅 크런치(PT7, 플랑크 dec26 도달) 트리거 여부. (M1.5는 자리만 — 실행은 M3.)
- *   nextPrestigeIndex == 6 (마지막 미지 서브층 = 플랑크) 도달 시 다음 상전이가 빅 크런치.
+ * 빅 크런치(PT7) 대기 신호(레거시 이름 — 다음 상전이가 6=플랑크 진입이면 true).
+ *   ⚠️ 이건 PT6(플랑크 *진입*) 대기이지 PT7(빅 크런치 *실행*)이 아니다. 실제 PT7 판정은 isBigCrunchAvailable.
  */
 export function isBigCrunchReady(dec: number, prestigeCount: number): boolean {
   return nextPrestigeIndex(dec, prestigeCount) === WALLS.length;
+}
+
+// --- 빅 크런치 (PT7) + 재하강 (economy §1.2·§4.4·§7.3·§7.4) --------------------
+
+/** 빅 크런치 QF 계수(economy §7.4 — 베켄슈타인 S=A/4). 일반 상전이(PT1~6)=1.0, 빅 크런치만 1.05. */
+export const BIG_CRUNCH_K = 1.05;
+
+/**
+ * D_current 재하강 보존 회차 곡선(economy §7.3). index = **새 runIndex**(빅 크런치 후 값).
+ *   runIndex 0 = 첫 캠페인(회차 1, 빅 크런치로 진입 안 함 → index 0은 미사용 자리). 첫 빅 크런치 → runIndex 1 → 0.65.
+ *   [_, 0.65, 0.50, 0.40, 0.40, 0.38, 0.35], 범위 밖(7회차+)은 마지막 0.35 유지.
+ *   ★ economy §7.3: D 보존율은 "연구 재구매 캘린더"에만 영향, race/배율엔 미미(인덱싱 저위험).
+ */
+export const D_PRESERVATION_CURVE: readonly number[] = [1, 0.65, 0.5, 0.4, 0.4, 0.38, 0.35];
+
+/** 새 runIndex에서의 D_current 보존율(범위 밖은 마지막 값 클램프). */
+export function dPreservation(newRunIndex: number): number {
+  if (newRunIndex <= 0) return 1;
+  const last = D_PRESERVATION_CURVE.length - 1;
+  return D_PRESERVATION_CURVE[newRunIndex > last ? last : newRunIndex];
+}
+
+/**
+ * 빅 크런치(PT7) 실행 가능 여부. **6벽을 모두 넘어(플랑크 진입, count≥6) + 플랑크에서 dec26 재도달**.
+ *   PT6(플랑크 진입) 후 C가 리셋(dec=0)되고, 플랑크 층에서 다시 dec26까지 압축하면 빅 크런치.
+ *   (economy §1.2 표: PT6=플랑크 진입, PT7=플랑크 도달 시 빅 크런치.)
+ */
+export function isBigCrunchAvailable(dec: number, prestigeCount: number): boolean {
+  return prestigeCount >= WALLS.length && dec >= WALLS[WALLS.length - 1];
+}
+
+/** 빅 크런치 미리보기(K=1.05 QF). 불가면 null. */
+export interface BigCrunchPreview {
+  qfTotal: Decimal;
+  qfGain: Decimal;
+  /** 재하강 후 새 회차(runIndex+1). */
+  nextRunIndex: number;
+}
+export function previewBigCrunch(
+  dec: number,
+  prestigeCount: number,
+  runIndex: number,
+  lifetimeC: DecimalSource,
+  qfClaimed: DecimalSource,
+): BigCrunchPreview | null {
+  if (!isBigCrunchAvailable(dec, prestigeCount)) return null;
+  return {
+    qfTotal: qfTotal(lifetimeC, BIG_CRUNCH_K),
+    qfGain: qfGain(lifetimeC, qfClaimed, BIG_CRUNCH_K),
+    nextRunIndex: runIndex + 1,
+  };
+}
+
+/** 빅 크런치 리셋 결과(재하강). game.ts가 이 값으로 state 교체 + 메커니즘 리셋. **순수**. */
+export interface BigCrunchResetResult {
+  E: Decimal;
+  C: Decimal;
+  bought: number[];
+  produced: Decimal[];
+  /** 확정 qfClaimed(= K=1.05 qfTotal). */
+  qfClaimed: Decimal;
+  /** 새 QF(= 이전 + gain). */
+  QF: Decimal;
+  /** 재하강 후 층 = 분자층(1) — dec0 재시작. */
+  layerIndex: number;
+  /** 회차 내 벽 카운터 리셋(0 — 6벽 재통과). */
+  count: number;
+  /** 새 빅 크런치 회차(runIndex+1). */
+  runIndex: number;
+  /** 보존된 D_current(= 이전 × 회차 곡선). */
+  dCurrent: Decimal;
+}
+
+/**
+ * 빅 크런치 리셋 매트릭스(재하강, systems §5-2 / economy §4.4·§7.3). **순수**.
+ *   리셋: E·C·체인·**층(→분자)**·**count(→0, 벽 재통과)**.
+ *   보존/누적: lifetime_C·QF(가산)·도감·연구·D_lifetime(game.ts) + **D_current × dPreservation(새 회차)**.
+ *   증가: runIndex+1. qfClaimed = K=1.05 qfTotal 확정.
+ */
+export function applyBigCrunchReset(
+  preview: BigCrunchPreview,
+  currentQF: DecimalSource,
+  currentDCurrent: DecimalSource,
+  runIndex: number,
+  seedBought: () => number[],
+): BigCrunchResetResult {
+  const newRunIndex = runIndex + 1;
+  return {
+    E: ZERO,
+    C: ZERO,
+    bought: seedBought(),
+    produced: new Array<Decimal>(seedBought().length).fill(ZERO),
+    qfClaimed: preview.qfTotal,
+    QF: D(currentQF).add(preview.qfGain),
+    layerIndex: 1, // 분자층 — dec0 재시작
+    count: 0, // 회차 내 벽 카운터 리셋(6벽 재통과)
+    runIndex: newRunIndex,
+    dCurrent: D(currentDCurrent).mul(dPreservation(newRunIndex)),
+  };
 }
 
 // --- 상전이 미리보기·실행 (system-flows §4.1) ---------------------------------

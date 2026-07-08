@@ -17,7 +17,7 @@
 import { Decimal, D, ZERO, add, sub } from './core/bignum';
 import { getState, setState, createInitialState, CHAIN_TIERS, type GameState } from './core/state';
 import type { SlotPhase, PhaseState } from './core/layers/mechanics';
-import { PhaseOverlap, Harmonics } from './core/layers/mechanics';
+import { OrbitalResonance, PhaseOverlap, Harmonics } from './core/layers/mechanics';
 import { MANUAL_COMPRESS, PHASE_OVERLAP, RESONANCE } from './data/constants';
 import { GameLoop, Scheduler } from './core/loop';
 import { SaveManager, type LoadResult } from './core/save';
@@ -46,10 +46,14 @@ import {
   previewPrestige,
   applyPrestigeReset,
   nextPrestigeIndex,
+  isBigCrunchAvailable,
+  previewBigCrunch,
+  applyBigCrunchReset,
   type PrestigePreview,
+  type BigCrunchPreview,
 } from './core/prestige';
 import { seedBought } from './core/state';
-import { prestigeBeat, prestigeExecLog } from './data/narrative';
+import { prestigeBeat, prestigeExecLog, bigCrunchExecLog, BIG_CRUNCH_BEAT } from './data/narrative';
 import {
   evaluateDiscoveries,
   evaluateMechDiscoveries,
@@ -212,6 +216,8 @@ export interface PrestigeSnapshot {
   targetLayerEn: string;
   /** 첫 상전이(PT1) 여부 — UI 특별 강조 연출(딥 퍼플, 2줄 내러티브, ui-flow §5-B). */
   isFirst: boolean;
+  /** 빅 크런치(PT7)인가 — true면 재하강 프레이밍(종착점 언어 금지). targetLayer=분자층. */
+  isBigCrunch: boolean;
   /** 상전이 횟수(N_prestige). */
   count: number;
 }
@@ -737,18 +743,16 @@ export class Game {
     // 상전이 가능 판정(M1.5). 미지 벽(dec19~26) 도달 + 미실행 상전이가 있으면 점등.
     //   prestige_ready는 가능 상태 진입 순간 1회만(UI 탭 점등·사운드). 멱등 — 매 tick 재발화 안 함.
     const pIndex = nextPrestigeIndex(dec, s.prestige.count);
-    if (pIndex >= 1) {
+    const bigCrunch = pIndex < 1 && isBigCrunchAvailable(dec, s.prestige.count);
+    if (pIndex >= 1 || bigCrunch) {
       if (!this.prestigeReadyEmitted) {
         this.prestigeReadyEmitted = true;
-        const preview = previewPrestige(
-          dec,
-          s.prestige.count,
-          s.resources.lifetime_C,
-          s.prestige.qfClaimed,
-        );
+        const previewQF = bigCrunch
+          ? previewBigCrunch(dec, s.prestige.count, s.prestige.runIndex, s.resources.lifetime_C, s.prestige.qfClaimed)?.qfGain
+          : previewPrestige(dec, s.prestige.count, s.resources.lifetime_C, s.prestige.qfClaimed)?.qfGain;
         bus.emit('prestige_ready', {
-          prestigeIndex: pIndex,
-          previewQF: (preview ? preview.qfGain : ZERO).toString(),
+          prestigeIndex: bigCrunch ? 7 : pIndex,
+          previewQF: (previewQF ?? ZERO).toString(),
         });
       }
     } else {
@@ -1020,6 +1024,73 @@ export class Game {
   }
 
   /**
+   * 빅 크런치(PT7) 실행 = 재하강(economy §4.4·§7.3·§7.4). 플레이어가 재하강 확인 시.
+   *   1. 미리보기(K=1.05 QF). 불가면 무시(이중 클릭 방어).
+   *   2. 재하강 리셋(applyBigCrunchReset): E·C·체인·**층(→분자)**·**count(→0)** 리셋 /
+   *      lifetime_C·QF(가산)·도감·연구·D_lifetime 보존 / **D_current × 회차곡선** / runIndex+1.
+   *   3. 모든 층별 메커니즘 리셋(오비탈 포함 — 분자층 재시작이므로 오비탈도 초기화).
+   *   4. bigCrunch 이벤트 + 재하강 비트(종착점 언어 금지 — "다시 내려간다").
+   * @returns 실행 성공 여부(UI 패널 닫기 분기).
+   */
+  executeBigCrunch(): boolean {
+    const s = getState();
+    const dec = computeDec(s.resources.C);
+    const preview: BigCrunchPreview | null = previewBigCrunch(
+      dec,
+      s.prestige.count,
+      s.prestige.runIndex,
+      s.resources.lifetime_C,
+      s.prestige.qfClaimed,
+    );
+    if (!preview) return false;
+
+    const reset = applyBigCrunchReset(
+      preview,
+      s.resources.QF,
+      s.resources.D_current,
+      s.prestige.runIndex,
+      seedBought,
+    );
+
+    // 리셋: E·C·체인·층(→분자)·count(→0, 벽 재통과).
+    s.resources.E = reset.E;
+    s.resources.C = reset.C;
+    s.chain.bought = reset.bought;
+    s.chain.produced = reset.produced;
+    s.layers.currentIndex = reset.layerIndex; // 분자층 dec0 재시작
+    s.prestige.count = reset.count;
+    s.prestige.runIndex = reset.runIndex;
+
+    // 보존·확정: QF 가산, qfClaimed 확정(K=1.05), D_current 회차곡선 보존(lifetime_C·D_lifetime·도감·연구 불변).
+    s.resources.QF = reset.QF;
+    s.prestige.qfClaimed = reset.qfClaimed;
+    s.resources.D_current = reset.dCurrent;
+
+    // 전 메커니즘 리셋(분자층 재시작 — 오비탈/위상/하모닉 전부 새 인스턴스).
+    s.mechanics.orbital = new OrbitalResonance();
+    s.mechanics.phase = new PhaseOverlap();
+    s.mechanics.harmonics = new Harmonics();
+
+    s.prestige.offlineBonusPending = true; // §3.3 재하강 직후 첫 오프라인 modifier=1.0
+    this.prestigeReadyEmitted = false;
+
+    // 진행 동기화(dec0 재시작 — 분자 재발견은 멱등, 이미 도감 보존).
+    this.processProgression(computeDec(s.resources.C));
+
+    bus.emit('bigCrunch', { runIndex: reset.runIndex });
+    // 재하강 비트(종착점 언어 금지, narrative §5-B — "재압축/유지/더 작은 것"). 첫 빅 크런치는 legendary.
+    bus.emit('prestige_beat', {
+      prestigeIndex: 7,
+      execLine: bigCrunchExecLog(formatNumber(preview.qfGain, 0), reset.runIndex),
+      beatLines: [...BIG_CRUNCH_BEAT],
+      isFirst: reset.runIndex === 1,
+    });
+
+    this.notify();
+    return true;
+  }
+
+  /**
    * 결정적 시간 전진(초). 테스트·오프라인·dev 검증용 — rAF 없이 고정 dt tick을 직접 돌린다.
    * (백그라운드 탭에서 rAF가 스로틀돼도 동일 로직을 재현. system-flows §12.1 결정성.)
    */
@@ -1130,7 +1201,11 @@ export class Game {
     if (phaseActive && phase.multiplier > 1) displayMult = displayMult.mul(phase.multiplier);
 
     // 상전이 스냅샷(M1.5). 미지 벽 도달 시만 점등. 미리보기로 QF 획득량·진입 층 계산.
+    //   빅 크런치(PT7)는 6벽 소진 + 플랑크 dec26 재도달 시 — 재하강 프레이밍(targetLayer=분자층, K=1.05).
     const preview = this.currentPreview(dec);
+    const bcPreview = preview
+      ? null
+      : previewBigCrunch(dec, s.prestige.count, s.prestige.runIndex, s.resources.lifetime_C, s.prestige.qfClaimed);
     const prestige: PrestigeSnapshot = preview
       ? {
           available: true,
@@ -1142,19 +1217,34 @@ export class Game {
           targetLayerKo: preview.targetLayer.nameKo,
           targetLayerEn: preview.targetLayer.nameEn,
           isFirst: s.prestige.count === 0, // 첫 상전이(아직 0회) → 특별 연출.
+          isBigCrunch: false,
           count: s.prestige.count,
         }
-      : {
-          available: false,
-          prestigeIndex: 0,
-          qfGain: ZERO,
-          qfTotal: s.prestige.qfClaimed,
-          nextMult: mult,
-          targetLayerKo: '',
-          targetLayerEn: '',
-          isFirst: s.prestige.count === 0,
-          count: s.prestige.count,
-        };
+      : bcPreview
+        ? {
+            available: true,
+            prestigeIndex: 7,
+            qfGain: bcPreview.qfGain,
+            qfTotal: bcPreview.qfTotal,
+            nextMult: productionMult(bcPreview.qfTotal),
+            targetLayerKo: layerByIndex(1)?.nameKo ?? '분자층',
+            targetLayerEn: layerByIndex(1)?.nameEn ?? 'Molecule',
+            isFirst: s.prestige.runIndex === 0, // 첫 빅 크런치 특별 연출.
+            isBigCrunch: true,
+            count: s.prestige.count,
+          }
+        : {
+            available: false,
+            prestigeIndex: 0,
+            qfGain: ZERO,
+            qfTotal: s.prestige.qfClaimed,
+            nextMult: mult,
+            targetLayerKo: '',
+            targetLayerEn: '',
+            isFirst: s.prestige.count === 0,
+            isBigCrunch: false,
+            count: s.prestige.count,
+          };
 
     // 표시 dC/dt: 전역 displayMult × 연구 T1 배율(체인 내부 — 실제 C 생산율과 일치).
     let rateC = owned[0].mul(displayMult);

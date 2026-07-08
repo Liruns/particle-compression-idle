@@ -142,6 +142,24 @@ export function prestigeExecLog(qfGainText: string, nextLayerKo: string): string
   return `압축 초기화. 양자 거품 +${qfGainText} 적립. ${nextLayerKo} 진입.`;
 }
 
+/**
+ * 빅 크런치(PT7) 재하강 비트(narrative §5-B / followup-bigcrunch-framing.md — **종착점 언어 금지**).
+ *  "클리어/완료/엔딩" 아님. "재압축·이전 관측 유지·더 작은 것이 있다"의 시작점 프레이밍. 느낌표 없음(§2-B).
+ */
+export const BIG_CRUNCH_BEAT: readonly string[] = [
+  '압축 한계. 시공간이 픽셀이었다.',
+  '이전 관측은 남는다. 양자 거품은 남는다.',
+  '더 작은 것이 있다. 다시 내려간다.',
+] as const;
+
+/**
+ * 빅 크런치 실행 순간 로그(재하강 언어 — "초기화/엔딩" 금지, "재압축/N회차"). N·회차는 game.ts 주입.
+ *  runIndex는 재하강 후 값(첫 빅 크런치 = 1 → "재하강 1회차").
+ */
+export function bigCrunchExecLog(qfGainText: string, runIndex: number): string {
+  return `재압축. 양자 거품 +${qfGainText} 적립. 재하강 ${runIndex}회차 — 다시 분자층으로.`;
+}
+
 /** 첫 화면 카피(narrative §5-D 게임 시작). */
 export const FIRST_SCREEN_LINES: readonly string[] = ['물질이 있다.', '압축하라.'] as const;
 

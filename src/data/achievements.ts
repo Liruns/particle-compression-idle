@@ -78,7 +78,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'prestige_1', nameKo: '무게', descKo: '첫 상전이 — 양자 거품을 얻었다.', category: 'prestige', test: (c) => c.prestigeCount >= 1 },
   { id: 'prestige_3', nameKo: '가속', descKo: '상전이 3회.', category: 'prestige', test: (c) => c.prestigeCount >= 3 },
   { id: 'prestige_6', nameKo: '마지막 문턱', descKo: '여섯 미지 서브층을 모두 넘어 플랑크에 닿았다.', category: 'prestige', test: (c) => c.prestigeCount >= 6 },
-  { id: 'redescent_1', nameKo: '다시, 더 깊이', descKo: '첫 재하강(빅 크런치) — 더 작은 것을 향해.', category: 'prestige', hidden: true, test: (c) => c.runIndex >= 1 },
+  { id: 'redescent_1', nameKo: '다시, 더 깊이', descKo: '첫 재하강(빅 크런치) — 더 작은 것을 향해.', category: 'prestige', test: (c) => c.runIndex >= 1 },
 
   // --- 도감(수집 후킹) ---
   { id: 'codex_10', nameKo: '수집가', descKo: '입자 10종 기록.', category: 'codex', test: (c) => c.codexCollected >= 10 },
