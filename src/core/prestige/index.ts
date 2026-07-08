@@ -13,7 +13,9 @@
  * 순수 함수 + 상태 비포함(파생). 상태 갱신·이벤트 발행·층 진입은 game.ts가 와이어링(§4.1 단방향).
  *   → 이래야 결정성(system-flows §12.1)과 테스트(QF·리셋 정합)가 쉽다.
  *
- * TODO(M3): 빅 크런치(PT7, dec26, K=1.05), 재하강 보존(D_current 회차 곡선), 집중 서브층 로테이션.
+ * M3 완료: 빅 크런치(PT7, dec26, K=1.05)·재하강 D_current 보존 회차 곡선 구현
+ *   (BIG_CRUNCH_K·D_PRESERVATION_CURVE·isBigCrunchAvailable·previewBigCrunch·applyBigCrunchReset).
+ * 남은 것(M4): 집중 서브층 로테이션(GDD §9 회차 집중 서브층).
  */
 
 import { Decimal, D, ZERO, type DecimalSource } from '../bignum';
@@ -128,14 +130,6 @@ export function nextPrestigeIndex(dec: number, prestigeCount: number): number {
  */
 export function isPrestigeAvailable(dec: number, prestigeCount: number): boolean {
   return nextPrestigeIndex(dec, prestigeCount) >= 1;
-}
-
-/**
- * 빅 크런치(PT7) 대기 신호(레거시 이름 — 다음 상전이가 6=플랑크 진입이면 true).
- *   ⚠️ 이건 PT6(플랑크 *진입*) 대기이지 PT7(빅 크런치 *실행*)이 아니다. 실제 PT7 판정은 isBigCrunchAvailable.
- */
-export function isBigCrunchReady(dec: number, prestigeCount: number): boolean {
-  return nextPrestigeIndex(dec, prestigeCount) === WALLS.length;
 }
 
 // --- 빅 크런치 (PT7) + 재하강 (economy §1.2·§4.4·§7.3·§7.4) --------------------

@@ -20,7 +20,6 @@ import {
   wallReachedIndex,
   nextPrestigeIndex,
   isPrestigeAvailable,
-  isBigCrunchReady,
   previewPrestige,
   applyPrestigeReset,
   QF_K,
@@ -147,10 +146,6 @@ describe('nextPrestigeIndex — 한 번에 1 상전이 (system-flows §3.5)', ()
     expect(nextPrestigeIndex(26, 6)).toBe(0); // 6벽 다 소진 → 불가(빅 크런치는 M3).
   });
 
-  it('isBigCrunchReady: 다음 상전이가 6(플랑크)이면 빅 크런치 대기', () => {
-    expect(isBigCrunchReady(26, 5)).toBe(true); // 다음 = 6
-    expect(isBigCrunchReady(19, 0)).toBe(false); // 다음 = 1
-  });
 });
 
 describe('상전이 미리보기 — previewPrestige', () => {
