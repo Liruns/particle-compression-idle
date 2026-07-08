@@ -536,6 +536,27 @@
   $: if (activePanel === 'research' && !showResearchNode) activePanel = null;
   // QF 성표는 층 발광색을 따른다(§3-C). layerRgb는 pushRender에서 renderer.layerColorRGB로 갱신.
   $: qfStyle = `color: rgba(${layerRgb}, 0.82);`;
+  // 열린 패널의 접근명(role=dialog aria-label — 스크린리더가 "이름 없는 dialog"로 읽지 않게).
+  $: panelTitle =
+    activePanel === 'research'
+      ? '연구'
+      : activePanel === 'codex'
+        ? '도감'
+        : activePanel === 'prestige'
+          ? prestigeBig
+            ? '빅 크런치'
+            : prestigeFirst
+              ? '미지 진입'
+              : '상전이'
+          : activePanel === 'stats'
+            ? '기록'
+            : activePanel === 'achievements'
+              ? '관측 목표'
+              : activePanel === 'settings'
+                ? '설정'
+                : activePanel === 'help'
+                  ? '관측 안내'
+                  : '';
 </script>
 
 <svelte:window on:keydown={onKeydown} on:pointerup={endPointer} on:blur={endPointer} />
@@ -680,7 +701,7 @@
       on:click={closePanel}
       on:keydown={(e) => e.key === 'Enter' && closePanel()}>
     </div>
-    <div class="bloom-panel" role="dialog" aria-modal="true" tabindex="-1" use:focusTrap>
+    <div class="bloom-panel" role="dialog" aria-modal="true" aria-label={panelTitle} tabindex="-1" use:focusTrap>
       <button class="bloom-close" on:click={closePanel} aria-label="닫기">✕</button>
       <div class="bloom-body">
         {#if activePanel === 'research'}
