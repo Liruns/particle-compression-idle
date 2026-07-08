@@ -13,7 +13,7 @@
 코어 루프(8단 체인·상전이·11층·도감·연구·오프라인)·경제·밸런스는 구현·검증 완료.
 절차적 WebAudio 사운드(에셋 0, `src/core/audio/`) — SFX 1차 + 층별 앰비언트 2차(웜↔쿨 아크), 설정 콘솔
 (사운드·앰비언트·모션·표기법·세이브 export/import/초기화), 기록(누적 통계)·관측 목표(업적 26개, 순수 인정형)
-패널을 추가. FTUE 힌트를 액션 신호 기반으로 정합.
+패널, 관측 안내(도움말)·키보드(스페이스=압축)를 추가. FTUE 힌트를 액션 신호 기반으로 정합.
 방향 SSOT = [`design/cosmic-direction.md`](design/cosmic-direction.md).
 
 ---
@@ -88,7 +88,7 @@ src/
     audio/           # M2.4: 절차적 WebAudio 사운드(에셋 0, 이벤트 버스 구독)
     achievements/    # 관측 목표(업적) 판정 — 영속 상태 파생, 순수 인정형
   data/              # 데이터 주도: 코어 경제 상수 (입자/연구 JSON은 후속)
-  ui/                # tokens.css + Svelte UI + stores(prefs·reduced-motion) + Settings/Stats/Achievements 뷰
+  ui/                # tokens.css + Svelte UI + stores(prefs·reduced-motion) + Settings/Stats/Achievements/Help 뷰
   render/            # 우주적 현미경 렌더(11 세계 + 공허 게임판 BoardRenderer)
   platform/          # 웹 vs NW.js/Steam 격리 (§5.2)
 ```

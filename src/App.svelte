@@ -34,6 +34,7 @@
   import SettingsView from './ui/SettingsView.svelte';
   import StatsView from './ui/StatsView.svelte';
   import AchievementsView from './ui/AchievementsView.svelte';
+  import HelpView from './ui/HelpView.svelte';
   import { achievementById } from './core/achievements';
   import Toast from './ui/Toast.svelte';
 
@@ -67,7 +68,7 @@
   ];
 
   /** 부른 디바이스(개입 bloom 오버레이). null=관조. */
-  type Panel = 'research' | 'codex' | 'prestige' | 'settings' | 'stats' | 'achievements';
+  type Panel = 'research' | 'codex' | 'prestige' | 'settings' | 'stats' | 'achievements' | 'help';
   let activePanel: Panel | null = null;
 
   /** 포인터 드래그(누른 채 쓸어담기) 상태. */
@@ -430,10 +431,28 @@
       },
     };
   }
+  /** 입력 필드(가져오기 textarea 등)에 포커스면 게임 단축키 억제 — 타이핑 보호. */
+  function isTypingTarget(el: EventTarget | null): boolean {
+    const t = el as HTMLElement | null;
+    if (!t) return false;
+    const tag = t.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable;
+  }
   function onKeydown(e: KeyboardEvent): void {
     unlockAudio();
+    if (isTypingTarget(e.target)) return; // 텍스트 입력 중엔 단축키 무시
     if (e.key === 'Escape' && activePanel) closePanel();
-    else if (e.key === '1') buyMode = 1;
+    else if (e.key === '?') {
+      e.preventDefault();
+      openPanel('help');
+    } else if (e.key === ' ' && !activePanel) {
+      // 스페이스 = 압축(관조 중, 포커스가 캔버스/바디일 때만 — 버튼 활성화와 충돌 방지).
+      const el = document.activeElement;
+      if (!el || el === document.body || (el as HTMLElement).classList?.contains('game-canvas')) {
+        e.preventDefault();
+        game?.manualCompress();
+      }
+    } else if (e.key === '1') buyMode = 1;
     else if (e.key === '2') buyMode = 10;
     else if (e.key === '3') buyMode = 100;
     else if (e.key === '4' || e.key.toLowerCase() === 'm') buyMode = 'max';
@@ -598,6 +617,11 @@
         class:on={activePanel === 'settings'}
         on:click={() => openPanel('settings')}
         title="설정">설정</button>
+      <button
+        class="node node-quiet"
+        class:on={activePanel === 'help'}
+        on:click={() => openPanel('help')}
+        title="관측 안내 (? 키)">안내</button>
     </div>
   </div>
 
@@ -631,6 +655,8 @@
           <StatsView stats={snap.stats} />
         {:else if activePanel === 'achievements'}
           <AchievementsView achievements={snap.achievements} />
+        {:else if activePanel === 'help'}
+          <HelpView />
         {/if}
       </div>
     </div>
