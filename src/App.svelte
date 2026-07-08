@@ -577,6 +577,7 @@
   on:pointerdown={onPointerDown}
   on:pointermove={onPointerMove}
   on:pointerleave={onPointerLeave}
+  on:pointercancel={onPointerLeave}
   aria-label="공허 게임판 — 떠다니는 물질을 만져 압축, 궤도 껍질을 눌러 결속"
 ></canvas>
 
