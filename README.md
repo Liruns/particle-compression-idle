@@ -6,11 +6,13 @@
 이 저장소는 게임 **코드**와 `design/` **설계 문서**를 함께 보관한다. 설계는 단일 진실
 소스(`design/GDD.md` 외)이며, 코드는 그 설계를 충실히 구현한다.
 
-현재 상태: **정거장2(수직 슬라이스) — "우주적 현미경" 피벗 / 이관 2단계 완료.**
+현재 상태: **정거장2(수직 슬라이스) — "우주적 현미경" 피벗 / 이관 2단계 + 사운드 1차 + 설정 + 기록 완료.**
 다크 대시보드(3패널·탭·게이지·체인 테이블)를 폐기하고 **다이제틱 공허 게임판**으로 재구성:
 풀스크린 캔버스에 11개 distinct 세계 + 중심 코어 + 8 궤도 껍질(체인) + 떠다니는 입자, 능동
 메커니즘 4종(수동 압축·오비탈 공명·위상 겹침·진동 하모닉스)을 전부 게임판에서 직접 만진다.
 코어 루프(8단 체인·상전이·11층·도감·연구·오프라인)·경제·밸런스는 구현·검증 완료.
+절차적 WebAudio 사운드(에셋 0, `src/core/audio/`), 설정 콘솔(사운드·모션·표기법·세이브 export/import/초기화),
+기록(전 생애 누적 통계) 패널을 추가. FTUE 힌트를 액션 신호 기반으로 정합(온보딩 마찰 제거).
 방향 SSOT = [`design/cosmic-direction.md`](design/cosmic-direction.md).
 
 ---
@@ -82,9 +84,10 @@ src/
     codex/           # 입자 도감 (스텁)
     research/        # 연구 트리 (스텁)
     events/          # 이벤트 버스 (§4.3)
+    audio/           # M2.4: 절차적 WebAudio 사운드(에셋 0, 이벤트 버스 구독)
   data/              # 데이터 주도: 코어 경제 상수 (입자/연구 JSON은 후속)
-  ui/                # tokens.css (DESIGN.md 토큰) + Svelte UI
-  render/            # 파티클/VFX 계약 (graphics-programmer 영역, 스텁)
+  ui/                # tokens.css + Svelte UI + stores(reduced-motion·prefs) + SettingsView
+  render/            # 우주적 현미경 렌더(11 세계 + 공허 게임판 BoardRenderer)
   platform/          # 웹 vs NW.js/Steam 격리 (§5.2)
 ```
 

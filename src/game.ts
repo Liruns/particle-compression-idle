@@ -41,7 +41,7 @@ import {
   LAST_KNOWN_LAYER_INDEX,
   type LayerDefinition,
 } from './core/layers';
-import { formatNumber } from './core/format';
+import { formatNumber, setDefaultNotation, type NotationKind } from './core/format';
 import {
   previewPrestige,
   applyPrestigeReset,
@@ -232,6 +232,28 @@ export interface OfflineSnapshot {
   dD: Decimal;
 }
 
+/** 통계(기록) 표시용 스냅샷(§stats). 진행 로직 비관여 — 표시 전용 집계. */
+export interface StatsSnapshot {
+  /** 수동 압축 누적 횟수. */
+  manualCompresses: number;
+  /** 결속(구매) 누적 수량. */
+  totalBinds: number;
+  /** 전 생애 최대 dec. */
+  maxDec: number;
+  /** 총 플레이타임(초). */
+  playtimeSeconds: number;
+  /** 상전이 횟수 / 재하강 run index. */
+  prestigeCount: number;
+  runIndex: number;
+  /** 누적 압축 깊이 C(전 런) / 누적 발견 데이터 D. */
+  lifetimeC: Decimal;
+  lifetimeD: Decimal;
+  /** 구매한 연구 노드 수. */
+  researchCount: number;
+  /** 도달 최대 층 index. */
+  maxLayerIndex: number;
+}
+
 /** UI가 읽는 표시용 스냅샷(읽기 전용). Decimal 그대로 — format은 UI에서. */
 export interface GameSnapshot {
   C: Decimal;
@@ -279,6 +301,10 @@ export interface GameSnapshot {
   offline: OfflineSnapshot | null;
   totalTicks: number;
   loadKind: LoadResult['kind'];
+  /** 현재 표기법 설정(설정 패널 표시용). */
+  notation: NotationKind;
+  /** 통계(기록 패널). */
+  stats: StatsSnapshot;
 }
 
 /** snapshot 구독자(Svelte가 등록). */
@@ -336,6 +362,8 @@ export class Game {
     const result = await this.save.load();
     this.loadKind = result.kind;
     setState(result.state);
+    // 저장된 표기법 설정을 표시 계층에 주입(formatNumber 전역 기본). 표시 전용 — 로직 불변.
+    setDefaultNotation(result.state.settings.notation);
 
     // 오프라인 복귀(M1.7, system-flows §7.1). 로드 직후 단 한 번 — meta.lastSave로부터 elapsed
     //   계산 → 끊긴 시점 rate × 유효시간 일괄 지급(economy §3.1 하한). 새 게임(lastSave≈now)은 0.
@@ -664,6 +692,9 @@ export class Game {
   private processProgression(dec: number): void {
     const s = getState();
 
+    // 전 생애 최대 dec 갱신(상전이 C 리셋을 넘어 유지 — 통계 "가장 깊이"). 표시 전용, 경제 불변.
+    if (dec > s.stats.maxDec) s.stats.maxDec = dec;
+
     // 층 진입(알려진 물리). 오프라인 점프로 여러 층을 건너뛰어도 각 진입을 순서대로 발행.
     const entered = layersEnteredSince(s.layers.currentIndex, dec);
     if (entered.length > 0) {
@@ -792,6 +823,7 @@ export class Game {
     // 원자적 적용(§2.1 단계 3): E 차감 → bought 증가.
     s.resources.E = sub(s.resources.E, plan.cost);
     s.chain.bought[idx] = owned + plan.count;
+    s.stats.totalBinds += plan.count; // 통계: 누적 결속 수(표시 전용).
 
     bus.emit('chain_purchased', { tier, count: plan.count });
     this.notify();
@@ -825,6 +857,7 @@ export class Game {
     s.resources.lifetime_C = add(s.resources.lifetime_C, bump);
     // 클릭으로 dec가 임계를 넘었을 수 있음 — 층/도감 동기화.
     this.processProgression(computeDec(s.resources.C));
+    s.stats.manualCompresses += 1; // 통계: 누적 수동 압축(표시 전용).
     bus.emit('manual_compress', {});
     this.notify();
   }
@@ -1127,6 +1160,19 @@ export class Game {
       offline: this.offlineSnapshot,
       totalTicks: this.loop.totalTicks,
       loadKind: this.loadKind,
+      notation: s.settings.notation,
+      stats: {
+        manualCompresses: s.stats.manualCompresses,
+        totalBinds: s.stats.totalBinds,
+        maxDec: s.stats.maxDec,
+        playtimeSeconds: s.meta.totalPlaytime,
+        prestigeCount: s.prestige.count,
+        runIndex: s.prestige.runIndex,
+        lifetimeC: s.resources.lifetime_C,
+        lifetimeD: s.resources.D_lifetime,
+        researchCount: s.research.purchased.size,
+        maxLayerIndex: s.layers.currentIndex,
+      },
     };
   }
 
@@ -1158,6 +1204,19 @@ export class Game {
   importSave(raw: string): void {
     const next: GameState = this.save.importSave(raw);
     setState(next);
+    this.notify();
+  }
+
+  /**
+   * 표기법 설정 변경(설정 패널). state.settings에 기록 + 표시 전역 기본 갱신 + 즉시 저장·통지.
+   *   표시 전용 — 경제·수식 불변. 저장으로 다음 로드에도 유지.
+   */
+  setNotation(n: NotationKind): void {
+    const s = getState();
+    if (s.settings.notation === n) return;
+    s.settings.notation = n;
+    setDefaultNotation(n);
+    void this.persist();
     this.notify();
   }
 

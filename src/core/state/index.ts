@@ -132,6 +132,19 @@ export interface SettingsState {
 }
 
 /**
+ * stats: 누적 통계(§1.1 "정확 카운터 = native 정수"). 진행 로직엔 안 쓰이는 표시 전용 집계.
+ *  세이브 봉투에 옵셔널로 실려 보존(구버전=deserialize 기본 0). 상전이/재하강에도 리셋 안 함(전 생애 누적).
+ */
+export interface StatsState {
+  /** 수동 압축(세포 만지기) 누적 횟수. */
+  manualCompresses: number;
+  /** 압축기 결속(구매) 누적 수량. */
+  totalBinds: number;
+  /** 전 생애 도달 최대 dec(상전이 C 리셋을 넘어 유지 — "가장 깊이 내려간 곳"). */
+  maxDec: number;
+}
+
+/**
  * GameState — 중앙 단일 상태. 메모리 표현(Decimal 살아있음).
  * 후속 확장 자리: layers / codex / research / stats / events 구독 상태 등.
  */
@@ -145,7 +158,7 @@ export interface GameState {
   mechanics: MechanicsState; // M1.4: 층별 메커니즘 살아있는 인스턴스(오비탈 공명)
   research: ResearchState; // M1.7: 구매 연구 노드 ID 집합(영구 보존)
   settings: SettingsState;
-  // TODO(M3+): stats     — 누적 통계(정확 카운터 = native 정수), D_total 텔레메트리(R8)
+  stats: StatsState; // 누적 통계(표시 전용, 전 생애 보존)
 }
 
 /** 8단 체인. */
@@ -205,6 +218,11 @@ export function createInitialState(now: number = Date.now()): GameState {
       offlinePrecise: false,
       notation: 'scientific',
       colorblind: null,
+    },
+    stats: {
+      manualCompresses: 0,
+      totalBinds: 0,
+      maxDec: 0,
     },
   };
 }

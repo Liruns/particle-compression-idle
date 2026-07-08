@@ -24,10 +24,11 @@ const W = 800,
   cx = 400,
   cy = 400,
   minDim = 800;
-const phaseRad = minDim * 0.46; // 368
+const phaseRad = minDim * 0.4; // 320 (board.phasePos와 정합)
+const phaseCy = cy + minDim * 0.08; // 위상장 중심 하강(토스트 회피)
 function phasePos(i: number) {
   const ang = -Math.PI / 2 + (i * Math.PI * 2) / 3;
-  return { x: cx + Math.cos(ang) * phaseRad, y: cy + Math.sin(ang) * phaseRad };
+  return { x: cx + Math.cos(ang) * phaseRad, y: phaseCy + Math.sin(ang) * phaseRad };
 }
 
 function baseInput(over: Partial<BoardInput>): BoardInput {

@@ -22,6 +22,23 @@ export type NotationKind = 'scientific' | 'engineering' | 'standard';
 /** 유효 자릿수 기본값(DESIGN min-digits=3 → 소수 2자리 = 유효 3자리). */
 const DEFAULT_DECIMALS = 2;
 
+/**
+ * 모듈 기본 표기법. 설정(SettingsState.notation)을 game이 로드/변경 시 주입한다.
+ *  formatNumber에 notation을 명시하지 않은 모든 호출부(App·board·뷰)가 이 값을 따른다 →
+ *  callsite 0개 수정으로 표기법 전환(표시 전용 전역, 로직·경제 불변).
+ */
+let defaultNotation: NotationKind = 'scientific';
+
+/** 기본 표기법 설정(설정 패널 → game.setNotation → 여기). */
+export function setDefaultNotation(n: NotationKind): void {
+  defaultNotation = n;
+}
+
+/** 현재 기본 표기법. */
+export function getDefaultNotation(): NotationKind {
+  return defaultNotation;
+}
+
 /** 위첨자 변환용 (과학 표기 1.23×10²³ 의 지수부). */
 const SUPERSCRIPT: Record<string, string> = {
   '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴',
@@ -43,7 +60,7 @@ function toSuperscript(n: number): string {
 export function formatNumber(
   value: DecimalSource,
   decimals: number = DEFAULT_DECIMALS,
-  notation: NotationKind = 'scientific',
+  notation?: NotationKind,
 ): string {
   const d = D(value);
 
@@ -63,12 +80,15 @@ export function formatNumber(
     return neg ? `-${body}` : body;
   }
 
-  // 큰/작은 수는 표기법에 따라
+  // 큰/작은 수는 표기법에 따라(미지정 시 모듈 기본 — 설정 반영).
+  const nk: NotationKind = notation ?? defaultNotation;
   const exp = abs.log10().floor().toNumber();
   const formatted =
-    notation === 'engineering'
+    nk === 'engineering'
       ? formatEngineering(abs, exp, decimals)
-      : formatScientific(abs, exp, decimals);
+      : nk === 'standard'
+        ? formatStandard(abs, exp, decimals)
+        : formatScientific(abs, exp, decimals);
 
   return neg ? `-${formatted}` : formatted;
 }
@@ -90,6 +110,26 @@ function formatEngineering(abs: Decimal, exp: number, decimals: number): string 
   const mStr = Number.isFinite(m) ? m.toFixed(decimals) : '1.00';
   const sign = engExp >= 0 ? '+' : '';
   return `${mStr}e${sign}${engExp}`;
+}
+
+/** 접미사 표기(단위: K/M/B/T … 짧은 스케일). 표에 없는 초거대/미소값은 과학 표기로 안전 폴백. */
+const STANDARD_SUFFIXES = [
+  '', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No',
+  'Dc', 'UDc', 'DDc', 'TDc', 'QaDc', 'QiDc', 'SxDc', 'SpDc', 'OcDc', 'NoDc',
+];
+
+/**
+ * N.NN[접미사] — 접미사 표기(예: 1.23M, 4.56Qa). 지수를 3자리 그룹으로 나눠 접미사를 붙인다.
+ *  범위 밖(접미사 소진) 또는 극소값(exp<0)은 과학 표기로 폴백 — 반쪽짜리 표기 방지.
+ */
+function formatStandard(abs: Decimal, exp: number, decimals: number): string {
+  if (exp < 0) return formatScientific(abs, exp, decimals);
+  const group = Math.floor(exp / 3);
+  if (group >= STANDARD_SUFFIXES.length) return formatScientific(abs, exp, decimals);
+  const mantissa = abs.div(Decimal.pow(10, group * 3));
+  const m = mantissa.toNumber();
+  const mStr = Number.isFinite(m) ? m.toFixed(decimals) : '1.00';
+  return `${mStr}${STANDARD_SUFFIXES[group]}`;
 }
 
 /**

@@ -14,6 +14,7 @@ import { Decimal, toStore, fromStore, ZERO } from '../bignum';
 import {
   type GameState,
   type SettingsState,
+  type StatsState,
   createInitialState,
   CHAIN_TIERS,
 } from '../state';
@@ -74,6 +75,8 @@ export interface SaveData {
     harmonics?: unknown;
   };
   settings: SettingsState;
+  /** 누적 통계(옵셔널 추가 — 구버전 세이브엔 없음 → deserialize에서 0 기본). */
+  stats?: Partial<StatsState>;
   /** validate가 채운 누락 필드 흔적 등 후속 확장 자리. */
   [extra: string]: unknown;
 }
@@ -112,6 +115,7 @@ export function serializeState(s: GameState): SaveData {
       harmonics: s.mechanics.harmonics.serialize(),
     },
     settings: { ...s.settings },
+    stats: { ...s.stats },
   };
 }
 
@@ -172,9 +176,23 @@ export function deserializeState(data: SaveData): GameState {
       notation: data.settings?.notation ?? init.settings.notation,
       colorblind: data.settings?.colorblind ?? init.settings.colorblind,
     },
+    stats: {
+      // 구버전(없음)·손상 → 0. 유한 음수 아닌 정수만 채택(§1.3 방어).
+      manualCompresses: safeCount(data.stats?.manualCompresses),
+      totalBinds: safeCount(data.stats?.totalBinds),
+      maxDec: safeNonNeg(data.stats?.maxDec),
+    },
   };
 }
 
+/** 통계 카운터 정규화: 유한·음수 아님·정수(구버전/손상 → 0). */
+function safeCount(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0;
+}
+/** 통계 실수(maxDec) 정규화: 유한·음수 아님(구버전/손상 → 0). */
+function safeNonNeg(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+}
 /** 체인 보유 배열을 항상 길이 CHAIN_TIERS로 정규화(구버전 길이 변화 방어). */
 function normalizeBought(arr: number[]): number[] {
   const out = new Array<number>(CHAIN_TIERS).fill(0);

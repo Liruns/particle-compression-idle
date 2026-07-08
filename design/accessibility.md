@@ -142,6 +142,12 @@ CSS `@media (prefers-reduced-motion: reduce)` 자동 감지 + 설정 탭 수동 
 
 **자동 감지가 설정 토글을 덮어쓰는 것이 원칙.** 시스템 수준 설정은 의료적 필요일 수 있다.
 
+> **구현(2026-07-08, M2.4b):** `ui/stores/reduced-motion.ts`(OS 미디어쿼리 readable) + `ui/stores/prefs.ts`
+> `effectiveReducedMotion = OS감소 OR 사용자'reduce'`. 캔버스 렌더러(`CanvasRenderer.setReducedMotion`)가
+> 이 파생 스토어를 구독해 파티클·맥동·드리프트를 정지한다(CSS `@media`는 DOM만 커버 → 비트맵은 이 경로).
+> 설정 패널(`SettingsView`) 모션 옵션은 **자동/감소 2단**뿐 — 위 원칙상 사용자가 OS 감소를 전체 모션으로
+> *되돌릴* 수단은 두지 않았다(감소를 *더* 켜는 것만 허용). CSS `@media` 분기(DOM 애니메이션)는 tokens.css가 담당.
+
 | 요소 | 기본 동작 | 감소 모드 동작 |
 |---|---|---|
 | 층 전환 페이드 | 0.3~0.5s 페이드+스케일 파열 | 즉시 전환 (페이드 없음, 스케일 파열 없음) |

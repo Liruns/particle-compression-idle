@@ -22,13 +22,17 @@
   import { CanvasRenderer } from './render';
   import type { BoardInput, BoardShell, BoardPhase, BoardHarmonics, BoardPhaseState } from './render/board';
   import { PHASE_OVERLAP } from './data/constants';
-  import { reducedMotion } from './ui/stores/reduced-motion';
+  import { prefs, effectiveReducedMotion, type Prefs } from './ui/stores/prefs';
+  import { AudioEngine } from './core/audio';
+  import type { NotationKind } from './core/format';
   import { particleById } from './data/particles';
   import { layerEntryBeat } from './data/narrative';
   import CodexView from './ui/CodexView.svelte';
   import ResearchView from './ui/ResearchView.svelte';
   import PrestigeView from './ui/PrestigeView.svelte';
   import OfflineModal from './ui/OfflineModal.svelte';
+  import SettingsView from './ui/SettingsView.svelte';
+  import StatsView from './ui/StatsView.svelte';
   import Toast from './ui/Toast.svelte';
 
   let snap: GameSnapshot | null = null;
@@ -45,6 +49,12 @@
   let bgResizeObserver: ResizeObserver | null = null;
   let onWindowResize: (() => void) | null = null;
 
+  // 절차적 사운드(M2.4). 첫 포인터/키 제스처에서 unlock(브라우저 자동재생 정책).
+  let audio: AudioEngine | null = null;
+  let audioUnlocked = false;
+  let prefsUnsub: (() => void) | null = null;
+  let curPrefs: Prefs = { muted: false, volume: 0.7, motion: 'auto' };
+
   /** 결속(구매) 수량 모드 — 공허 좌상단 셀렉터. */
   let buyMode: BuyMode = 1;
   const buyModes: { id: BuyMode; label: string }[] = [
@@ -55,7 +65,7 @@
   ];
 
   /** 부른 디바이스(개입 bloom 오버레이). null=관조. */
-  type Panel = 'research' | 'codex' | 'prestige';
+  type Panel = 'research' | 'codex' | 'prestige' | 'settings' | 'stats';
   let activePanel: Panel | null = null;
 
   /** 포인터 드래그(누른 채 쓸어담기) 상태. */
@@ -79,7 +89,16 @@
     installUnloadSave(game);
 
     setupRenderer();
-    rmUnsub = reducedMotion.subscribe((v) => renderer?.setReducedMotion(v));
+    rmUnsub = effectiveReducedMotion.subscribe((v) => renderer?.setReducedMotion(v));
+
+    // 사운드 엔진 — 이벤트 버스 구독(읽기 전용). 층 인덱스로 음역 결정. prefs로 mute/volume 반영.
+    audio = new AudioEngine({ getLayerIndex: () => snap?.layer.index ?? 1 });
+    audio.bind(bus);
+    prefsUnsub = prefs.subscribe((p) => {
+      curPrefs = p;
+      audio?.setMuted(p.muted);
+      audio?.setVolume(p.volume);
+    });
 
     if (import.meta.env.DEV) {
       (window as unknown as { forceLayer: (slug: string) => void }).forceLayer = (slug: string) => {
@@ -94,6 +113,8 @@
         if (!p) return;
         const kind = p.rarity === 'LEGENDARY' ? 'legendary' : 'discover';
         toast?.push(kind, [`${p.nameKo} — 도감에 기록됨`]);
+        // 발견 종소리 — 등급(legendary)은 App만 알기에 직접 cue(엔진 자동구독 제외).
+        audio?.cue('codexDiscover', { legendary: kind === 'legendary' });
       }),
     );
     busUnsubs.push(
@@ -140,6 +161,8 @@
     unsub?.();
     for (const u of busUnsubs) u();
     rmUnsub?.();
+    prefsUnsub?.();
+    audio?.dispose();
     if (savedTimer) clearTimeout(savedTimer);
     bgResizeObserver?.disconnect();
     if (onWindowResize) window.removeEventListener('resize', onWindowResize);
@@ -152,7 +175,7 @@
     if (!bgCanvas) return;
     // 단일 풀스크린 캔버스(세계 배경 + 전경 게임판 합성). 구 게이지 글로우 캔버스는 폐기됨.
     renderer = new CanvasRenderer({ bgCanvas });
-    renderer.setReducedMotion($reducedMotion);
+    renderer.setReducedMotion($effectiveReducedMotion);
     if (snap) {
       lastSlug = snap.layer.slug;
       renderer.onLayerChange(snap.layer.slug);
@@ -269,6 +292,7 @@
 
   function onPointerDown(e: PointerEvent): void {
     if (!renderer || !game || !snap || e.button !== 0) return;
+    unlockAudio();
     pointerDown = true;
     const { x, y } = canvasXY(e);
     renderer.gameBoard.setPointer(x, y);
@@ -336,7 +360,17 @@
       return;
     }
     lastFocused = (document.activeElement as HTMLElement) ?? null;
+    unlockAudio();
     activePanel = p;
+  }
+
+  /** 첫 사용자 제스처에서 사운드 unlock(자동재생 정책) + 현재 prefs 재적용(ctx 지연 생성). */
+  function unlockAudio(): void {
+    if (audioUnlocked || !audio) return;
+    audioUnlocked = true;
+    audio.unlock();
+    audio.setMuted(curPrefs.muted);
+    audio.setVolume(curPrefs.volume);
   }
   function closePanel(): void {
     activePanel = null;
@@ -381,11 +415,28 @@
     };
   }
   function onKeydown(e: KeyboardEvent): void {
+    unlockAudio();
     if (e.key === 'Escape' && activePanel) closePanel();
     else if (e.key === '1') buyMode = 1;
     else if (e.key === '2') buyMode = 10;
     else if (e.key === '3') buyMode = 100;
     else if (e.key === '4' || e.key.toLowerCase() === 'm') buyMode = 'max';
+  }
+
+  // --- 설정(game 위임) ----------------------------------------------------------
+  function onNotation(n: NotationKind) {
+    game?.setNotation(n);
+  }
+  function onExport(): string {
+    return game?.exportSave() ?? '';
+  }
+  function onImport(raw: string): void {
+    // 검증 실패 시 game.importSave가 throw → SettingsView가 잡아 인라인 오류.
+    game?.importSave(raw);
+  }
+  function onReset(): void {
+    game?.resetToFresh();
+    closePanel();
   }
 
   // --- game 위임(오버레이 뷰) ---------------------------------------------------
@@ -515,6 +566,16 @@
       {/if}
       <button class="node node-quiet" class:saved={justSaved} on:click={onSave} title="저장"
         >{justSaved ? '저장됨 ✓' : '저장'}</button>
+      <button
+        class="node node-quiet"
+        class:on={activePanel === 'stats'}
+        on:click={() => openPanel('stats')}
+        title="기록">기록</button>
+      <button
+        class="node node-quiet"
+        class:on={activePanel === 'settings'}
+        on:click={() => openPanel('settings')}
+        title="설정">설정</button>
     </div>
   </div>
 
@@ -537,6 +598,15 @@
           <CodexView codex={snap.codex} />
         {:else if activePanel === 'prestige'}
           <PrestigeView prestige={snap.prestige} onPrestige={onPrestige} onContinue={onPrestigeContinue} />
+        {:else if activePanel === 'settings'}
+          <SettingsView
+            notation={snap.notation}
+            {onNotation}
+            {onExport}
+            {onImport}
+            {onReset} />
+        {:else if activePanel === 'stats'}
+          <StatsView stats={snap.stats} />
         {/if}
       </div>
     </div>
