@@ -55,7 +55,7 @@
   let audio: AudioEngine | null = null;
   let audioUnlocked = false;
   let prefsUnsub: (() => void) | null = null;
-  let curPrefs: Prefs = { muted: false, volume: 0.7, motion: 'auto' };
+  let curPrefs: Prefs = { muted: false, volume: 0.7, motion: 'auto', ambient: true };
 
   /** 결속(구매) 수량 모드 — 공허 좌상단 셀렉터. */
   let buyMode: BuyMode = 1;
@@ -103,6 +103,7 @@
       curPrefs = p;
       audio?.setMuted(p.muted);
       audio?.setVolume(p.volume);
+      audio?.setAmbientEnabled(p.ambient);
     });
 
     if (import.meta.env.DEV) {
@@ -211,6 +212,7 @@
     if (s.layer.slug !== lastSlug) {
       lastSlug = s.layer.slug;
       renderer.onLayerChange(s.layer.slug); // 세계·게임판 색은 렌더러가 slug로 직접 구동(data-layer 불요)
+      audio?.setLayer(s.layer.index); // 앰비언트 사운드스케이프 층 크로스페이드(사운드 2차)
     }
     renderer.gameBoard.setInput(buildBoardInput(s));
     layerRgb = renderer.layerColorRGB;
@@ -384,6 +386,7 @@
     audio.unlock();
     audio.setMuted(curPrefs.muted);
     audio.setVolume(curPrefs.volume);
+    audio.setAmbientEnabled(curPrefs.ambient);
   }
   function closePanel(): void {
     activePanel = null;

@@ -9,7 +9,7 @@
    *   - 세이브 export/import/reset = game 위임(F1 봉투). import 실패는 검증 예외 → 인라인 오류.
    */
   import type { NotationKind } from '../core/format';
-  import { prefs, setMuted, setVolume, setMotion, type MotionPref } from './stores/prefs';
+  import { prefs, setMuted, setVolume, setMotion, setAmbient, type MotionPref } from './stores/prefs';
 
   /** 현재 표기법(스냅샷). 활성 표시용. */
   export let notation: NotationKind;
@@ -107,6 +107,15 @@
         aria-label="볼륨"
         on:input={(e) => setVolume(+e.currentTarget.value / 100)} />
       <span class="s-value">{Math.round($prefs.volume * 100)}</span>
+    </div>
+    <div class="s-row">
+      <span class="s-sublabel">앰비언트</span>
+      <button
+        class="s-toggle"
+        class:on={$prefs.ambient}
+        aria-pressed={$prefs.ambient}
+        disabled={$prefs.muted}
+        on:click={() => setAmbient(!$prefs.ambient)}>{$prefs.ambient ? '켜짐' : '꺼짐'}</button>
     </div>
   </section>
 

@@ -22,11 +22,13 @@ export interface Prefs {
   volume: number;
   /** 모션 정책. */
   motion: MotionPref;
+  /** 앰비언트 사운드스케이프 on/off(SFX와 별개, audio-design §4-3). */
+  ambient: boolean;
 }
 
 const KEY = 'micro_idle_prefs';
 
-const DEFAULTS: Prefs = { muted: false, volume: 0.7, motion: 'auto' };
+const DEFAULTS: Prefs = { muted: false, volume: 0.7, motion: 'auto', ambient: true };
 
 function load(): Prefs {
   if (typeof localStorage === 'undefined') return { ...DEFAULTS };
@@ -41,6 +43,7 @@ function load(): Prefs {
           ? parsed.volume
           : DEFAULTS.volume,
       motion: parsed.motion === 'reduce' ? 'reduce' : DEFAULTS.motion,
+      ambient: typeof parsed.ambient === 'boolean' ? parsed.ambient : DEFAULTS.ambient,
     };
   } catch {
     return { ...DEFAULTS };
@@ -78,4 +81,7 @@ export function setVolume(volume: number): void {
 }
 export function setMotion(motion: MotionPref): void {
   prefs.update((p) => ({ ...p, motion }));
+}
+export function setAmbient(ambient: boolean): void {
+  prefs.update((p) => ({ ...p, ambient }));
 }

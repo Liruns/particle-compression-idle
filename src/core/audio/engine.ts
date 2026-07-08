@@ -12,6 +12,7 @@
 
 import type { EventBus } from '../events';
 import { voiceForEvent, type VoiceSpec } from './voices';
+import { AmbientBed } from './ambient';
 
 /** 이벤트 이름 → 최소 throttle 간격(ms). 자동/연타 이벤트가 소리를 도배하지 않도록. */
 const MIN_INTERVAL_MS: Record<string, number> = {
@@ -41,6 +42,8 @@ export class AudioEngine {
   private lastAt: Record<string, number> = {};
   private readonly getLayerIndex: () => number;
   private unsubs: (() => void)[] = [];
+  private ambient: AmbientBed | null = null;
+  private ambientEnabled = true;
 
   constructor(opts: AudioEngineOptions) {
     this.getLayerIndex = opts.getLayerIndex;
@@ -65,6 +68,10 @@ export class AudioEngine {
       this.master.gain.value = this.muted ? 0 : this.volume;
       this.master.connect(this.comp);
       this.comp.connect(this.ctx.destination);
+      // 앰비언트 베드 — master 아래에 물려 mute/volume 자동 적용(사운드 2차).
+      this.ambient = new AmbientBed(this.ctx, this.master);
+      this.ambient.setEnabled(this.ambientEnabled);
+      this.ambient.start(this.getLayerIndex());
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
@@ -81,6 +88,17 @@ export class AudioEngine {
     if (this.master && this.ctx && !this.muted) {
       this.master.gain.setTargetAtTime(this.volume, this.ctx.currentTime, 0.02);
     }
+  }
+
+  /** 현재 층 변경 통지 → 앰비언트 파라미터 크로스페이드(App이 층 전환 시 호출). */
+  setLayer(layerIndex: number): void {
+    this.ambient?.setLayer(layerIndex);
+  }
+
+  /** 앰비언트 사운드스케이프 on/off(설정). SFX·마일스톤 음은 영향 없음. */
+  setAmbientEnabled(enabled: boolean): void {
+    this.ambientEnabled = enabled;
+    this.ambient?.setEnabled(enabled);
   }
 
   /** 이벤트 버스 구독 — 소리를 내는 이벤트만(voices.ts가 빈 배열이면 무음). 반환: 해제 함수. */
@@ -172,6 +190,8 @@ export class AudioEngine {
   dispose(): void {
     for (const off of this.unsubs) off();
     this.unsubs = [];
+    this.ambient?.dispose();
+    this.ambient = null;
     if (this.ctx) {
       void this.ctx.close();
       this.ctx = null;
