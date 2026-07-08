@@ -44,7 +44,7 @@
               class="rs-buy"
               class:active={node.affordable}
               disabled={!node.affordable}
-              on:click={() => onBuy(node.id)}>결속 −{node.costD} D</button>
+              on:click={() => onBuy(node.id)}>연구 −{node.costD} D</button>
           {/if}
         </span>
       </li>

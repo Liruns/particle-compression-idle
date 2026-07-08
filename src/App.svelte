@@ -576,9 +576,11 @@
           <span class="r-rate">영구</span>
         </div>
       {/if}
-      <div class="res res-mult">
-        <span class="r-sym">배율</span><span class="r-val">×{formatNumber(snap.mult, 3)}</span>
-      </div>
+      {#if snap.mult.gt(1)}
+        <div class="res res-mult">
+          <span class="r-sym">배율</span><span class="r-val">×{formatNumber(snap.mult, 3)}</span>
+        </div>
+      {/if}
     </div>
 
     <!-- 좌하단: r(반경) + 층 — 성표 주석. 작아질수록 더 광막(작음=숭고 §2-A). -->
