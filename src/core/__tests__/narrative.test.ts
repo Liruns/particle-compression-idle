@@ -11,6 +11,9 @@ import { describe, it, expect } from 'vitest';
 import {
   LAYER_ENTRY_BEATS,
   PRESTIGE_BEATS,
+  BIG_CRUNCH_BEAT,
+  FIRST_SCREEN_LINES,
+  WHISPER,
   layerEntryBeat,
   prestigeBeat,
 } from '../../data/narrative';
@@ -59,5 +62,14 @@ describe('보이스 규칙 — 느낌표 절제(narrative §2-B)', () => {
       ...PRESTIGE_BEATS.flatMap((b) => b.lines),
     ];
     for (const line of all) expect(line).not.toContain('!');
+  });
+});
+
+describe('오프닝/재하강 카피 배선(죽은 자산 방지)', () => {
+  it('FIRST_SCREEN_LINES·WHISPER·BIG_CRUNCH_BEAT 존재·비어있지 않음', () => {
+    expect(FIRST_SCREEN_LINES.length).toBeGreaterThan(0);
+    expect(FIRST_SCREEN_LINES.every((l) => l.length > 0)).toBe(true);
+    expect(WHISPER.length).toBeGreaterThan(0);
+    expect(BIG_CRUNCH_BEAT.length).toBeGreaterThan(0);
   });
 });

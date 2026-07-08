@@ -26,7 +26,7 @@
   import { AudioEngine } from './core/audio';
   import type { NotationKind } from './core/format';
   import { particleById } from './data/particles';
-  import { layerEntryBeat } from './data/narrative';
+  import { layerEntryBeat, FIRST_SCREEN_LINES, WHISPER } from './data/narrative';
   import CodexView from './ui/CodexView.svelte';
   import ResearchView from './ui/ResearchView.svelte';
   import PrestigeView from './ui/PrestigeView.svelte';
@@ -53,6 +53,10 @@
   let rmUnsub: (() => void) | null = null;
   let bgResizeObserver: ResizeObserver | null = null;
   let onWindowResize: (() => void) | null = null;
+
+  /** 첫 화면 인트로(신규 게임 부팅 시 1회, narrative §5-D "물질이 있다. 압축하라."). 잠깐 뜨고 사라짐. */
+  let showIntro = false;
+  let introTimer: ReturnType<typeof setTimeout> | null = null;
 
   // 절차적 사운드(M2.4). 첫 포인터/키 제스처에서 unlock(브라우저 자동재생 정책).
   let audio: AudioEngine | null = null;
@@ -157,6 +161,11 @@
     achievementsReady = true;
     // 로드된 세이브가 이미 미지 층이면 머니샷 소진 처리(재방문엔 안 뜸). 알려진 물리/새 게임이면 false 유지.
     seenUnknown = (snap?.layer.index ?? 1) >= 6;
+    // 신규 게임(세이브 없음) 첫 부팅 → 오프닝 비트(FIRST_SCREEN_LINES)를 잠깐 표시 후 페이드(게임성 첫 훅).
+    if (snap?.loadKind === 'fresh' && (snap?.stats.playtimeSeconds ?? 0) < 2) {
+      showIntro = true;
+      introTimer = setTimeout(() => (showIntro = false), 4200);
+    }
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game;
   });
 
@@ -183,6 +192,7 @@
     prefsUnsub?.();
     audio?.dispose();
     if (savedTimer) clearTimeout(savedTimer);
+    if (introTimer) clearTimeout(introTimer);
     bgResizeObserver?.disconnect();
     if (onWindowResize) window.removeEventListener('resize', onWindowResize);
     renderer?.dispose();
@@ -391,6 +401,11 @@
 
   /** 첫 사용자 제스처에서 사운드 unlock(자동재생 정책) + 현재 prefs 재적용(ctx 지연 생성). */
   function unlockAudio(): void {
+    // 첫 제스처 시 오프닝 인트로도 즉시 소거(만지려는 플레이어를 안 막음).
+    if (showIntro) {
+      showIntro = false;
+      if (introTimer) clearTimeout(introTimer);
+    }
     if (audioUnlocked || !audio) return;
     audioUnlocked = true;
     audio.unlock();
@@ -542,6 +557,15 @@
   <OfflineModal offline={snap.offline} onDismiss={onDismissOffline} />
 {/if}
 
+<!-- 오프닝 인트로(신규 게임 1회, narrative §5-D) — 공허 중앙에 잠깐 떠오르는 첫 비트. 상호작용 비차단. -->
+{#if showIntro}
+  <div class="intro" class:reduced={$effectiveReducedMotion} aria-hidden="true">
+    {#each FIRST_SCREEN_LINES as line, i}
+      <div class="intro-line" style="animation-delay: {i * 0.7}s">{line}</div>
+    {/each}
+  </div>
+{/if}
+
 {#if snap}
   <!-- 공허에 뜬 희미한 주석층(테두리·카드·배경 0 — §3-A·§3-B). pointer-events는 상호작용 요소만. -->
   <div class="annot-layer" aria-hidden={activePanel ? 'true' : 'false'}>
@@ -592,7 +616,7 @@
     <!-- 우하단: 힌트(FTUE) + 속삭임. -->
     <div class="annot whisper">
       {#if snap.ftue.hint}<div class="hint">{snap.ftue.hint}</div>{/if}
-      <div class="murmur">물질 속으로, 영원히 천천히 떨어진다.</div>
+      <div class="murmur">{snap.stats.runIndex > 0 ? WHISPER : '물질 속으로, 영원히 천천히 떨어진다.'}</div>
     </div>
 
     <!-- 하단 중앙: 잠든 디바이스 노드(개입). 부르면 bloom. (§3-B 가장자리 발광 노드) -->
@@ -1027,6 +1051,55 @@
     justify-content: center;
     color: rgba(150, 166, 174, 0.6);
     font-family: var(--font-narrative, 'Newsreader', 'Gothic A1', serif);
+  }
+
+  /* 오프닝 인트로(신규 게임 1회) — 공허 중앙, 하강하는 첫 문장. 상호작용 비차단, 팝업 아래(z5). */
+  .intro {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    pointer-events: none;
+    animation: intro-out 4.2s ease-in forwards;
+  }
+  .intro-line {
+    font-family: var(--font-narrative, 'Newsreader', 'Gothic A1', serif);
+    font-size: clamp(20px, 3.4vw, 34px);
+    letter-spacing: 0.06em;
+    color: rgba(224, 238, 244, 0.9);
+    text-shadow: 0 0 24px rgba(0, 0, 0, 0.9);
+    opacity: 0;
+    animation: intro-in 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  @keyframes intro-in {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes intro-out {
+    0%,
+    78% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+  /* 모션 최소: 애니메이션 없이 정적 표시(타이머가 제거). */
+  .intro.reduced,
+  .intro.reduced .intro-line {
+    animation: none;
+    opacity: 1;
+    transform: none;
   }
 
   /* 좁은 화면(모바일/세로): 주석 크라우딩 완화 — 폰트·여백 축소, 속삭임 숨김(공허 우선). */
