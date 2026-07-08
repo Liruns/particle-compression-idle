@@ -8,7 +8,7 @@
  *  - 작은 정수는 표기법 무관 콤마(사람 친화) 유지.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { formatNumber, setDefaultNotation, getDefaultNotation } from '../format';
+import { formatNumber, formatScale, setDefaultNotation, getDefaultNotation } from '../format';
 
 // 각 테스트 후 전역 기본 복구(다른 테스트 오염 방지).
 afterEach(() => setDefaultNotation('scientific'));
@@ -67,5 +67,24 @@ describe('작은 수는 표기법 무관 콤마', () => {
     expect(formatNumber(1234, 2, 'scientific')).toBe('1,234');
     expect(formatNumber(1234, 2, 'engineering')).toBe('1,234');
     expect(formatNumber(1234, 2, 'standard')).toBe('1,234');
+  });
+});
+
+describe('formatScale — 도감 스케일 위첨자 통일', () => {
+  it('일반 e표기 → 위첨자 + m', () => {
+    expect(formatScale('2.75e-10')).toBe('2.75×10⁻¹⁰ m');
+    expect(formatScale('1e-33')).toBe('1.00×10⁻³³ m');
+  });
+  it('"<" 상한 접두사 보존', () => {
+    expect(formatScale('<1e-18')).toBe('<1.00×10⁻¹⁸ m');
+  });
+  it('"0"·빈값·손상 → —', () => {
+    expect(formatScale('0')).toBe('—');
+    expect(formatScale('')).toBe('—');
+    expect(formatScale(null)).toBe('—');
+  });
+  it('표기 설정과 무관하게 항상 scientific(위첨자)', () => {
+    setDefaultNotation('engineering');
+    expect(formatScale('2.75e-10')).toBe('2.75×10⁻¹⁰ m'); // e표기 아님
   });
 });

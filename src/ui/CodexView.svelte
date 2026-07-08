@@ -9,6 +9,7 @@
   import { LAYERS } from '../core/layers';
   import { particlesByLayer, type Particle } from '../data/particles';
   import { holographicMultiplier, layerCompletion } from '../core/codex';
+  import { formatScale } from '../core/format';
 
   export let codex: GameSnapshot['codex'];
 
@@ -112,7 +113,7 @@
           {#if found}
             {#if p.charge !== null}<span>q{p.charge > 0 ? '+' : ''}{p.charge}</span>{/if}
             {#if p.spin !== null}<span>s{p.spin}</span>{/if}
-            <span class="cx-scale">{p.scaleM} m</span>
+            <span class="cx-scale">{formatScale(p.scaleM)}</span>
           {/if}
         </span>
         <span class="cx-flavor">{found ? p.flavorKo : lockHint(p)}</span>

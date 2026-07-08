@@ -562,7 +562,7 @@
       </div>
       <div class="res res-c">
         <span class="r-sym">C</span><span class="r-val">{formatNumber(snap.C, 2)}</span>
-        <span class="r-rate">{#if snap.rateC.gt(0)}+{formatNumber(snap.rateC, 2)}/s{/if}</span>
+        <span class="r-rate">깊이</span>
       </div>
       {#if snap.ftue.showResourceD}
         <div class="res res-d">

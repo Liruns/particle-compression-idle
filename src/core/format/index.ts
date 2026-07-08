@@ -143,6 +143,20 @@ export function formatRadius(rMeters: DecimalSource): string {
   return `${formatNumber(d, 3, 'scientific')} m`;
 }
 
+/**
+ * 도감 입자 스케일 문자열(scaleM) → 표시. 데이터는 `"2.75e-10"`·`"<1e-18"`·`"0"` 등 다양 →
+ *  게임 전체(r 표기)와 동일한 **과학 위첨자**로 통일(밤티 회피). "<"(측정 상한) 접두사 보존, "0"·빈값은 "—".
+ *  표기 설정(공학/표준) 무관하게 항상 scientific — 물리 스케일은 위첨자가 표준.
+ */
+export function formatScale(scaleM: string | null | undefined): string {
+  if (!scaleM || scaleM === '0') return '—';
+  const lt = scaleM.trim().startsWith('<');
+  const num = lt ? scaleM.trim().slice(1) : scaleM;
+  const d = D(num);
+  if (d.eq(0) || Number.isNaN(d.mag)) return '—';
+  return `${lt ? '<' : ''}${formatNumber(d, 2, 'scientific')} m`;
+}
+
 /** 시간(초) → 사람이 읽는 문자열. 오프라인 복귀·페이싱 표시용 헬퍼 스텁. */
 export function formatDuration(seconds: number): string {
   if (seconds < 60) return `${Math.floor(seconds)}초`;
