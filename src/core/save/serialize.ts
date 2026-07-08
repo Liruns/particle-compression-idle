@@ -140,7 +140,8 @@ export function deserializeState(data: SaveData): GameState {
       build: data.meta?.build ?? init.meta.build,
       createdAt: data.meta?.createdAt ?? init.meta.createdAt,
       lastSave: data.meta?.lastSave ?? init.meta.lastSave,
-      totalPlaytime: data.meta?.totalPlaytime ?? 0,
+      // 손상/악성 import 방어: 유한·음수 아님만 채택(stats와 동일 규율 — §1.3).
+      totalPlaytime: safeNonNeg(data.meta?.totalPlaytime),
     },
     resources: {
       E: fromStore(data.resources?.E),
@@ -152,8 +153,9 @@ export function deserializeState(data: SaveData): GameState {
     },
     chain: { bought, produced },
     prestige: {
-      count: data.prestige?.count ?? 0,
-      runIndex: data.prestige?.runIndex ?? 0,
+      // 방어: prestige.count·runIndex는 벽 카운팅·QF 계산에 직접 쓰이므로 유한·음수 아닌 정수만.
+      count: safeCount(data.prestige?.count),
+      runIndex: safeCount(data.prestige?.runIndex),
       qfClaimed: fromStore(data.prestige?.qfClaimed),
       focusSublayer: data.prestige?.focusSublayer ?? null,
       offlineBonusPending: data.prestige?.offlineBonusPending ?? false,
@@ -182,7 +184,7 @@ export function deserializeState(data: SaveData): GameState {
     },
     settings: {
       offlinePrecise: data.settings?.offlinePrecise ?? init.settings.offlinePrecise,
-      notation: data.settings?.notation ?? init.settings.notation,
+      notation: safeNotation(data.settings?.notation),
       colorblind: data.settings?.colorblind ?? init.settings.colorblind,
     },
     stats: {
@@ -201,6 +203,10 @@ function safeCount(v: unknown): number {
 /** 통계 실수(maxDec) 정규화: 유한·음수 아님(구버전/손상 → 0). */
 function safeNonNeg(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+}
+/** 표기법 정규화: 유효 3종만 채택(구버전/손상/악성 → 기본 scientific). */
+function safeNotation(v: unknown): 'scientific' | 'engineering' | 'standard' {
+  return v === 'engineering' || v === 'standard' ? v : 'scientific';
 }
 /** 체인 보유 배열을 항상 길이 CHAIN_TIERS로 정규화(구버전 길이 변화 방어). */
 function normalizeBought(arr: number[]): number[] {

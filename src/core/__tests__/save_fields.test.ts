@@ -123,3 +123,40 @@ describe('손상/복구 로드 분류 (LoadResult — UI 통지의 근거)', () 
     expect(res.kind).toBe('fresh');
   });
 });
+
+describe('악성/손상 스칼라 정규화 (import 방어 — 체크섬 유효해도 타입 방어)', () => {
+  it('count·runIndex·playtime·notation의 문자열/음수/NaN/무효값을 기본으로 정규화', () => {
+    // 체크섬은 손상만 탐지(FNV, 편집 방어 아님) → 악성 편집은 통과할 수 있으므로 deserialize가 방어해야 한다.
+    const env = JSON.parse(mgr.buildEnvelope(createInitialState())) as { data: string };
+    const obj = JSON.parse(env.data) as {
+      prestige: { count: unknown; runIndex: unknown };
+      meta: { totalPlaytime: unknown };
+      settings: { notation: unknown };
+    };
+    obj.prestige.count = 'evil'; // 문자열
+    obj.prestige.runIndex = -5; // 음수
+    obj.meta.totalPlaytime = NaN; // NaN(JSON 직렬화 시 null)
+    obj.settings.notation = 'hacker'; // 무효 표기법
+    const data = JSON.stringify(obj);
+    const back = mgr.parseEnvelope(
+      JSON.stringify({ version: CURRENT_SCHEMA_VERSION, data, checksum: checksum(data) }),
+    );
+    expect(back.prestige.count).toBe(0);
+    expect(back.prestige.runIndex).toBe(0);
+    expect(back.meta.totalPlaytime).toBe(0);
+    expect(back.settings.notation).toBe('scientific');
+  });
+
+  it('정상 스칼라는 보존(방어가 유효값을 깎지 않음)', () => {
+    const s = createInitialState();
+    s.prestige.count = 3;
+    s.prestige.runIndex = 2;
+    s.meta.totalPlaytime = 4567.8;
+    s.settings.notation = 'engineering';
+    const back = mgr.parseEnvelope(mgr.buildEnvelope(s));
+    expect(back.prestige.count).toBe(3);
+    expect(back.prestige.runIndex).toBe(2);
+    expect(back.meta.totalPlaytime).toBeCloseTo(4567.8, 3);
+    expect(back.settings.notation).toBe('engineering');
+  });
+});
