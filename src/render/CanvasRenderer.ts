@@ -89,14 +89,14 @@ export class CanvasRenderer implements Renderer {
    * 층 전환(slug 변화 시 App에서 호출). 세계 전환 하강 재생 + 새 세계 물질 교체.
    *  첫 호출(부팅 슬러그)은 즉시 스냅(전환 없음), 이후 slug 변화는 떨어짐 전환(art §5-B).
    */
-  onLayerChange(layerSlug: string): void {
-    this.applyLayer(layerSlug, !this.applied);
+  onLayerChange(layerSlug: string, moneyShot = false): void {
+    this.applyLayer(layerSlug, !this.applied, moneyShot);
   }
 
   /** immediate=true면 세계를 즉시 맞춤(부팅·강제), false면 전환 하강 + 세포 재시드. */
-  private applyLayer(slug: string, immediate: boolean): void {
+  private applyLayer(slug: string, immediate: boolean, moneyShot = false): void {
     if (immediate) this.world.setLayerImmediate(slug);
-    else this.world.setLayerBySlug(slug);
+    else this.world.setLayerBySlug(slug, moneyShot);
     // 층이 실제로 바뀌면(부팅 제외) 새 세계의 물질로 교체 — 만질 세포도 세계 따라 달라짐(§3-C).
     if (!immediate) this.board.reseedCells();
     this.applied = true;

@@ -15,6 +15,8 @@ import { WORLDS, worldIndexForSlug, initWorlds, type World } from './layer-world
 
 /** 전환 길이(초). 프로토타입 DUR=1.7 — 느린 하강(art §5-B). */
 const TRANSITION_DUR = 1.7;
+/** 머니샷 전환 길이(초) — 첫 미지 진입(쿼크→프리온) 색온도 식는 순간을 더 길고 무겁게(art-cosmic §6). */
+const MONEY_SHOT_DUR = 3.2;
 /** dt 상한(초). 백그라운드 복귀 큰 갭을 클램프(프로토타입 0.1). */
 const DT_CLAMP = 0.1;
 
@@ -23,6 +25,8 @@ interface Transition {
   to: number;
   /** 진행 0..1. */
   p: number;
+  /** 머니샷(첫 미지 진입): 더 긴 하강 + 깊은 문턱 어둠 + 도착 후 냉색 블룸(art-cosmic §6). */
+  moneyShot: boolean;
 }
 
 export class WorldRenderer {
@@ -48,7 +52,7 @@ export class WorldRenderer {
    *  reduced-motion이면 전환 애니메이션 없이 즉시 스냅(멀미 방지). 같은 층이면 무시.
    *  이미 전환 중이면 목표를 교체(중첩 점프 방지: 진행 중 전환은 끝까지 두고, 새 목표는 그 다음).
    */
-  setLayerBySlug(slug: string): void {
+  setLayerBySlug(slug: string, moneyShot = false): void {
     const ni = worldIndexForSlug(slug);
     if (this.reducedMotion) {
       this.cur = ni;
@@ -58,10 +62,17 @@ export class WorldRenderer {
     if (this.trans) {
       // 진행 중 전환이 있으면, 그 목표를 새 slug로 갱신(연쇄 점프 시 마지막 목표로 수렴).
       if (this.trans.to !== ni) this.trans.to = ni;
+      // 진행 중에 머니샷 신호가 오면 승격(첫 미지 진입이 연쇄에 묻히지 않게).
+      if (moneyShot) this.trans.moneyShot = true;
       return;
     }
     if (ni === this.cur) return;
-    this.trans = { from: this.cur, to: ni, p: 0 };
+    this.trans = { from: this.cur, to: ni, p: 0, moneyShot };
+  }
+
+  /** 전환 진행 중 여부(테스트·HUD). */
+  get transitioning(): boolean {
+    return this.trans !== null;
   }
 
   setReducedMotion(v: boolean): void {
@@ -119,8 +130,9 @@ export class WorldRenderer {
       ctx.globalCompositeOperation = 'lighter';
       this.drawWorld(w, ctx, t, cx, cy, 1, 1, W, H, d);
     } else {
-      // 전환 하강("떨어지며 이어짐", 프로토타입 frame 로직 이식).
-      this.trans.p += d / TRANSITION_DUR;
+      // 전환 하강("떨어지며 이어짐", 프로토타입 frame 로직 이식). 머니샷은 더 길게.
+      const money = this.trans.moneyShot;
+      this.trans.p += d / (money ? MONEY_SHOT_DUR : TRANSITION_DUR);
       const p = Math.min(1, this.trans.p);
       const from = WORLDS[this.trans.from];
       const to = WORLDS[this.trans.to];
@@ -137,10 +149,24 @@ export class WorldRenderer {
         const k = (p - 0.4) / 0.6;
         this.drawWorld(to, ctx, t, cx, cy, 0.42 + Math.min(1, k) * 0.58, Math.min(1, k), W, H, d);
       }
-      // 문턱의 어둠 — 통과하는 순간 가장 깊은 침묵.
+      // 문턱의 어둠 — 통과하는 순간 가장 깊은 침묵. 머니샷은 더 깊고 오래(미지로 넘는 무게).
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = `rgba(0,0,0,${0.55 * Math.sin(p * Math.PI)})`;
+      const darkPeak = money ? 0.82 : 0.55;
+      const darkCurve = money ? Math.pow(Math.sin(p * Math.PI), 0.7) : Math.sin(p * Math.PI);
+      ctx.fillStyle = `rgba(0,0,0,${darkPeak * darkCurve})`;
       ctx.fillRect(0, 0, W, H);
+      // 머니샷 도착 냉색 블룸 — 어둠을 뚫고 새(더 차가운) 세계색이 번진다(플래시 아님, 부드러운 상승).
+      if (money && p > 0.72) {
+        const k = (p - 0.72) / 0.28; // 0→1
+        const c = to.col.split(',').map(Number);
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.6);
+        g.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},${0.28 * k})`);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalCompositeOperation = 'source-over';
+      }
       if (this.trans.p >= 1) {
         this.cur = this.trans.to;
         this.trans = null;

@@ -48,6 +48,8 @@
   let bgCanvas: HTMLCanvasElement | null = null;
   let renderer: CanvasRenderer | null = null;
   let lastSlug = '';
+  /** 미지 층(index≥6)에 이미 들어와 봤는가 — 첫 진입만 머니샷. 로드 세이브가 미지면 start 후 true. */
+  let seenUnknown = false;
   let rmUnsub: (() => void) | null = null;
   let bgResizeObserver: ResizeObserver | null = null;
   let onWindowResize: (() => void) | null = null;
@@ -153,6 +155,8 @@
     }
     mechIntroEnabled = true;
     achievementsReady = true;
+    // 로드된 세이브가 이미 미지 층이면 머니샷 소진 처리(재방문엔 안 뜸). 알려진 물리/새 게임이면 false 유지.
+    seenUnknown = (snap?.layer.index ?? 1) >= 6;
     if (import.meta.env.DEV) (window as unknown as { game: Game }).game = game;
   });
 
@@ -211,8 +215,13 @@
   function pushRender(s: GameSnapshot): void {
     if (!renderer) return;
     if (s.layer.slug !== lastSlug) {
+      const first = lastSlug !== ''; // 부팅 첫 슬러그(빈 lastSlug)는 즉시 스냅 — 전환 아님
       lastSlug = s.layer.slug;
-      renderer.onLayerChange(s.layer.slug); // 세계·게임판 색은 렌더러가 slug로 직접 구동(data-layer 불요)
+      // 머니샷: 미지 층(index≥6)으로 *처음* 넘는 순간(쿼크→프리온 첫 상전이) = 색온도 식는 머니샷(art-cosmic §6).
+      const enteringUnknown = s.layer.index >= 6;
+      const moneyShot = first && enteringUnknown && !seenUnknown;
+      if (enteringUnknown) seenUnknown = true;
+      renderer.onLayerChange(s.layer.slug, moneyShot); // 세계·게임판 색은 렌더러가 slug로 직접 구동
       audio?.setLayer(s.layer.index); // 앰비언트 사운드스케이프 층 크로스페이드(사운드 2차)
     }
     renderer.gameBoard.setInput(buildBoardInput(s));
