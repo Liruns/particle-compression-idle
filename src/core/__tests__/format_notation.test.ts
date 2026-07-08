@@ -88,3 +88,25 @@ describe('formatScale — 도감 스케일 위첨자 통일', () => {
     expect(formatScale('2.75e-10')).toBe('2.75×10⁻¹⁰ m'); // e표기 아님
   });
 });
+
+describe('formatNumber 경계값(방어 — 화면 garbage/거짓 0 방지)', () => {
+  it('0·NaN·±Infinity', () => {
+    expect(formatNumber(0)).toBe('0');
+    expect(formatNumber(NaN)).toBe('NaN');
+    expect(formatNumber(Infinity)).toBe('∞'); // "1.00×10Infinity" garbage 아님
+    expect(formatNumber(-Infinity)).toBe('-∞');
+  });
+
+  it('음수는 부호 보존', () => {
+    expect(formatNumber(-1234)).toBe('-1,234');
+    expect(formatNumber('-1.23e8', 2, 'scientific')).toBe('-1.23×10⁸');
+  });
+
+  it('아주 작은 값은 "0.00"으로 뭉개지지 않고 과학 표기로 폴백(거짓 0 방지)', () => {
+    const s = formatNumber(0.0003, 2, 'scientific');
+    expect(s).toContain('×10');
+    expect(parseFloat(s)).not.toBe(0);
+    // 소수 2자리로 표현 가능한 작은 값은 그대로 소수.
+    expect(formatNumber(0.25, 2)).toBe('0.25');
+  });
+});

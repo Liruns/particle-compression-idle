@@ -66,6 +66,8 @@ export function formatNumber(
 
   if (d.eq(0)) return '0';
   if (Number.isNaN(d.mag)) return 'NaN';
+  // Infinity 방어 — scientific 경로로 새면 "1.00×10Infinity" 같은 garbage가 됨(위첨자 변환 통과).
+  if (!Number.isFinite(d.mag)) return d.sign < 0 ? '-∞' : '∞';
 
   const neg = d.sign < 0;
   const abs = d.abs();
@@ -77,7 +79,8 @@ export function formatNumber(
       Number.isInteger(asNum) && asNum < 1e6
         ? asNum.toLocaleString('en-US')
         : asNum.toFixed(decimals);
-    return neg ? `-${body}` : body;
+    // 0이 아닌데 반올림이 "0.00"으로 뭉개지면(값 < 0.5·10⁻ᵈ) 과학 표기로 폴백 — 거짓 0 방지.
+    if (parseFloat(body) !== 0) return neg ? `-${body}` : body;
   }
 
   // 큰/작은 수는 표기법에 따라(미지정 시 모듈 기본 — 설정 반영).
