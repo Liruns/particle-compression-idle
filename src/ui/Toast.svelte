@@ -1,6 +1,6 @@
 <script context="module" lang="ts">
   /** 토스트 종류 — 스타일 분기. (type export는 모듈 컨텍스트에 둔다 — Svelte 규칙.) */
-  export type ToastKind = 'discover' | 'beat' | 'legendary';
+  export type { ToastKind } from './toast-priority';
 </script>
 
 <script lang="ts">
@@ -10,24 +10,29 @@
    *  층 진입 비트는 여러 줄(narrative §4) — multiline 토스트 허용.
    */
   import { onDestroy } from 'svelte';
-
-  interface ToastItem {
-    id: number;
-    kind: ToastKind;
-    lines: string[];
-  }
+  import { capByPriority, TOAST_CAP, type ToastKind, type ToastItem } from './toast-priority';
 
   let items: ToastItem[] = [];
   let nextId = 0;
   const timers = new Map<number, ReturnType<typeof setTimeout>>();
 
-  /** 동시 표시 cap(ui-flow §11-C). */
-  const CAP = 3;
+  /** 특정 id 타이머 정리(중복 제거 헬퍼). */
+  function clearTimer(id: number): void {
+    const tm = timers.get(id);
+    if (tm) {
+      clearTimeout(tm);
+      timers.delete(id);
+    }
+  }
 
-  /** 외부(App)에서 호출: 토스트 추가. */
+  /** 외부(App)에서 호출: 토스트 추가. 우선순위 cap — 상전이 비트가 업적 다발에 밀리지 않게(toast-priority). */
   export function push(kind: ToastKind, lines: string[]): void {
     const id = nextId++;
-    items = [...items, { id, kind, lines }].slice(-CAP);
+    const next = capByPriority([...items, { id, kind, lines }], TOAST_CAP);
+    // cap으로 탈락한 항목의 타이머 정리(누수 방지).
+    const keepIds = new Set(next.map((t) => t.id));
+    for (const t of items) if (!keepIds.has(t.id)) clearTimer(t.id);
+    items = next;
     // 비트(여러 줄)는 길게, 발견은 짧게.
     const ttl = kind === 'beat' ? 4200 : kind === 'legendary' ? 3600 : 2200;
     timers.set(
@@ -38,11 +43,7 @@
 
   function dismiss(id: number): void {
     items = items.filter((t) => t.id !== id);
-    const tm = timers.get(id);
-    if (tm) {
-      clearTimeout(tm);
-      timers.delete(id);
-    }
+    clearTimer(id);
   }
 
   onDestroy(() => {
