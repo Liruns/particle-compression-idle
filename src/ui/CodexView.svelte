@@ -9,7 +9,7 @@
   import { LAYERS } from '../core/layers';
   import { particlesByLayer, type Particle } from '../data/particles';
   import { holographicMultiplier, layerCompletion } from '../core/codex';
-  import { formatScale } from '../core/format';
+  import { formatScale, formatPercent, formatMultiplier } from '../core/format';
 
   export let codex: GameSnapshot['codex'];
 
@@ -44,9 +44,9 @@
     }),
   );
 
-  function pct(layerIndex: number): number {
+  function pct(layerIndex: number): string {
     const c = completionByLayer.get(layerIndex);
-    return c && c.total > 0 ? Math.round((c.collected / c.total) * 100) : 0;
+    return c && c.total > 0 ? formatPercent(c.collected / c.total) : '0%';
   }
   function layerName(layerIndex: number): string {
     return LAYERS.find((l) => l.index === layerIndex)?.nameKo ?? '';
@@ -76,10 +76,10 @@
     <span class="cx-meta">
       <span class="cx-count">{codex.collected}<span class="slash">/</span>{codex.denominator}</span>
       <span class="dot">·</span>
-      <span class="cx-pct">{Math.round(codex.completion * 100)}%</span>
+      <span class="cx-pct">{formatPercent(codex.completion)}</span>
       <span class="dot">·</span>
       <span class="cx-holo" title="홀로그래픽 배율 — 정보층에서 적용 (완주 시 ×1.350)"
-        >홀로 ×{holoMult.toFixed(3)}</span>
+        >홀로 {formatMultiplier(holoMult, 3)}</span>
     </span>
   </header>
 
@@ -99,7 +99,7 @@
   </nav>
 
   <div class="cx-layerhead">
-    {layerName(selectedLayer)}<span class="dim"> · {pct(selectedLayer)}%</span>
+    {layerName(selectedLayer)}<span class="dim"> · {pct(selectedLayer)}</span>
   </div>
 
   <!-- 입자 = 테두리 없는 표본 행(카드 폐기). 발견=밝음, 미발견=물러난 마스킹. -->

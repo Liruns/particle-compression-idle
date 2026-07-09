@@ -6,7 +6,7 @@
    *  단방향(§4.1): prestige 스냅샷만 읽고 실행은 onPrestige 위임. 리셋/보존 매트릭스 정보 불변.
    */
   import type { PrestigeSnapshot } from '../game';
-  import { formatNumber } from '../core/format';
+  import { formatNumber, formatMultiplier } from '../core/format';
 
   export let prestige: PrestigeSnapshot;
   /** 상전이 실행 위임(부모가 game.executePrestige 호출). */
@@ -41,7 +41,7 @@
       <span class="pt-qf-label"
         >{bc ? '최종 양자 거품 폭발' : prestige.isFirst ? '양자 거품 첫 획득' : '양자 거품 획득'}</span>
       <span class="pt-qf-gain">+{formatNumber(prestige.qfGain, 0)}<span class="pt-qf-unit"> QF</span></span>
-      <span class="pt-qf-mult">다음 런 생산 ×{formatNumber(prestige.nextMult, 3)}</span>
+      <span class="pt-qf-mult">다음 런 생산 {formatMultiplier(prestige.nextMult, 3)}</span>
     </div>
 
     <!-- 리셋 / 보존 — 두 갈래 원장(테두리 없는 색 텍스트). -->

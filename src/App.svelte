@@ -17,7 +17,7 @@
    */
   import { onMount, onDestroy } from 'svelte';
   import { Game, installUnloadSave, type GameSnapshot, type BuyMode } from './game';
-  import { formatNumber, formatRadius } from './core/format';
+  import { formatNumber, formatRadius, formatMultiplier } from './core/format';
   import { bus } from './core/events';
   import { CanvasRenderer } from './render';
   import type { BoardInput, BoardShell, BoardPhase, BoardHarmonics, BoardPhaseState } from './render/board';
@@ -596,7 +596,7 @@
       {/if}
       {#if snap.mult.gt(1)}
         <div class="res res-mult">
-          <span class="r-sym">배율</span><span class="r-val">×{formatNumber(snap.mult, 3)}</span>
+          <span class="r-sym">배율</span><span class="r-val">{formatMultiplier(snap.mult, 3)}</span>
         </div>
       {/if}
     </div>

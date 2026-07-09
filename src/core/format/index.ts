@@ -99,6 +99,27 @@ export function formatNumber(
 }
 
 /**
+ * 배율 표기(AD formatX 참조: `×${format}`). 배율은 항상 고정 소수(정수라도 ×1.00).
+ *  홀로·공명·오프라인 효율이 제각각 toFixed/formatNumber로 조립되던 걸 단일 헬퍼로 통일 —
+ *  작은 값은 toFixed, 거대 배율은 표기법(formatNumber)으로 안전.
+ */
+export function formatMultiplier(value: DecimalSource, decimals: number = DEFAULT_DECIMALS): string {
+  const d = D(value);
+  if (d.abs().lt('1e6')) return `×${d.toNumber().toFixed(decimals)}`;
+  return `×${formatNumber(d, decimals)}`;
+}
+
+/**
+ * 퍼센트 표기(AD formatPercents 참조: `${value*100}%`). 도감 완성도·오프라인 효율 등
+ *  Math.round(x*100)를 곳곳에서 반복하던 걸 통일. decimals=0이면 반올림 정수.
+ */
+export function formatPercent(fraction: DecimalSource, decimals: number = 0): string {
+  const pct = D(fraction).mul(100).toNumber();
+  if (!Number.isFinite(pct)) return '—';
+  return decimals > 0 ? `${pct.toFixed(decimals)}%` : `${Math.round(pct)}%`;
+}
+
+/**
  * e{log₁₀} — 로그 표기(AD Logarithm 참조: `e${log10}`). 이 게임은 dec=α·log₁₀C의 로그 스케일이라
  *  거대 수의 자릿수 비교에 가장 직관적(예: 1.23×10⁴⁰ → e40.09). 작은 수는 상위 콤마 분기가 이미
  *  가독 처리하므로 여기 도달하지 않는다(로그 표기는 큰/극소 수에만).

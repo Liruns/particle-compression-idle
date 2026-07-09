@@ -5,14 +5,14 @@
    *  헤더 한 줄로 강등 · 탈채도 공허 팔레트. 단방향(§4.1): offline 스냅샷만 읽고 닫기는 onDismiss 위임.
    */
   import type { OfflineSnapshot } from '../game';
-  import { formatNumber, formatDuration } from '../core/format';
+  import { formatNumber, formatDuration, formatMultiplier, formatPercent } from '../core/format';
   import { focusTrap } from './actions/focus-trap';
 
   export let offline: OfflineSnapshot;
   /** 확인(모달 닫기) 위임 — 부모가 game.dismissOffline 호출. */
   export let onDismiss: () => void;
 
-  $: effPct = Math.round(offline.modifier * 100);
+
   $: isPrestigeBonus = offline.modifier >= 1;
 
   function onKey(e: KeyboardEvent) {
@@ -30,8 +30,8 @@
       <span class="om-elapsed">{formatDuration(offline.rawSeconds)} 동안 압축이 진행됐습니다.</span>
       <span class="om-eff"
         >유효 환산 {formatDuration(offline.effectiveSeconds)} · 효율 <span class="om-eff-pct"
-          >{effPct}%</span
-        > (×{offline.modifier.toFixed(2)})</span>
+          >{formatPercent(offline.modifier)}</span
+        > ({formatMultiplier(offline.modifier, 2)})</span>
     </header>
 
     <!-- 획득 = 테두리 없는 로그 행. 자원 = 색 글자 글리프(E 금·C 청·D 보라). -->
