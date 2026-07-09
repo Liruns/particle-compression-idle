@@ -39,6 +39,7 @@ function baseInput(over: Partial<BoardInput>): BoardInput {
     resonance: { active: false, open: false, progress: 0, combo: 0 },
     phase: { active: false, state: 'coherent', pinned: false, cycleProgress: 0, pinCostLabel: '0', nodes: [] },
     harmonics: { active: false, chargeProgress: 0, nextTier: 1, burstingTiers: [], totalResonances: 0 },
+    layerIndex: 1,
     ...over,
   };
 }

@@ -287,6 +287,7 @@
         resonance,
         phase,
         harmonics,
+        layerIndex: s.layer.index,
       };
     }
     // 최적(가장 싼 다음 구매) 티어 — 부름 강조.
@@ -325,6 +326,7 @@
       resonance,
       phase,
       harmonics,
+      layerIndex: s.layer.index,
     };
   }
 

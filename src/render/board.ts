@@ -114,6 +114,8 @@ export interface BoardInput {
   phase: BoardPhase;
   /** 진동 하모닉스 상태(끈층+, passive 시각화). 비활성이면 active=false. */
   harmonics: BoardHarmonics;
+  /** 현재 층 index(1..11). 껍질 형태 모티프(층별 압축기 정체성) 선택에 쓴다. */
+  layerIndex: number;
 }
 
 /** 히트테스트 결과 — App이 game 호출을 분기. */
@@ -243,6 +245,7 @@ export class BoardRenderer {
     resonance: { active: false, open: false, progress: 0, combo: 0 },
     phase: { active: false, state: 'coherent', pinned: false, cycleProgress: 0, pinCostLabel: '', nodes: [] },
     harmonics: { active: false, chargeProgress: 0, nextTier: 1, burstingTiers: [], totalResonances: 0 },
+    layerIndex: 1,
   };
   private reducedMotion = false;
   /** 현재 층 발광색('r,g,b') — WorldRenderer가 매 프레임 공급(전환 보간 포함). 코어·자유빛이 따른다. */
@@ -540,6 +543,65 @@ export class BoardRenderer {
     return mixRGB(base, this.layerColor, SHELL_LAYER_BLEND);
   }
 
+  /** 층별 껍질 형태 모티프(계층별 압축기 정체성 — 색 넘어 형태로 세계를 구분). */
+  private shellMotif(): 'dot' | 'ring' | 'bar' | 'diamond' {
+    const idx = this.input.layerIndex;
+    if (idx === 5 || idx === 11) return 'diamond'; // 쿼크·플랑크 = 점입자(마름모).
+    if (idx === 7 || idx === 10) return 'bar'; // 끈·정보 = 진동 현/비트(막대).
+    if (idx === 6 || idx === 8 || idx === 9) return 'ring'; // 프리온·루프·거품 = 고리.
+    return 'dot'; // 분자·원자·핵·핵자 = 입자 점(기본).
+  }
+
+  /** 궤도 위 결속 양자 1개를 모티프 형태로. ang=궤도각(막대 접선 방향). */
+  private drawShellMark(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    r: number,
+    ang: number,
+    fill: string,
+    motif: 'dot' | 'ring' | 'bar' | 'diamond',
+  ): void {
+    if (motif === 'ring') {
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.25, 0, TAU);
+      ctx.strokeStyle = fill;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      return;
+    }
+    if (motif === 'bar') {
+      const tx = -Math.sin(ang);
+      const ty = Math.cos(ang);
+      const L = r * 1.9;
+      ctx.beginPath();
+      ctx.moveTo(x - tx * L, y - ty * L);
+      ctx.lineTo(x + tx * L, y + ty * L);
+      ctx.strokeStyle = fill;
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      return;
+    }
+    if (motif === 'diamond') {
+      const d = r * 1.35;
+      ctx.beginPath();
+      ctx.moveTo(x, y - d);
+      ctx.lineTo(x + d, y);
+      ctx.lineTo(x, y + d);
+      ctx.lineTo(x - d, y);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      return;
+    }
+    // dot(기본): 채운 원.
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
   /** 위상 고정/해제 피드백(App이 pin/unpin 후 호출). 선택 노드에 잔광 + "고정/해제" 텍스트. */
   onPhase(state: BoardPhaseState, pinned: boolean): void {
     this.phasePinPulse = 1;
@@ -718,6 +780,7 @@ export class BoardRenderer {
       : Math.max(3, Math.min(46, 4 + Math.floor(owned * 16 * 0.2) + (s.bought % 6)));
     const dotBaseR = 1.0 + boundNorm * 1.6 + bloom * 0.9;
     let brightBudget = 10;
+    const motif = this.shellMotif();
     for (let k = 0; k < dotCount; k++) {
       const a = ang0 + (k / dotCount) * TAU;
       const h = fract(Math.sin(k * 12.9898 + i * 7.13) * 43758.5453);
@@ -731,10 +794,7 @@ export class BoardRenderer {
         brightBudget--;
         this.glow(ctx, px, py, pr * 3.2 + 2, col, Math.min(0.5, pa * 0.5));
       }
-      ctx.beginPath();
-      ctx.arc(px, py, pr, 0, TAU);
-      ctx.fillStyle = `rgba(${col},${Math.min(0.95, pa)})`;
-      ctx.fill();
+      this.drawShellMark(ctx, px, py, pr, a, `rgba(${col},${Math.min(0.95, pa)})`, motif);
     }
     // 하모닉(끈층+) 강조: 버스트 중이면 자홍 환링(폭발), 다음 공명 티어면 옅은 점화 예고 맥동.
     const harm = this.input.harmonics;
