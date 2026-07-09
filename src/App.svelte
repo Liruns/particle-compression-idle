@@ -59,6 +59,8 @@
       (isTauriDesktop && !forceGame));
   /** DEV: ?p=0.6 으로 코스믹 진행도 강제(단계 확인용). null이면 게임 dec/26 연동. */
   const cosmicDevP = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('p') : null;
+  /** Tauri 투명창 위젯에서만 투명 배경(웹 ?widget은 어두운 씬 그대로 확인용). */
+  const widgetTransparent = widget && isTauriDesktop;
 
   // 풀스크린 게임 캔버스(세계 배경 + 전경 게임판). 글로우 게이지 캔버스는 폐기(null) — 게이지=코어로 대체.
   let bgCanvas: HTMLCanvasElement | null = null;
@@ -118,6 +120,10 @@
 
     setupRenderer();
     renderer?.setWidgetMode(widget);
+    renderer?.setTransparent(widgetTransparent);
+    if (widgetTransparent && typeof document !== 'undefined') {
+      document.body.classList.add('widget-transparent');
+    }
     busUnsubs.push(bus.on('bigCrunch', () => renderer?.cosmicBang())); // 빅크런치 → 위젯 빅뱅 섬광.
     rmUnsub = effectiveReducedMotion.subscribe((v) => {
       renderer?.setReducedMotion(v);
@@ -567,6 +573,10 @@
 <svelte:window on:keydown={onKeydown} on:pointerup={endPointer} on:blur={endPointer} />
 
 {#if !widget}<Toast bind:this={toast} />{/if}
+{#if widget && isTauriDesktop}
+  <!-- Tauri 프레임리스 위젯: 테두리가 없으니 전체 창을 드래그 핸들로(위젯엔 클릭 상호작용 없음). -->
+  <div class="widget-drag" data-tauri-drag-region aria-hidden="true"></div>
+{/if}
 
 <!-- 풀스크린 게임 캔버스 — 세계 배경 + 전경 게임판. 포인터=만지기 표면(공허가 곧 게임판 §3). -->
 <canvas
@@ -744,6 +754,21 @@
     background: #000;
     overflow: hidden;
     color: #e0eef4;
+  }
+
+  /* Tauri 투명 위젯: 페이지도 투명해야 창 뒤 바탕화면이 비친다. */
+  :global(body.widget-transparent) {
+    background: transparent;
+  }
+  /* 프레임리스 위젯 드래그 영역 — 전체 창(캔버스 위). data-tauri-drag-region이 실제 이동 처리. */
+  .widget-drag {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    cursor: grab;
+  }
+  .widget-drag:active {
+    cursor: grabbing;
   }
 
   /* 풀스크린 게임 캔버스 — 만질 표면. (세계+전경 한 파이프라인) */

@@ -41,6 +41,8 @@ export class CosmicCycle {
   private time = 0;
   private bangT = 0; // 빅뱅 플래시(0..1 감쇠).
   private reduced = false;
+  /** 투명 위젯 모드 — 불투명 배경 대신 중앙 소프트 헤일로(가장자리 완전 투명 → 바탕화면에 떠 있는 느낌). */
+  private transparent = false;
 
   private readonly stars: { x: number; y: number; s: number; ph: number }[] = [];
   private readonly orbs: Orbiter[] = [];
@@ -73,6 +75,10 @@ export class CosmicCycle {
   setReducedMotion(v: boolean): void {
     this.reduced = v;
   }
+  /** 투명 배경 모드 on/off(Tauri 투명창 위젯). */
+  setTransparent(v: boolean): void {
+    this.transparent = v;
+  }
 
   private glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, col: string, a: number): void {
     if (a <= 0 || r <= 0) return;
@@ -99,8 +105,18 @@ export class CosmicCycle {
 
     // 심우주 배경.
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = '#05060a';
-    ctx.fillRect(0, 0, W, H);
+    if (this.transparent) {
+      // 투명 위젯: 중앙만 은은히 어둡고 가장자리는 완전 투명 → 우주가 바탕화면에 떠 있는 느낌.
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.6);
+      g.addColorStop(0, 'rgba(5,6,10,0.62)');
+      g.addColorStop(0.6, 'rgba(5,6,10,0.30)');
+      g.addColorStop(1, 'rgba(5,6,10,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+    } else {
+      ctx.fillStyle = '#05060a';
+      ctx.fillRect(0, 0, W, H);
+    }
     // 성단(은하 단계에서 밝아짐).
     ctx.globalCompositeOperation = 'lighter';
     const starA = 0.25 + 0.35 * clamp((p - 0.4) / 0.4, 0, 1);

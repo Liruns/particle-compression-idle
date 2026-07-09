@@ -106,6 +106,11 @@ export class CanvasRenderer implements Renderer {
     this.cosmic.bang();
   }
 
+  /** 투명 배경 모드(Tauri 투명창 위젯) — 코스믹 씬이 불투명 배경 대신 소프트 헤일로로 그린다. */
+  setTransparent(v: boolean): void {
+    this.cosmic.setTransparent(v);
+  }
+
   /**
    * 층 전환(slug 변화 시 App에서 호출). 세계 전환 하강 재생 + 새 세계 물질 교체.
    *  첫 호출(부팅 슬러그)은 즉시 스냅(전환 없음), 이후 slug 변화는 떨어짐 전환(art §5-B).
