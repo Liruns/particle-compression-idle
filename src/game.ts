@@ -1413,6 +1413,14 @@ export class Game {
     this.notify();
   }
 
+  /**
+   * 렌더 FPS 캡 변경(발열/전력, 표시 전용 — 로직 불변). 기본 30fps.
+   *  감소모션(정지 앰비언트) 시 App이 더 낮춰 정지 프레임 재그리기 낭비를 줄인다.
+   */
+  setRenderFps(fps: number): void {
+    this.loop.setRenderMinInterval(fps > 0 ? 1000 / fps : 0);
+  }
+
   // --- 구독(Svelte 단방향, §4.1) ---------------------------------------------
   subscribe(fn: SnapshotListener): () => void {
     this.listeners.add(fn);

@@ -102,7 +102,12 @@
     installUnloadSave(game);
 
     setupRenderer();
-    rmUnsub = effectiveReducedMotion.subscribe((v) => renderer?.setReducedMotion(v));
+    rmUnsub = effectiveReducedMotion.subscribe((v) => {
+      renderer?.setReducedMotion(v);
+      // 발열/전력: 감소모션이면 앰비언트가 정지 → 렌더 12fps로 더 낮춤(정지 프레임 재그리기 낭비 감소).
+      //   입력(드래그 압축·구매)은 직접 notify라 캡과 무관하게 즉시 반응.
+      game?.setRenderFps(v ? 12 : 30);
+    });
 
     // 사운드 엔진 — 이벤트 버스 구독(읽기 전용). 층 인덱스로 음역 결정. prefs로 mute/volume 반영.
     audio = new AudioEngine({ getLayerIndex: () => snap?.layer.index ?? 1 });

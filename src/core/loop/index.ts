@@ -70,7 +70,7 @@ export class GameLoop {
   private readonly renderFn: RenderFn;
   private readonly onOverflow?: OverflowFn;
   private readonly now: () => number;
-  private readonly renderMinIntervalMs: number;
+  private renderMinIntervalMs: number;
   /** 마지막 render 시각(ms) — FPS 캡 스로틀 기준. */
   private lastRender = 0;
 
@@ -88,6 +88,11 @@ export class GameLoop {
     this.onOverflow = opts.onOverflow;
     this.now = opts.now ?? (() => performance.now());
     this.renderMinIntervalMs = opts.renderMinIntervalMs ?? 0;
+  }
+
+  /** 렌더 FPS 캡을 런타임 변경(발열/전력 — 예: 감소모션 시 정지 앰비언트라 더 낮춤). ms=프레임 최소 간격. */
+  setRenderMinInterval(ms: number): void {
+    this.renderMinIntervalMs = Number.isFinite(ms) && ms > 0 ? ms : 0;
   }
 
   start(): void {
