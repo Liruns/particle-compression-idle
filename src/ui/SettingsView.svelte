@@ -30,6 +30,7 @@
     { id: 'scientific', label: '과학' },
     { id: 'engineering', label: '공학' },
     { id: 'standard', label: '표준' },
+    { id: 'logarithm', label: '로그' },
   ];
 
   // 세이브 데이터 UI 상태.
@@ -152,7 +153,7 @@
         {/each}
       </div>
     </div>
-    <p class="s-hint">과학 1.23×10²³ · 공학 1.23e+24 · 표준 1.23M</p>
+    <p class="s-hint">과학 1.23×10²³ · 공학 1.23e+24 · 표준 1.23M · 로그 e23.09</p>
   </section>
 
   <!-- 세이브 데이터 -->

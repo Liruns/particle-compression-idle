@@ -11,6 +11,7 @@
  */
 
 import { Decimal, toStore, fromStore, ZERO } from '../bignum';
+import type { NotationKind } from '../format';
 import {
   type GameState,
   type SettingsState,
@@ -204,9 +205,9 @@ function safeCount(v: unknown): number {
 function safeNonNeg(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
 }
-/** 표기법 정규화: 유효 3종만 채택(구버전/손상/악성 → 기본 scientific). */
-function safeNotation(v: unknown): 'scientific' | 'engineering' | 'standard' {
-  return v === 'engineering' || v === 'standard' ? v : 'scientific';
+/** 표기법 정규화: 유효 4종만 채택(구버전/손상/악성 → 기본 scientific). */
+function safeNotation(v: unknown): NotationKind {
+  return v === 'engineering' || v === 'standard' || v === 'logarithm' ? v : 'scientific';
 }
 /** 체인 보유 배열을 항상 길이 CHAIN_TIERS로 정규화(구버전 길이 변화 방어). */
 function normalizeBought(arr: number[]): number[] {

@@ -15,6 +15,7 @@
  */
 
 import { Decimal, D, ZERO } from '../bignum';
+import type { NotationKind } from '../format';
 import { SEED_T1_BOUGHT } from '../chain/engine';
 import { OrbitalResonance, PhaseOverlap, Harmonics } from '../layers/mechanics';
 
@@ -135,7 +136,7 @@ export interface SettingsState {
   /** 오프라인 정밀모드 on/off(§3.1 미니 시뮬). */
   offlinePrecise: boolean;
   /** 숫자 표기법. */
-  notation: 'scientific' | 'engineering' | 'standard';
+  notation: NotationKind;
   /** 색맹 모드(DESIGN accessibility). null=off. */
   colorblind: 'protanopia' | 'deuteranopia' | 'tritanopia' | null;
 }

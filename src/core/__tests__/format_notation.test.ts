@@ -127,3 +127,23 @@ describe('formatDuration — 복합 2단위 + 방어(스텁 소수-단위 제거
     expect(formatDuration(Infinity)).toBe('0초');
   });
 });
+
+describe('logarithm 표기 (AD Logarithm 참조 — 로그 스케일 게임 테마)', () => {
+  it('거대 수는 e{log₁₀} — 자릿수 직관', () => {
+    expect(formatNumber('1e40', 2, 'logarithm')).toBe('e40.00');
+    expect(formatNumber('1.23e40', 2, 'logarithm')).toBe('e40.09');
+    expect(formatNumber('1e100', 2, 'logarithm')).toBe('e100.00');
+  });
+  it('극소 수는 음수 지수', () => {
+    expect(formatNumber('3e-11', 2, 'logarithm')).toBe('e-10.52');
+  });
+  it('작은 수는 표기법 무관 콤마 유지(로그 분기 미도달)', () => {
+    expect(formatNumber(1234, 2, 'logarithm')).toBe('1,234');
+    expect(formatNumber(70.25, 2, 'logarithm')).toBe('70.25');
+  });
+  it('전역 기본으로 설정 시 미지정 호출부가 로그를 따름', () => {
+    setDefaultNotation('logarithm');
+    expect(getDefaultNotation()).toBe('logarithm');
+    expect(formatNumber('1e50', 2)).toBe('e50.00');
+  });
+});

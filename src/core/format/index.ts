@@ -17,7 +17,7 @@
 
 import { Decimal, D, type DecimalSource } from '../bignum';
 
-export type NotationKind = 'scientific' | 'engineering' | 'standard';
+export type NotationKind = 'scientific' | 'engineering' | 'standard' | 'logarithm';
 
 /** 유효 자릿수 기본값(DESIGN min-digits=3 → 소수 2자리 = 유효 3자리). */
 const DEFAULT_DECIMALS = 2;
@@ -91,11 +91,23 @@ export function formatNumber(
       ? formatEngineering(abs, exp, decimals)
       : nk === 'standard'
         ? formatStandard(abs, exp, decimals)
-        : formatScientific(abs, exp, decimals);
+        : nk === 'logarithm'
+          ? formatLogarithm(abs, decimals)
+          : formatScientific(abs, exp, decimals);
 
   return neg ? `-${formatted}` : formatted;
 }
 
+/**
+ * e{log₁₀} — 로그 표기(AD Logarithm 참조: `e${log10}`). 이 게임은 dec=α·log₁₀C의 로그 스케일이라
+ *  거대 수의 자릿수 비교에 가장 직관적(예: 1.23×10⁴⁰ → e40.09). 작은 수는 상위 콤마 분기가 이미
+ *  가독 처리하므로 여기 도달하지 않는다(로그 표기는 큰/극소 수에만).
+ */
+function formatLogarithm(abs: Decimal, decimals: number): string {
+  const log10 = abs.log10().toNumber();
+  if (!Number.isFinite(log10)) return log10 < 0 ? 'e-∞' : 'e∞';
+  return `e${log10.toFixed(decimals)}`;
+}
 /** N.NN×10ⁿ — DESIGN scientific 기본. */
 function formatScientific(abs: Decimal, exp: number, decimals: number): string {
   // mantissa = abs / 10^exp  (1 <= mantissa < 10)
