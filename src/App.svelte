@@ -78,6 +78,8 @@
   type Panel = 'research' | 'codex' | 'prestige' | 'settings' | 'stats' | 'achievements' | 'help';
   let activePanel: Panel | null = null;
 
+  /** 포인터 드래그(누른 채 쓸어담기) 상태. 호버 스윕은 조작감 문제로 롤백 — 누른 채만 흡수. */
+  let pointerDown = false;
 
   /** 현재 층 발광색(QF 성표 = 층색 §3-C). pushRender에서 갱신. */
   let layerRgb = '159,184,154';
@@ -334,6 +336,7 @@
   function onPointerDown(e: PointerEvent): void {
     if (!renderer || !game || !snap || e.button !== 0) return;
     unlockAudio();
+    pointerDown = true;
     const { x, y } = canvasXY(e);
     renderer.gameBoard.setPointer(x, y);
     const hit = renderer.gameBoard.activate();
@@ -343,17 +346,22 @@
     else if (hit.kind === 'phase') doPhase(hit.state);
   }
   function onPointerMove(e: PointerEvent): void {
-    if (!renderer || !game) return;
+    if (!renderer) return;
     const { x, y } = canvasXY(e);
     renderer.gameBoard.setPointer(x, y);
-    // 슥슥 스윕 압축: 버튼을 누르지 않아도 포인터가 지나가는 float 세포를 흡수(누를 필요 없음).
-    //   dragAbsorb는 세포 반경 진입 시 1회만 캡처 → 정지 포인터는 추가 흡수 0(경제 중립).
-    const n = renderer.gameBoard.dragAbsorb(x, y);
-    if (n > 0) doCompress(n); // 한 스윕에 여러 셀 흡수해도 압축·렌더는 1회 배치(메인스레드 블록 방지).
+    // 드래그 쓸어담기 — 버튼을 누른 채 지나간 float 세포만큼 압축(호버 스윕 롤백, 조작감).
+    if (pointerDown) {
+      const n = renderer.gameBoard.dragAbsorb(x, y);
+      if (n > 0) doCompress(n); // 여러 셀 흡수도 압축·렌더 1회 배치(메인스레드 블록 방지).
+    }
   }
 
   function onPointerLeave(): void {
+    pointerDown = false;
     renderer?.gameBoard.clearPointer();
+  }
+  function endPointer(): void {
+    pointerDown = false;
   }
 
   /** 세포 흡수 = 수동 압축(실제 게임). 획득 E를 중심 떠오르는 수치로 피드백. */
@@ -524,7 +532,7 @@
                   : '';
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window on:keydown={onKeydown} on:pointerup={endPointer} on:blur={endPointer} />
 
 <Toast bind:this={toast} />
 
