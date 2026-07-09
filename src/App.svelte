@@ -44,10 +44,19 @@
   let unsub: (() => void) | null = null;
   const busUnsubs: (() => void)[] = [];
   let toast: Toast;
-  /** 데스크톱 위젯 모드(#widget 또는 ?widget) — 게임 UI를 숨기고 코스믹 사이클 씬만 그린다(진행 연동). */
+  /** 데스크톱 위젯 모드 — 게임 UI를 숨기고 코스믹 사이클 씬만 그린다(진행 연동).
+   *  트리거: #widget/?widget, 또는 Tauri 데스크톱 앱(기본 위젯; #game/?game으로 풀게임 오버라이드). */
+  const isTauriDesktop =
+    typeof window !== 'undefined' &&
+    ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+  const forceGame =
+    typeof location !== 'undefined' &&
+    (location.hash.includes('game') || new URLSearchParams(location.search).has('game'));
   const widget =
     typeof location !== 'undefined' &&
-    (location.hash.includes('widget') || new URLSearchParams(location.search).has('widget'));
+    (location.hash.includes('widget') ||
+      new URLSearchParams(location.search).has('widget') ||
+      (isTauriDesktop && !forceGame));
   /** DEV: ?p=0.6 으로 코스믹 진행도 강제(단계 확인용). null이면 게임 dec/26 연동. */
   const cosmicDevP = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('p') : null;
 

@@ -1,0 +1,27 @@
+[package]
+name = "app"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+# 데스크톱(Windows) 전용: cdylib 제거. GNU ld가 tao/wry의 방대한 export 테이블에서
+# "export ordinal too large"로 링크 실패 → DLL(cdylib) 미생성으로 우회. 모바일 재개 시 복원.
+crate-type = ["lib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3" }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3" }
+tauri-plugin-log = "2"
