@@ -657,16 +657,19 @@ export class BoardRenderer {
     const spin = this.reducedMotion ? 0 : dir * (0.04 + boundNorm * 0.5 + i * 0.006);
     const ang0 = now * spin;
 
-    let baseA = 0.05 + boundNorm * 0.5;
+    // 빈 껍질도 "압축기 궤도가 여기 있다"가 보이게 기본 가시성 상향(구 0.025는 사실상 안 보여
+    //   압축기 존재를 모름 — 발견성 개선, 경제 중립). 결속가능 시 더 밝게 맥동.
+    let baseA = 0.07 + boundNorm * 0.48;
     let callGlow = 0;
     if (!s.producing)
-      baseA = can ? 0.08 + (this.reducedMotion ? 0.04 : 0.05 * (0.5 + 0.5 * Math.sin(now * 3))) : 0.025;
+      baseA = can ? 0.13 + (this.reducedMotion ? 0.04 : 0.05 * (0.5 + 0.5 * Math.sin(now * 3))) : 0.06;
     if (can)
       callGlow =
         (0.1 + 0.18 * call) *
         (this.reducedMotion ? 0.8 : 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(now * 2.4 + i)));
     const bloomGlow = bloom * 0.5 + buyP * 0.6;
-    const ringA = baseA + callGlow * 0.6 + bloomGlow * 0.5;
+    // 추천 다음 티어(best)는 결속 가능 여부와 무관히 링을 초점으로 살짝 강조 — "다음 압축기가 여기".
+    const ringA = baseA + callGlow * 0.6 + bloomGlow * 0.5 + (s.best ? 0.05 : 0);
 
     ctx.save();
     ctx.translate(this.cx, this.cy);
