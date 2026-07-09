@@ -16,7 +16,7 @@
  *   init()로 결정적 시드 기반 배치를 1회 만든다(프레임당 추가 힙 할당 0 지향).
  */
 
-const TAU = Math.PI * 2;
+import { TAU } from './util';
 
 /** 결정적 의사난수(시드 기반, 프로토타입 rng와 동일). 외부 의존 없음 — 결정성 보장. */
 function makeRng(seed: number): () => number {

@@ -17,7 +17,7 @@
  *   실제 체인(buy/owned/affordable)·실제 능동(manualCompress)에 연결한다.
  */
 
-const TAU = Math.PI * 2;
+import { TAU, clamp, lerp, fract, easeOutCubic, mixRGB } from './util';
 
 /** 한 껍질(=체인 티어) 표시 입력. owned는 number 파생(ownedLog10)으로만 — Decimal 미유입. */
 export interface BoardShell {
@@ -155,15 +155,6 @@ const SHELL_COLORS: string[] = [
 /** 껍질색↔세계색 조화 비율(계층별 압축기 정체성 — 티어 구분은 유지하되 세계 톤을 입힌다). */
 const SHELL_LAYER_BLEND = 0.45;
 
-/** 'r,g,b' 두 색을 t(0..1)로 선형 혼합. */
-function mixRGB(a: string, b: string, t: number): string {
-  const pa = a.split(',').map(Number);
-  const pb = b.split(',').map(Number);
-  const r = Math.round(pa[0] + (pb[0] - pa[0]) * t);
-  const g = Math.round(pa[1] + (pb[1] - pa[1]) * t);
-  const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t);
-  return `${r},${g},${bl}`;
-}
 
 interface Cell {
   a: number;
@@ -213,18 +204,6 @@ interface FloatText {
 
 const CELL_TARGET = 15;
 
-function clamp(x: number, a: number, b: number): number {
-  return x < a ? a : x > b ? b : x;
-}
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-function easeOutCubic(x: number): number {
-  return 1 - Math.pow(1 - x, 3);
-}
-function fract(x: number): number {
-  return x - Math.floor(x);
-}
 
 /** 결정적 난수(layer-worlds와 동일 — 세포 시드용. 표현 전용이라 결정성은 권장사항). */
 function makeRng(seed: number): () => number {

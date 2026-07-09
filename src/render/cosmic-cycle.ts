@@ -8,17 +8,7 @@
  *  경계에서 크로스페이드. 경제·로직 무관 — snapshot 파생 p만 읽는다(단방향).
  */
 
-const TAU = Math.PI * 2;
-const clamp = (v: number, a: number, b: number): number => Math.min(b, Math.max(a, v));
-const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
-const fract = (x: number): number => x - Math.floor(x);
-/** 결정적 의사난수 0..1(시드 i). */
-const rnd = (i: number): number => fract(Math.sin(i * 127.1 + 11.7) * 43758.5453);
-
-/** 'r,g,b' 선형 혼합. */
-function mix(a: [number, number, number], b: [number, number, number], t: number): string {
-  return `${Math.round(lerp(a[0], b[0], t))},${Math.round(lerp(a[1], b[1], t))},${Math.round(lerp(a[2], b[2], t))}`;
-}
+import { TAU, clamp, lerp, fract, rnd, mixRGB } from './util';
 
 interface Orbiter {
   /** 궤도 반경 비율(0..1, R 기준). */
@@ -245,7 +235,7 @@ export class CosmicCycle {
       const rr = R * (0.24 + k * 0.05);
       ctx.beginPath();
       ctx.ellipse(cx, cy, rr, rr * 0.32, 0.4, 0, TAU);
-      const col = mix([255, 180, 90], [255, 245, 220], k / 2);
+      const col = mixRGB('255,180,90', '255,245,220', k / 2);
       ctx.strokeStyle = `rgba(${col},${a * (0.5 - k * 0.12)})`;
       ctx.lineWidth = 2 + (2 - k);
       ctx.stroke();
