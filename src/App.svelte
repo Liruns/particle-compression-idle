@@ -23,6 +23,7 @@
   import type { BoardInput, BoardShell, BoardPhase, BoardHarmonics, BoardPhaseState } from './render/board';
   import { PHASE_OVERLAP } from './data/constants';
   import { prefs, effectiveReducedMotion, type Prefs } from './ui/stores/prefs';
+  import { focusTrap } from './ui/actions/focus-trap';
   import { AudioEngine } from './core/audio';
   import type { NotationKind } from './core/format';
   import { particleById } from './data/particles';
@@ -426,42 +427,6 @@
     lastFocused = null;
   }
 
-  /**
-   * 포커스 트랩 액션(접근성): 열릴 때 패널 내 첫 포커스 가능 요소로 포커스 이동, Tab을 패널 안에 가둠.
-   *  Esc 닫기는 전역 onKeydown이 담당. 닫을 때 트리거 복귀는 closePanel.
-   */
-  function focusTrap(node: HTMLElement) {
-    const focusables = () =>
-      Array.from(
-        node.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
-    (focusables()[0] ?? node).focus();
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== 'Tab') return;
-      const f = focusables();
-      if (f.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = f[0];
-      const last = f[f.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    node.addEventListener('keydown', onKey);
-    return {
-      destroy() {
-        node.removeEventListener('keydown', onKey);
-      },
-    };
-  }
   /** 입력 필드(가져오기 textarea 등)에 포커스면 게임 단축키 억제 — 타이핑 보호. */
   function isTypingTarget(el: EventTarget | null): boolean {
     const t = el as HTMLElement | null;

@@ -6,6 +6,7 @@
    */
   import type { OfflineSnapshot } from '../game';
   import { formatNumber, formatDuration } from '../core/format';
+  import { focusTrap } from './actions/focus-trap';
 
   export let offline: OfflineSnapshot;
   /** 확인(모달 닫기) 위임 — 부모가 game.dismissOffline 호출. */
@@ -16,38 +17,6 @@
 
   function onKey(e: KeyboardEvent) {
     if (e.key === 'Escape') onDismiss();
-  }
-
-  /** 포커스 트랩(접근성): 열릴 때 패널 내 첫 포커스 요소로 이동, Tab을 패널 안에 가둠. */
-  function focusTrap(node: HTMLElement) {
-    const focusables = () =>
-      Array.from(
-        node.querySelectorAll<HTMLElement>('button, [href], [tabindex]:not([tabindex="-1"])'),
-      ).filter((el) => !el.hasAttribute('disabled') && el.offsetParent !== null);
-    (focusables()[0] ?? node).focus();
-    function onTab(e: KeyboardEvent) {
-      if (e.key !== 'Tab') return;
-      const f = focusables();
-      if (f.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = f[0];
-      const last = f[f.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-    node.addEventListener('keydown', onTab);
-    return {
-      destroy() {
-        node.removeEventListener('keydown', onTab);
-      },
-    };
   }
 </script>
 
