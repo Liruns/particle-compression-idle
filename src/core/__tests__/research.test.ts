@@ -21,14 +21,18 @@ import {
   chainTierMultipliers,
   clickPowerMultiplier,
   dYieldMultiplier,
+  resonanceDMultiplier,
+  resonanceWindowBonus,
+  resonanceComboMaxBonus,
+  hasAutoResonance,
   researchSnapshot,
 } from '../research';
 import { createInitialState } from '../state';
 import { serializeState, deserializeState } from '../save/serialize';
 
 describe('연구 노드 데이터 — A가지 체인증폭 (research-tree §2)', () => {
-  it('시드 = 7노드, 루트 3개(선행 없음)', () => {
-    expect(RESEARCH_NODES.length).toBe(7);
+  it('시드 = 11노드, 루트 3개(선행 없음)', () => {
+    expect(RESEARCH_NODES.length).toBe(11);
     expect(RESEARCH_NODES.filter((n) => n.prerequisites.length === 0).length).toBe(3);
   });
 
@@ -142,7 +146,7 @@ describe('연구 스냅샷 — researchSnapshot (ui-flow §3 표시 상태)', ()
   it('미해금: unlocked false', () => {
     const v = researchSnapshot(new Set(), false, () => true);
     expect(v.unlocked).toBe(false);
-    expect(v.branchProgress).toEqual([0, 7]);
+    expect(v.branchProgress).toEqual([0, 11]);
   });
 
   it('A1 구매 가능(D 충분) → affordable true, A2는 선행 미충족 잠금', () => {
@@ -163,7 +167,7 @@ describe('연구 스냅샷 — researchSnapshot (ui-flow §3 표시 상태)', ()
     expect(a2.unlocked).toBe(true);
     expect(a2.affordable).toBe(true);
     expect(a2.prereqNamesKo).toContain('T1 증폭기'); // 선행 노드 한국어 이름.
-    expect(v.branchProgress).toEqual([1, 7]);
+    expect(v.branchProgress).toEqual([1, 11]);
   });
 
   it('D 부족: affordable false(잠금 아님 — 해금은 됨)', () => {
@@ -226,5 +230,31 @@ describe('효과 적용 — clickPowerMultiplier / dYieldMultiplier (연구소 �
   it('tier_mult 노드(A1)는 click/d_yield에 영향 없음(분리)', () => {
     expect(clickPowerMultiplier(new Set(['A1']))).toBe(1);
     expect(dYieldMultiplier(new Set(['A1']))).toBe(1);
+  });
+});
+
+describe('공명 강화 집계 — resonance_d / window / combo_max / auto', () => {
+  it('구매 없음 → 기본값(배율1·연장0·상한0·자동없음)', () => {
+    const e = new Set<string>();
+    expect(resonanceDMultiplier(e)).toBe(1);
+    expect(resonanceWindowBonus(e)).toBe(0);
+    expect(resonanceComboMaxBonus(e)).toBe(0);
+    expect(hasAutoResonance(e)).toBe(false);
+  });
+  it('Q1(공명 데이터) → resonance_d ×1.5', () => {
+    expect(resonanceDMultiplier(new Set(['Q1']))).toBeCloseTo(1.5, 6);
+  });
+  it('Q2(넓은 공명창) → window +1.5초', () => {
+    expect(resonanceWindowBonus(new Set(['Q2']))).toBeCloseTo(1.5, 6);
+  });
+  it('Q3(깊은 공명) → combo_max +5', () => {
+    expect(resonanceComboMaxBonus(new Set(['Q3']))).toBe(5);
+  });
+  it('Z1(자동 공명) → hasAutoResonance true', () => {
+    expect(hasAutoResonance(new Set(['Z1']))).toBe(true);
+  });
+  it('공명 노드는 생산 티어 배율(chainTierMultipliers)에 영향 없음(분리)', () => {
+    const m = chainTierMultipliers(new Set(['Q1', 'Q2', 'Q3', 'Z1']));
+    expect(m).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
   });
 });

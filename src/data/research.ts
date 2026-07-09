@@ -41,6 +41,25 @@ export type ResearchEffect =
       /** 발견·공명 D 획득 배율(>1). 연구 연료를 가속 — 생산 레이스 무관(안전한 성장 축). */
       kind: 'd_yield';
       value: number;
+    }
+  | {
+      /** 공명 D(클릭+자동) 획득 배율(>1). 오비탈 공명 전용 연료↑ — 생산 레이스 무관. */
+      kind: 'resonance_d';
+      value: number;
+    }
+  | {
+      /** 공명 창 연장(초). 슬롯 유효 시간↑ — 타이밍이 관대해짐(QoL). */
+      kind: 'resonance_window';
+      value: number;
+    }
+  | {
+      /** 콤보 상한 증가(정수). 연속 성공 D 가속의 천장↑. */
+      kind: 'resonance_combo_max';
+      value: number;
+    }
+  | {
+      /** 자동 공명. 열린 슬롯을 자동으로 잡아 성공 처리(개입 자동화 — 콤보 유지). */
+      kind: 'auto_resonance';
     };
 
 /** 연구 노드 정의(research-tree §1 스키마). */
@@ -158,6 +177,54 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     prerequisites: ['A2'],
     costD: 800,
     flavorKo: '기초 단을 공진시켜 폭발적으로 끌어올린다. 뿌리가 깊을수록 나무는 높다.',
+  },
+  {
+    id: 'Q1',
+    branch: 'SYNERGY',
+    name: 'Resonance Data',
+    nameKo: '공명 데이터',
+    depth: 2,
+    effect: { kind: 'resonance_d', value: 1.5 },
+    effectKo: '공명 데이터(D) 획득 ×1.5 (클릭·자동)',
+    prerequisites: ['R1'],
+    costD: 60,
+    flavorKo: '공명의 순간을 더 깊이 기록한다. 같은 공명에서 더 많은 데이터.',
+  },
+  {
+    id: 'Q2',
+    branch: 'SYNERGY',
+    name: 'Wide Resonance Window',
+    nameKo: '넓은 공명창',
+    depth: 3,
+    effect: { kind: 'resonance_window', value: 1.5 },
+    effectKo: '공명 슬롯 유효 시간 +1.5초 (타이밍 관대)',
+    prerequisites: ['Q1'],
+    costD: 160,
+    flavorKo: '공명의 창이 넓어진다. 서두르지 않아도 잡을 수 있다.',
+  },
+  {
+    id: 'Q3',
+    branch: 'SYNERGY',
+    name: 'Deep Resonance',
+    nameKo: '깊은 공명',
+    depth: 4,
+    effect: { kind: 'resonance_combo_max', value: 5 },
+    effectKo: '공명 콤보 상한 +5 (연속 성공 D 천장↑)',
+    prerequisites: ['Q2'],
+    costD: 450,
+    flavorKo: '공명이 공명을 부른다. 끊기지 않는 한 더 깊이 울린다.',
+  },
+  {
+    id: 'Z1',
+    branch: 'AUTO',
+    name: 'Auto Resonance',
+    nameKo: '자동 공명',
+    depth: 3,
+    effect: { kind: 'auto_resonance' },
+    effectKo: '열린 공명 슬롯을 자동으로 잡음 (개입 자동화 — 콤보 유지)',
+    prerequisites: ['Q1'],
+    costD: 600,
+    flavorKo: '관측 장치가 스스로 공명을 포착한다. 손을 떼도 공명은 이어진다.',
   },
 ] as const;
 

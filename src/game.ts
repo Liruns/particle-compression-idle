@@ -72,6 +72,10 @@ import {
   chainTierMultipliers,
   clickPowerMultiplier,
   dYieldMultiplier,
+  resonanceDMultiplier,
+  resonanceWindowBonus,
+  resonanceComboMaxBonus,
+  hasAutoResonance,
   researchSnapshot,
   isResearchUnlocked,
   type ResearchView,
@@ -403,6 +407,9 @@ export class Game {
     //  멱등이므로 이미 기록된 것은 재발화 안 함.
     this.processProgression(computeDec(getState().resources.C));
 
+    // 로드된 연구(공명 강화 노드)를 orbital에 주입(파생 — 세이브엔 purchased만, 강화는 재계산).
+    this.applyResonanceConfig();
+
     // everySecond: lastSave·플레이타임 갱신(저빈도, §4.2).
     this.scheduler.every('everySecond', 1, () => {
       const s = getState();
@@ -475,11 +482,22 @@ export class Game {
     const s = getState();
     if (!this.isResonanceActive()) return 1;
 
-    const r = s.mechanics.orbital.update(dt);
-    if (r.dGained > 0) this.addDiscovery(r.dGained);
+    const orbital = s.mechanics.orbital;
+    const resD = resonanceDMultiplier(s.research.purchased); // 공명 데이터 연구 배율.
+    const r = orbital.update(dt);
+    if (r.dGained > 0) this.addDiscovery(r.dGained * resD);
     if (r.slotOpened) bus.emit('resonance_slot_open', {});
     if (r.autoResonated) bus.emit('resonance_auto', {});
-    return s.mechanics.orbital.getMultiplier();
+
+    // 자동 공명 연구(Z1): 열린 슬롯을 자동으로 잡아 성공 처리(콤보 유지 + D). 개입 자동화.
+    if (hasAutoResonance(s.research.purchased) && orbital.getPhase() === 'open') {
+      const cr = orbital.click();
+      if (cr.success) {
+        if (cr.dGained > 0) this.addDiscovery(cr.dGained * resD);
+        bus.emit('resonance_click', { success: true });
+      }
+    }
+    return orbital.getMultiplier();
   }
 
   /**
@@ -705,10 +723,21 @@ export class Game {
     // 원자적 적용: D 차감 → 구매 기록.
     s.resources.D_current = sub(s.resources.D_current, D(r.node.costD));
     s.research.purchased.add(r.node.id);
+    // 공명 강화 노드(창/콤보 상한)를 orbital에 즉시 반영(파생 — 저장 안 함).
+    this.applyResonanceConfig();
 
     bus.emit('research_purchased', { nodeId: r.node.id, branch: r.node.branch });
     this.notify();
     return true;
+  }
+
+  /** research.purchased에서 공명 강화(창/콤보 상한)를 계산해 orbital에 주입. 로드/구매 시 호출. */
+  private applyResonanceConfig(): void {
+    const p = getState().research.purchased;
+    getState().mechanics.orbital.configure(
+      resonanceWindowBonus(p),
+      resonanceComboMaxBonus(p),
+    );
   }
 
   /**
@@ -941,7 +970,8 @@ export class Game {
     if (!this.isResonanceActive()) return false;
     const s = getState();
     const r = s.mechanics.orbital.click();
-    if (r.success && r.dGained > 0) this.addDiscovery(r.dGained);
+    if (r.success && r.dGained > 0)
+      this.addDiscovery(r.dGained * resonanceDMultiplier(s.research.purchased));
     bus.emit('resonance_click', { success: r.success });
     this.notify();
     return r.success;

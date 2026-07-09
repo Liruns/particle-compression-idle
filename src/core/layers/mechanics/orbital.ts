@@ -73,6 +73,9 @@ export class OrbitalResonance implements LayerMechanic {
   private bonus = 1;
   /** 연속 성공 콤보(개선 — 연달아 맞힐수록 클릭 D↑, 놓치면 0). */
   private combo = 0;
+  /** 연구 강화(파생 — game.ts가 research에서 계산해 주입, 저장 안 함). 창 연장(초)·콤보 상한 증가. */
+  private windowBonus = 0;
+  private comboMaxBonus = 0;
 
   /**
    * 고정 dt 전진(systems §2-A 슬롯 상태머신 + 배율 감쇠). game.ts tick에서 매 틱 호출.
@@ -100,7 +103,7 @@ export class OrbitalResonance implements LayerMechanic {
       if (this.phase === 'closed') {
         // 닫힘 → 열림. 남은 음수 시간을 window에서 차감해 이월.
         this.phase = 'open';
-        this.timer += RESONANCE.SLOT_WINDOW_SECONDS;
+        this.timer += this.windowSeconds();
         slotOpened = true;
       } else {
         // 열림 만료(미클릭) → 방치 자동 공명 발화 후 닫힘.
@@ -130,7 +133,7 @@ export class OrbitalResonance implements LayerMechanic {
     this.bonus = Math.max(this.bonus, RESONANCE.CLICK_BONUS);
     this.phase = 'closed';
     this.timer = RESONANCE.SLOT_INTERVAL_SECONDS;
-    this.combo = Math.min(RESONANCE.COMBO_MAX, this.combo + 1);
+    this.combo = Math.min(RESONANCE.COMBO_MAX + this.comboMaxBonus, this.combo + 1);
     const comboMult = 1 + (this.combo - 1) * RESONANCE.COMBO_D_STEP;
     return { success: true, dGained: RESONANCE.D_PER_CLICK * comboMult };
   }
@@ -150,13 +153,25 @@ export class OrbitalResonance implements LayerMechanic {
     return this.combo;
   }
 
+  /** 슬롯 유효 창(초) — 기본 + 연구 연장(넓은 공명창). */
+  private windowSeconds(): number {
+    return RESONANCE.SLOT_WINDOW_SECONDS + this.windowBonus;
+  }
+
+  /** 연구 강화 주입(파생 — game.ts가 research.purchased에서 계산해 로드/구매 시 호출). 저장 안 함. */
+  configure(windowBonus: number, comboMaxBonus: number): void {
+    this.windowBonus = Number.isFinite(windowBonus) && windowBonus > 0 ? windowBonus : 0;
+    this.comboMaxBonus =
+      Number.isFinite(comboMaxBonus) && comboMaxBonus > 0 ? Math.floor(comboMaxBonus) : 0;
+  }
+
   /**
    * 현재 phase 진행도(0~1). open=window 소진율(카운트다운 링), closed=다음 열림까지 진행율.
    *   UI 위젯이 링/프로그레스로 표시(ui-flow §2-E "카운트다운 링").
    */
   getPhaseProgress(): number {
     const full =
-      this.phase === 'open' ? RESONANCE.SLOT_WINDOW_SECONDS : RESONANCE.SLOT_INTERVAL_SECONDS;
+      this.phase === 'open' ? this.windowSeconds() : RESONANCE.SLOT_INTERVAL_SECONDS;
     if (full <= 0) return 0;
     // timer = 남은 시간 → 진행도 = 1 - 남은/전체. 경계 클램프.
     return Math.min(1, Math.max(0, 1 - this.timer / full));

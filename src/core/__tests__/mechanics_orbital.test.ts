@@ -357,3 +357,39 @@ describe('오비탈 공명 콤보', () => {
     expect(m.getCombo()).toBe(0);
   });
 });
+
+// --- 공명 강화(연구 configure — 창 연장 / 콤보 상한) ---------------------------
+describe('오비탈 공명 강화 (configure)', () => {
+  function openAndClick(m: OrbitalResonance) {
+    advance(m, RESONANCE.SLOT_INTERVAL_SECONDS + 0.5);
+    return m.click();
+  }
+
+  it('configure 콤보 상한 증가 → 콤보가 COMBO_MAX+bonus까지', () => {
+    const m = new OrbitalResonance();
+    m.configure(0, 5); // 콤보 상한 +5.
+    for (let i = 0; i < RESONANCE.COMBO_MAX + 8; i++) openAndClick(m);
+    expect(m.getCombo()).toBe(RESONANCE.COMBO_MAX + 5);
+  });
+
+  it('configure 창 연장 → 기본 창이 지나도 슬롯이 열려있음', () => {
+    const m = new OrbitalResonance();
+    m.configure(2, 0); // 창 +2초(3→5초).
+    advance(m, RESONANCE.SLOT_INTERVAL_SECONDS + 0.1); // 열림.
+    expect(m.getPhase()).toBe('open');
+    // 기본 창(3초)을 지나도(총 3.5초 경과) 아직 열림(창 5초).
+    advance(m, RESONANCE.SLOT_WINDOW_SECONDS + 0.4);
+    expect(m.getPhase()).toBe('open');
+    // 연장 창까지 지나면 닫힘(자동 공명).
+    advance(m, 2);
+    expect(m.getPhase()).toBe('closed');
+  });
+
+  it('configure 방어: 음수/비유한 → 0', () => {
+    const m = new OrbitalResonance();
+    m.configure(-5, NaN);
+    advance(m, RESONANCE.SLOT_INTERVAL_SECONDS + 0.5);
+    for (let i = 0; i < RESONANCE.COMBO_MAX + 3; i++) openAndClick(m);
+    expect(m.getCombo()).toBe(RESONANCE.COMBO_MAX); // bonus 0 → 기본 상한.
+  });
+});

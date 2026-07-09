@@ -149,6 +149,39 @@ export function dYieldMultiplier(purchased: ReadonlySet<string>): number {
   return m;
 }
 
+/**
+ * 공명 강화 집계(오비탈 공명 전용). 파생 — 저장 안 함. game.ts가 D 배율·orbital.configure에 사용.
+ *   resonance_d = D 배율 곱, resonance_window = 창 연장 합(초), resonance_combo_max = 콤보 상한 증가 합.
+ */
+export function resonanceDMultiplier(purchased: ReadonlySet<string>): number {
+  let m = 1;
+  for (const node of RESEARCH_NODES) {
+    if (purchased.has(node.id) && node.effect.kind === 'resonance_d') m *= node.effect.value;
+  }
+  return m;
+}
+export function resonanceWindowBonus(purchased: ReadonlySet<string>): number {
+  let s = 0;
+  for (const node of RESEARCH_NODES) {
+    if (purchased.has(node.id) && node.effect.kind === 'resonance_window') s += node.effect.value;
+  }
+  return s;
+}
+export function resonanceComboMaxBonus(purchased: ReadonlySet<string>): number {
+  let s = 0;
+  for (const node of RESEARCH_NODES) {
+    if (purchased.has(node.id) && node.effect.kind === 'resonance_combo_max') s += node.effect.value;
+  }
+  return s;
+}
+/** 자동 공명 연구 보유 여부(열린 슬롯 자동 잡기). */
+export function hasAutoResonance(purchased: ReadonlySet<string>): boolean {
+  for (const node of RESEARCH_NODES) {
+    if (purchased.has(node.id) && node.effect.kind === 'auto_resonance') return true;
+  }
+  return false;
+}
+
 // --- UI 스냅샷 (ui-flow §3) ----------------------------------------------------
 
 /** 연구 노드 1개의 표시 상태(ui-flow §3-B 노드 카드). */
