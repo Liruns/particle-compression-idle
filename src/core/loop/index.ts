@@ -48,6 +48,11 @@ export interface GameLoopOptions {
   onOverflow?: OverflowFn;
   /** 테스트용 시간 소스(기본 performance.now). */
   now?: () => number;
+  /**
+   * 렌더 최소 간격(ms). 기본 0 = 매 rAF 프레임 렌더. >0이면 FPS 캡(발열·전력 절감) —
+   *  로직 tick(고정 20/s)은 영향 없이 그대로, **표현(render)만** 이 간격으로 스로틀.
+   */
+  renderMinIntervalMs?: number;
 }
 
 /**
@@ -65,6 +70,9 @@ export class GameLoop {
   private readonly renderFn: RenderFn;
   private readonly onOverflow?: OverflowFn;
   private readonly now: () => number;
+  private readonly renderMinIntervalMs: number;
+  /** 마지막 render 시각(ms) — FPS 캡 스로틀 기준. */
+  private lastRender = 0;
 
   private rafId: number | null = null;
   private last = 0;
@@ -79,6 +87,7 @@ export class GameLoop {
     this.renderFn = opts.render;
     this.onOverflow = opts.onOverflow;
     this.now = opts.now ?? (() => performance.now());
+    this.renderMinIntervalMs = opts.renderMinIntervalMs ?? 0;
   }
 
   start(): void {
@@ -133,8 +142,12 @@ export class GameLoop {
       }
     }
 
-    // 보간 alpha(0~1): 표현이 tick 사이를 부드럽게.
-    this.renderFn(this.accumulator / TICK_DT);
+    // 보간 alpha(0~1): 표현이 tick 사이를 부드럽게. 렌더 스로틀(발열/전력) — 간격 미달이면 이 프레임
+    //   render 생략(로직 tick은 위에서 이미 결정적으로 처리됨 — 표현만 캡, 진행 손실 없음).
+    if (current - this.lastRender >= this.renderMinIntervalMs) {
+      this.lastRender = current;
+      this.renderFn(this.accumulator / TICK_DT);
+    }
 
     this.scheduleFrame();
   }

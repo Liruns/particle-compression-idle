@@ -383,6 +383,8 @@ export class Game {
       // catch-up 상한 초과분(백그라운드 탭/장시간 멈춤)은 오프라인 경로로 일괄 흡수(§6.4).
       //   "백그라운드 = 짧은 오프라인" — 48h 클램프·modifier 동일 적용(익스플로잇 차단).
       onOverflow: (overflowSeconds) => this.applyOverflowOffline(overflowSeconds),
+      // 렌더 30fps 캡(발열·전력 — 방치형 느린 앰비언트엔 30fps로 충분, GPU 부하 ~절반). 로직은 20/s 불변.
+      renderMinIntervalMs: 1000 / 30,
     });
   }
 
