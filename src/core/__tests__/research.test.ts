@@ -19,28 +19,30 @@ import {
   isNodePurchasable,
   buyResearchNode,
   chainTierMultipliers,
+  clickPowerMultiplier,
+  dYieldMultiplier,
   researchSnapshot,
 } from '../research';
 import { createInitialState } from '../state';
 import { serializeState, deserializeState } from '../save/serialize';
 
 describe('연구 노드 데이터 — A가지 체인증폭 (research-tree §2)', () => {
-  it('프로토타입 = 2노드(A1·A2), 둘 다 CHAIN 가지', () => {
-    expect(RESEARCH_NODES.length).toBe(2);
-    expect(RESEARCH_NODES.every((n) => n.branch === 'CHAIN')).toBe(true);
+  it('시드 = 7노드, 루트 3개(선행 없음)', () => {
+    expect(RESEARCH_NODES.length).toBe(7);
+    expect(RESEARCH_NODES.filter((n) => n.prerequisites.length === 0).length).toBe(3);
   });
 
   it('A1: T1 ×1.5, 비용 50 D, 선행 없음(루트)', () => {
     const a1 = researchNodeById('A1')!;
     expect(a1.effect).toEqual({ kind: 'tier_mult', tiers: [1], value: 1.5 });
-    expect(a1.costD).toBe(50);
+    expect(a1.costD).toBe(30);
     expect(a1.prerequisites).toEqual([]);
   });
 
   it('A2: T5~T8 ×1.5, 비용 500 D, A1 선행', () => {
     const a2 = researchNodeById('A2')!;
     expect(a2.effect).toEqual({ kind: 'tier_mult', tiers: [5, 6, 7, 8], value: 1.5 });
-    expect(a2.costD).toBe(500);
+    expect(a2.costD).toBe(350);
     expect(a2.prerequisites).toEqual(['A1']);
   });
 
@@ -50,8 +52,8 @@ describe('연구 노드 데이터 — A가지 체인증폭 (research-tree §2)',
 });
 
 describe('해금 게이트 — 첫 D + 원자층 (research-tree §3-C, ui-flow §3-C)', () => {
-  it('분자층(L1) → 미해금(원자층 게이트)', () => {
-    expect(isResearchUnlocked(1, true)).toBe(false);
+  it('분자층(L1) + D 보유 → 해금("연구소" 컨셉 — 첫 D부터, 층 게이트 없음)', () => {
+    expect(isResearchUnlocked(1, true)).toBe(true);
   });
   it('원자층(L2) + D 없음 → 미해금', () => {
     expect(isResearchUnlocked(2, false)).toBe(false);
@@ -126,9 +128,10 @@ describe('효과 적용 — chainTierMultipliers (C안 tier_mult)', () => {
     expect(m).toEqual([1.5, 1, 1, 1, 1.5, 1.5, 1.5, 1.5]);
   });
 
-  it('★ C안 불변: 전 티어 동일 곱이 아님(T2~T4는 항상 1) — research_mult≈1.0 보장', () => {
+  it('★ C안 불변: 전 노드 구매해도 T2~T4는 항상 1(전역 곱 아님) — research_mult≈1.0 보장', () => {
     // 모든 노드 구매해도 중간 티어(T2,T3,T4)는 절대 강화 안 됨 → 전역 곱 아님(체인 내부 일부).
-    const m = chainTierMultipliers(new Set(['A1', 'A2']));
+    const all = new Set(RESEARCH_NODES.map((n) => n.id));
+    const m = chainTierMultipliers(all);
     expect(m[1]).toBe(1); // T2
     expect(m[2]).toBe(1); // T3
     expect(m[3]).toBe(1); // T4
@@ -139,7 +142,7 @@ describe('연구 스냅샷 — researchSnapshot (ui-flow §3 표시 상태)', ()
   it('미해금: unlocked false', () => {
     const v = researchSnapshot(new Set(), false, () => true);
     expect(v.unlocked).toBe(false);
-    expect(v.branchProgress).toEqual([0, 2]);
+    expect(v.branchProgress).toEqual([0, 7]);
   });
 
   it('A1 구매 가능(D 충분) → affordable true, A2는 선행 미충족 잠금', () => {
@@ -160,7 +163,7 @@ describe('연구 스냅샷 — researchSnapshot (ui-flow §3 표시 상태)', ()
     expect(a2.unlocked).toBe(true);
     expect(a2.affordable).toBe(true);
     expect(a2.prereqNamesKo).toContain('T1 증폭기'); // 선행 노드 한국어 이름.
-    expect(v.branchProgress).toEqual([1, 2]);
+    expect(v.branchProgress).toEqual([1, 7]);
   });
 
   it('D 부족: affordable false(잠금 아님 — 해금은 됨)', () => {
@@ -198,5 +201,30 @@ describe('직렬화 — research.purchased 라운드트립 (§1.1 영구 보존)
     (data.research as { purchased: unknown }).purchased = ['A1', 123, null, 'A2'];
     const restored = deserializeState(data);
     expect([...restored.research.purchased].sort()).toEqual(['A1', 'A2']);
+  });
+});
+
+describe('효과 적용 — clickPowerMultiplier / dYieldMultiplier (연구소 축)', () => {
+  it('구매 없음 → 둘 다 1', () => {
+    expect(clickPowerMultiplier(new Set())).toBe(1);
+    expect(dYieldMultiplier(new Set())).toBe(1);
+  });
+  it('C1(관측 집중) → click_power ×1.6, d_yield 불변', () => {
+    expect(clickPowerMultiplier(new Set(['C1']))).toBeCloseTo(1.6, 6);
+    expect(dYieldMultiplier(new Set(['C1']))).toBe(1);
+  });
+  it('C1+C2 → click_power 곱(1.6×2.0=3.2)', () => {
+    expect(clickPowerMultiplier(new Set(['C1', 'C2']))).toBeCloseTo(3.2, 6);
+  });
+  it('R1(선명한 관측) → d_yield ×1.35, click_power 불변', () => {
+    expect(dYieldMultiplier(new Set(['R1']))).toBeCloseTo(1.35, 6);
+    expect(clickPowerMultiplier(new Set(['R1']))).toBe(1);
+  });
+  it('R1+R2 → d_yield 곱(1.35×1.6=2.16)', () => {
+    expect(dYieldMultiplier(new Set(['R1', 'R2']))).toBeCloseTo(2.16, 6);
+  });
+  it('tier_mult 노드(A1)는 click/d_yield에 영향 없음(분리)', () => {
+    expect(clickPowerMultiplier(new Set(['A1']))).toBe(1);
+    expect(dYieldMultiplier(new Set(['A1']))).toBe(1);
   });
 });

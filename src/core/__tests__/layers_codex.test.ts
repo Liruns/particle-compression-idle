@@ -382,14 +382,18 @@ describe('FTUE 점진 공개 — deriveFtue (ux.md §3)', () => {
     expect(f.showResourceQF).toBe(false);
   });
 
-  it('연구 탭 게이트(M1.7): 첫 D + 원자층(L2) 동시 충족 시만 해금', () => {
-    // D 있으나 분자층(L1) → 미해금(원자층 게이트).
+  it('연구 탭 게이트("연구소" 컨셉): 첫 D부터 해금(층 게이트 없음 — 분자층 L1 포함)', () => {
+    // D 있으면 분자층(L1)부터 해금 — 발견=연구 연료.
     expect(deriveFtue({ ...base, layerIndex: 1, hasDiscoveryData: true }).showResearchTab).toBe(
-      false,
+      true,
     );
-    // D 있고 원자층(L2) → 해금.
+    // D 있고 원자층(L2)도 물론 해금.
     expect(deriveFtue({ ...base, layerIndex: 2, hasDiscoveryData: true }).showResearchTab).toBe(
       true,
+    );
+    // D 없으면 여전히 잠금.
+    expect(deriveFtue({ ...base, layerIndex: 1, hasDiscoveryData: false }).showResearchTab).toBe(
+      false,
     );
   });
 });

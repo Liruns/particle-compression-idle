@@ -16,12 +16,12 @@
 
 <section class="research">
   <header class="rs-top">
-    <span class="rs-title">연구 — 체인 증폭</span>
+    <span class="rs-title">연구소</span>
     <span class="rs-d"><span class="rs-d-sym">D</span> 보유 {formatNumber(dCurrent)}</span>
   </header>
 
   <p class="rs-branch">
-    A. 체인 증폭<span class="dim"> · {research.branchProgress[0]}/{research.branchProgress[1]}</span>
+    관측 노드<span class="dim"> · {research.branchProgress[0]}/{research.branchProgress[1]}</span>
   </p>
 
   <ul class="rs-nodes" role="list">
@@ -52,7 +52,8 @@
   </ul>
 
   <p class="rs-note">
-    체인 증폭은 특정 티어 생산만 강화합니다. 발견 데이터 D로 영구 구매 — 상전이·재하강에 보존됩니다.
+    발견(도감)이 연구 데이터 D를 준다. D로 노드를 영구 언락 — 만지기 파워·데이터 획득·티어 증폭.
+    상전이·재하강에 보존됩니다.
   </p>
 </section>
 

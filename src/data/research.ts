@@ -1,72 +1,102 @@
 /**
  * data/research — 연구 트리 노드 데이터 (데이터 주도). (research-tree.md, economy.md §7.2, systems.md §3)
  *
- * 전체 52노드 중 **프로토타입 정거장1 = A가지(체인 증폭) 2노드만**(scope-mvp §2, roadmap M1.7).
- *   나머지 50노드(A 잔여·B 시너지·C 자동화·D 위상심화)는 후속 정거장. "작은 단위."
+ * 진행 축("연구소" 컨셉): 발견(D) → 노드 언락(선행 그래프) → 강화 → 더 깊이. 분자층(L1)부터 열려
+ *   초반 선택지를 준다(D는 도감 발견에서 나옴 — game.ts). 슬라이스 시드 = 7노드(후속 확장).
  *
- * ★ economy §7.2.1 C안(구조 분리) 준수 — **production_mult 외부, research_mult ≈ 1.0**:
- *   A가지 체인 증폭 노드의 효과는 "특정 티어 생산에만 곱하는 **체인 내부 배율**"이다.
- *   전 체인에 곱하는 전역 production_mult 상수곱이 **아니다**(그건 §3.4 race 가드레일 대상).
- *   구현: chainTick의 tierMult(티어별 배율 배열, 하모닉과 동형) 경로로 적용 → research_mult 불변.
- *   "구현이 이 분리를 어기면(체인 내부 배율이 사실상 전역 곱이 되면) §3.4 재검증"(economy §7.2.1 경고).
- *   A1/A2는 *일부* 티어(T1 / T5~T8)만 곱하므로 전역 곱이 아님 — 분리 유지.
+ * ★ economy §7.2.1 C안(구조 분리) 준수 — 생산 레이스에 곱해지는 건 **부분 티어 배율(tier_mult)뿐**:
+ *   tier_mult는 "지정 티어 생산에만 곱하는 체인 내부 배율"이지 전역 production_mult 상수곱이 아니다.
+ *   시드 노드는 T1·T5~T8만 강화(T2~T4는 미강화) → 전 티어를 덮지 않으므로 전역 곱이 아님(가드레일 안전).
+ *   "체인 내부 배율이 사실상 전역 곱이 되면 §3.4 재검증"(economy §7.2.1) — 부분 티어 원칙 유지 필수.
  *
- * 효과 종류(현재 구현분):
- *   - tier_mult: 지정 티어들의 생산 배율 × value (체인 내부, chainTick tierMult로 전달).
+ * 효과 종류(생산 레이스 안전형 위주):
+ *   - tier_mult:  지정 티어 생산 ×value (체인 내부, chainTick tierMult). 부분 티어만.
+ *   - click_power: 수동 압축(만지기) 파워 ×value. 클릭은 소수 기여라 레이스 영향 미미.
+ *   - d_yield:    발견·공명 D 획득 ×value. **연구 축 자체를 가속**(생산 레이스 무관 — 안전한 성장 축).
  *
- * 비용·배율([ECONOMY] 위임값): 정확값 economy 미확정 → **보수적 시드**(D는 "느린 연구 화폐"
- *   economy §7.2.3 — 오비탈 공명 D_PER_CLICK=1 기준 수 분 내 첫 노드 구매 가능한 입도).
- *   data 분리로 economy가 로직 수정 없이 튜닝(tech-arch §4.4). 문제 발견 시 economy-designer 보고.
- *
- * 해금(research-tree §0·§2): A가지 = 원자층(L2) 진입 + 첫 D 획득 시. 깊이 노드는 선행 노드 구매 게이트.
+ * 비용([ECONOMY] 위임 시드): D는 "느린 연구 화폐". L1 발견 D(≈48)로 값싼 루트 몇 개 구매 가능한 입도.
+ *   data 분리로 economy가 로직 수정 없이 튜닝(tech-arch §4.4).
  */
 
-/** 연구 가지(research-tree §0). 프로토타입은 CHAIN(A)만 활성, 나머지는 후속. */
+/** 연구 가지(research-tree §0). 표시 그룹 태그. */
 export type ResearchBranch = 'CHAIN' | 'SYNERGY' | 'AUTO' | 'PHASE';
 
 /**
- * 연구 노드 효과(현재 구현분). C안 — 전역 production_mult 곱이 아니다.
- *  - tier_mult: tiers(1-기반 티어 번호) 각각의 생산을 value배(체인 내부 배율, chainTick tierMult).
+ * 연구 노드 효과. 생산 레이스에 직접 곱하는 건 tier_mult(부분 티어)뿐 — C안 분리 유지.
  */
-export type ResearchEffect = {
-  kind: 'tier_mult';
-  /** 배율을 적용할 1-기반 티어 번호들(예: [1]=T1, [5,6,7,8]=고위 4티어). */
-  tiers: number[];
-  /** 배율(>1). 해당 티어 생산에만 곱(전역 곱 아님 — research_mult 불변). */
-  value: number;
-};
+export type ResearchEffect =
+  | {
+      kind: 'tier_mult';
+      /** 배율을 적용할 1-기반 티어 번호들(예: [1]=T1, [5,6,7,8]=고위 4티어). 부분 티어만. */
+      tiers: number[];
+      /** 배율(>1). 해당 티어 생산에만 곱(전역 곱 아님 — research_mult 불변). */
+      value: number;
+    }
+  | {
+      /** 수동 압축(만지기) 파워 배율(>1). 클릭 bump에만 곱 — 자동 생산 레이스와 분리. */
+      kind: 'click_power';
+      value: number;
+    }
+  | {
+      /** 발견·공명 D 획득 배율(>1). 연구 연료를 가속 — 생산 레이스 무관(안전한 성장 축). */
+      kind: 'd_yield';
+      value: number;
+    };
 
-/** 연구 노드 정의(research-tree §1 스키마 — 프로토타입 구현분만). */
+/** 연구 노드 정의(research-tree §1 스키마). */
 export interface ResearchNode {
-  /** 코드 식별자(research-tree A1·A2 등). */
+  /** 코드 식별자. */
   id: string;
-  /** 가지. */
+  /** 가지(표시 그룹). */
   branch: ResearchBranch;
   /** 표시 이름. */
   name: string;
   /** 한국어 이름. */
   nameKo: string;
-  /** 가지 내 깊이(1=루트 바로 아래). */
+  /** 가지 내 깊이(1=루트). */
   depth: number;
-  /** 효과(체인 내부 배율 — C안). */
+  /** 효과. */
   effect: ResearchEffect;
   /** 효과 1줄 설명(UI 노드 카드). */
   effectKo: string;
-  /** 선행 노드 ID(빈 배열 = 가지 루트). 전부 구매돼야 해금(research-tree prerequisites). */
+  /** 선행 노드 ID(빈 배열 = 루트). 전부 구매돼야 해금(prerequisites). */
   prerequisites: string[];
-  /** D 비용(노드 1회 구매, native number — D는 비교적 작은 화폐). */
+  /** D 비용(노드 1회 구매, native number). */
   costD: number;
-  /** 플레이버(narrative §3 보이스 요약 — 최종은 locale 패스 M3). */
+  /** 플레이버(narrative §3 보이스 요약). */
   flavorKo: string;
 }
 
 /**
- * A. 체인 증폭(CHAIN) 가지 — 프로토타입 2노드(research-tree §2 A1·A2).
- *   A1: T1 증폭(루트). A2: 고위 티어(T5~T8) 증폭(루트). 둘 다 깊이1 루트 — 선행 없음.
- *   (research-tree A2는 L3 게이팅이나, 프로토타입은 층 게이트 대신 첫 D 해금 + 비용으로 페이싱.
- *    더 깊은 노드 A3·A4…와 층 게이트는 후속 정거장.)
+ * 연구 노드 시드(7개). 루트 3(값싼 L1 진입) → 깊이 노드 4(선행 게이트).
+ *   tier_mult는 T1·T5~T8만(부분 티어 — 가드레일 안전). 나머지 agency는 click_power·d_yield로.
  */
 export const RESEARCH_NODES: readonly ResearchNode[] = [
+  // --- 루트(선행 없음 — 첫 D로 바로 진입) ---
+  {
+    id: 'C1',
+    branch: 'CHAIN',
+    name: 'Focused Observation',
+    nameKo: '관측 집중',
+    depth: 1,
+    effect: { kind: 'click_power', value: 1.6 },
+    effectKo: '수동 압축(만지기) 파워 ×1.6',
+    prerequisites: [],
+    costD: 8,
+    flavorKo: '손끝의 압력을 벼린다. 직접 만지는 한 번이 더 깊이 파고든다.',
+  },
+  {
+    id: 'R1',
+    branch: 'SYNERGY',
+    name: 'Clear Observation',
+    nameKo: '선명한 관측',
+    depth: 1,
+    effect: { kind: 'd_yield', value: 1.35 },
+    effectKo: '발견·공명 데이터(D) 획득 ×1.35',
+    prerequisites: [],
+    costD: 12,
+    flavorKo: '흐릿하던 관측 신호가 또렷해진다. 같은 발견에서 더 많은 데이터.',
+  },
   {
     id: 'A1',
     branch: 'CHAIN',
@@ -76,20 +106,58 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effect: { kind: 'tier_mult', tiers: [1], value: 1.5 },
     effectKo: 'T1 압축기 생산 ×1.5',
     prerequisites: [],
-    costD: 50,
+    costD: 30,
     flavorKo: '체인의 기초를 강화한다. 첫 번째 단이 강해질수록 모든 것이 강해진다.',
+  },
+
+  // --- 깊이(선행 게이트) ---
+  {
+    id: 'C2',
+    branch: 'CHAIN',
+    name: 'Precision Observation',
+    nameKo: '정밀 관측',
+    depth: 2,
+    effect: { kind: 'click_power', value: 2.0 },
+    effectKo: '수동 압축 파워 추가 ×2.0',
+    prerequisites: ['C1'],
+    costD: 70,
+    flavorKo: '관측이 외과적으로 정밀해진다. 만지는 손이 곧 압축기다.',
+  },
+  {
+    id: 'R2',
+    branch: 'SYNERGY',
+    name: 'Data Distillation',
+    nameKo: '데이터 증류',
+    depth: 2,
+    effect: { kind: 'd_yield', value: 1.6 },
+    effectKo: '발견·공명 데이터(D) 추가 ×1.6',
+    prerequisites: ['R1'],
+    costD: 90,
+    flavorKo: '잡음을 걷어내고 순수한 데이터만 남긴다. 연구가 가속된다.',
   },
   {
     id: 'A2',
     branch: 'CHAIN',
     name: 'High-Tier Amplifier',
     nameKo: '고위 티어 증폭',
-    depth: 1,
+    depth: 2,
     effect: { kind: 'tier_mult', tiers: [5, 6, 7, 8], value: 1.5 },
     effectKo: 'T5~T8 압축기 생산 ×1.5 (4개 티어)',
     prerequisites: ['A1'],
-    costD: 500,
+    costD: 350,
     flavorKo: '체인의 정점을 밀어올린다. 높은 곳이 강해지면 아래도 따라온다.',
+  },
+  {
+    id: 'A3',
+    branch: 'CHAIN',
+    name: 'T1 Resonant Amplifier',
+    nameKo: 'T1 공진 증폭',
+    depth: 3,
+    effect: { kind: 'tier_mult', tiers: [1], value: 2.0 },
+    effectKo: 'T1 압축기 생산 추가 ×2.0',
+    prerequisites: ['A2'],
+    costD: 800,
+    flavorKo: '기초 단을 공진시켜 폭발적으로 끌어올린다. 뿌리가 깊을수록 나무는 높다.',
   },
 ] as const;
 

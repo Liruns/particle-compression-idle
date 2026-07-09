@@ -39,8 +39,9 @@ export { RESEARCH_NODES, researchNodeById } from '../../data/research';
  * @param layerIndex 현재 층 index(2=원자층+).
  * @param hasDiscoveryData D를 한 번이라도 획득했는가(D_lifetime > 0 또는 D_current > 0).
  */
-export function isResearchUnlocked(layerIndex: number, hasDiscoveryData: boolean): boolean {
-  return layerIndex >= 2 && hasDiscoveryData;
+export function isResearchUnlocked(_layerIndex: number, hasDiscoveryData: boolean): boolean {
+  // "연구소" 컨셉: 발견(D)이 곧 연구 연료 → 첫 D부터 해금(분자층 L1 포함). 층 게이트 제거.
+  return hasDiscoveryData;
 }
 
 /**
@@ -122,6 +123,30 @@ export function chainTierMultipliers(purchased: ReadonlySet<string>): number[] {
     }
   }
   return mults;
+}
+
+/**
+ * 구매 노드들의 **수동 압축 파워 배율**(click_power 곱). 파생 — 저장 안 함. 없으면 1.
+ *   클릭 bump에만 곱(game.ts manualCompress) — 자동 생산 레이스와 분리(안전).
+ */
+export function clickPowerMultiplier(purchased: ReadonlySet<string>): number {
+  let m = 1;
+  for (const node of RESEARCH_NODES) {
+    if (purchased.has(node.id) && node.effect.kind === 'click_power') m *= node.effect.value;
+  }
+  return m;
+}
+
+/**
+ * 구매 노드들의 **D 획득 배율**(d_yield 곱). 파생 — 저장 안 함. 없으면 1.
+ *   발견·공명 D에 곱(game.ts addDiscovery) — 연구 축 가속(생산 레이스 무관).
+ */
+export function dYieldMultiplier(purchased: ReadonlySet<string>): number {
+  let m = 1;
+  for (const node of RESEARCH_NODES) {
+    if (purchased.has(node.id) && node.effect.kind === 'd_yield') m *= node.effect.value;
+  }
+  return m;
 }
 
 // --- UI 스냅샷 (ui-flow §3) ----------------------------------------------------

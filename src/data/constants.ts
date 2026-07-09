@@ -99,6 +99,21 @@ export const MANUAL_COMPRESS = {
   CLICK_SECONDS: 0.5,
 } as const;
 
+// --- 발견 → 데이터 D (연구소 컨셉 — 발견이 곧 연구 연료) ------------------------
+/**
+ * 도감 입자 발견 시 지급하는 D(발견 데이터). 희귀도 비례 — 발견=연구소장의 자원(연구 노드 연료).
+ *  L1(분자층)부터 D가 나와 연구가 초반에 열린다(game.ts processProgression 발견 루프에서 지급).
+ *  [ECONOMY] 보수적 시드 — L1 8입자(4C+2U+2R) ≈ 48 D로 값싼 루트 노드 2~4개 구매 가능한 입도.
+ *  d_yield 연구가 이 값에 곱해진다(연구 축 자체 가속).
+ */
+export const DISCOVERY_D_BY_RARITY = {
+  COMMON: 3,
+  UNCOMMON: 6,
+  RARE: 12,
+  EPIC: 25,
+  LEGENDARY: 50,
+} as const;
+
 // --- 위상 겹침 (systems.md §2-E, 프리온층 L6 메커니즘 — M1.6) ------------------
 /**
  * 위상 겹침(Phase Superposition, systems §2-E). 프리온층 진입 시 C가 "위상 C"로 재정의되어

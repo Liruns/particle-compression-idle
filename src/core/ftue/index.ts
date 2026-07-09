@@ -106,8 +106,8 @@ export function deriveFtue(input: FtueInput): FtueState {
     stage,
     showChain,
     showCodexTab,
-    // 연구 탭: 첫 D 획득 + 원자층(L2+) 진입 시 해금(M1.7, ui-flow §3-C). A가지 = 첫 D 게이트.
-    showResearchTab: hasDiscoveryData && layerIndex >= 2,
+    // 연구 탭: 첫 D 획득 시 해금("연구소" 컨셉 — 발견이 곧 D → 분자층 L1부터 열림).
+    showResearchTab: hasDiscoveryData,
     showResourceD: hasDiscoveryData, // M1.4 — D 첫 획득 후(오비탈 공명)
     showResourceQF: hasPrestiged, // M1.5 (M1.3/M1.4 항상 false)
     showMechanismSlot,

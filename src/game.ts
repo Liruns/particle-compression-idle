@@ -18,7 +18,8 @@ import { Decimal, D, ZERO, add, sub } from './core/bignum';
 import { getState, setState, createInitialState, CHAIN_TIERS, type GameState } from './core/state';
 import type { SlotPhase, PhaseState } from './core/layers/mechanics';
 import { OrbitalResonance, PhaseOverlap, Harmonics } from './core/layers/mechanics';
-import { MANUAL_COMPRESS, PHASE_OVERLAP, RESONANCE } from './data/constants';
+import { MANUAL_COMPRESS, PHASE_OVERLAP, RESONANCE, DISCOVERY_D_BY_RARITY } from './data/constants';
+import { particleById } from './data/particles';
 import { GameLoop, Scheduler } from './core/loop';
 import { SaveManager, type LoadResult } from './core/save';
 import {
@@ -69,6 +70,8 @@ import {
   RESEARCH_NODES,
   buyResearchNode,
   chainTierMultipliers,
+  clickPowerMultiplier,
+  dYieldMultiplier,
   researchSnapshot,
   isResearchUnlocked,
   type ResearchView,
@@ -490,7 +493,8 @@ export class Game {
   /** D(발견 데이터) 가산. 현재 런 + lifetime 동시 누적(§5-2 D_lifetime 100% 보존, R8 입력). */
   private addDiscovery(amount: number): void {
     const s = getState();
-    const d = D(amount);
+    // d_yield 연구가 모든 D 획득(발견·공명)을 가속 — 연구 축 자체 성장(생산 레이스 무관).
+    const d = D(amount * dYieldMultiplier(s.research.purchased));
     s.resources.D_current = add(s.resources.D_current, d);
     s.resources.D_lifetime = add(s.resources.D_lifetime, d);
   }
@@ -730,6 +734,9 @@ export class Game {
     const newly = evaluateDiscoveries(dec, s.codex.discovered);
     for (const id of newly) {
       s.codex.discovered.add(id);
+      // 발견 = 데이터(연구소 컨셉). 희귀도별 D 지급 → L1부터 연구 연료 확보.
+      const rarity = particleById(id)?.rarity;
+      if (rarity) this.addDiscovery(DISCOVERY_D_BY_RARITY[rarity]);
       bus.emit('codexDiscover', { particleId: id });
     }
 
@@ -783,6 +790,8 @@ export class Game {
     const newly = evaluateMechDiscoveries(layerIndex, ctx, s.codex.discovered);
     for (const id of newly) {
       s.codex.discovered.add(id);
+      const rarity = particleById(id)?.rarity;
+      if (rarity) this.addDiscovery(DISCOVERY_D_BY_RARITY[rarity]);
       bus.emit('codexDiscover', { particleId: id });
     }
   }
@@ -905,6 +914,9 @@ export class Game {
       const researchT1 = chainTierMultipliers(s.research.purchased)[0];
       let clickRate = owned[0].mul(mult);
       if (researchT1 !== 1) clickRate = clickRate.mul(researchT1);
+      // 연구 click_power(관측 집중/정밀)도 클릭에 반영 — 만지기 파워↑(자동 생산 레이스와 분리).
+      const clickPower = clickPowerMultiplier(s.research.purchased);
+      if (clickPower !== 1) clickRate = clickRate.mul(clickPower);
       const bump = clickRate.mul(MANUAL_COMPRESS.CLICK_SECONDS);
       s.resources.C = add(s.resources.C, bump);
       s.resources.E = add(s.resources.E, bump);
