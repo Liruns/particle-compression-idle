@@ -886,30 +886,34 @@ export class Game {
    *   CLICK_SECONDS초 분량을 즉시 가산. "클릭은 체인 위에 더해지는 구조, 대체 아님."
    *   배율은 공명 포함 현재 유효 배율을 적용해 클릭도 공명의 혜택을 받게 한다(일관성).
    */
-  manualCompress(): void {
+  manualCompress(times = 1): void {
     const s = getState();
-    const baseMult = productionMult(s.resources.QF);
-    // 현재 활성 메커니즘 배율도 클릭에 반영(메커니즘 중엔 클릭도 더 강함 — 곱 구조 일관).
-    //   원자~쿼크: 오비탈 공명. 프리온+: 위상 겹침. (티어별 하모닉은 클릭 단일 가산엔 미반영.)
-    const resonanceMult = this.isResonanceActive() ? s.mechanics.orbital.getMultiplier() : 1;
-    const phaseMult = this.isPhaseActive() ? s.mechanics.phase.getMultiplier() : 1;
-    let mult = baseMult;
-    if (resonanceMult > 1) mult = mult.mul(resonanceMult);
-    if (phaseMult > 1) mult = mult.mul(phaseMult);
-    const owned = composeOwned(s.chain.bought, s.chain.produced);
-    // 연구 T1 체인증폭(M1.7)도 클릭에 반영(클릭도 T1 강화 혜택 — 곱 구조 일관). C안 — 체인 내부 배율.
-    const researchT1 = chainTierMultipliers(s.research.purchased)[0];
-    let clickRate = owned[0].mul(mult);
-    if (researchT1 !== 1) clickRate = clickRate.mul(researchT1);
-    // 현재 dC/dt의 CLICK_SECONDS초 분량. 체인이 비어도(T1 시드) 소폭 진행.
-    const bump = clickRate.mul(MANUAL_COMPRESS.CLICK_SECONDS);
-    s.resources.C = add(s.resources.C, bump);
-    s.resources.E = add(s.resources.E, bump);
-    s.resources.lifetime_C = add(s.resources.lifetime_C, bump);
-    // 클릭으로 dec가 임계를 넘었을 수 있음 — 층/도감 동기화.
+    const n = Math.max(1, Math.floor(times));
+    // n회 압축을 한 번의 notify/draw로 배치 — 스윕/드래그가 한 입력에 여러 셀을 흡수해도
+    //   렌더는 1회만(구: 셀마다 notify→동기 draw로 메인스레드 블록 = "느려지다 멈춤" 원인).
+    //   경제는 n회 개별 호출과 동일(각 반복이 갱신된 owned/C로 rate 재계산 = 결정적 동형).
+    for (let k = 0; k < n; k++) {
+      const baseMult = productionMult(s.resources.QF);
+      // 현재 활성 메커니즘 배율도 클릭에 반영(메커니즘 중엔 클릭도 더 강함 — 곱 구조 일관).
+      const resonanceMult = this.isResonanceActive() ? s.mechanics.orbital.getMultiplier() : 1;
+      const phaseMult = this.isPhaseActive() ? s.mechanics.phase.getMultiplier() : 1;
+      let mult = baseMult;
+      if (resonanceMult > 1) mult = mult.mul(resonanceMult);
+      if (phaseMult > 1) mult = mult.mul(phaseMult);
+      const owned = composeOwned(s.chain.bought, s.chain.produced);
+      // 연구 T1 체인증폭(M1.7)도 클릭에 반영(곱 구조 일관). C안 — 체인 내부 배율.
+      const researchT1 = chainTierMultipliers(s.research.purchased)[0];
+      let clickRate = owned[0].mul(mult);
+      if (researchT1 !== 1) clickRate = clickRate.mul(researchT1);
+      const bump = clickRate.mul(MANUAL_COMPRESS.CLICK_SECONDS);
+      s.resources.C = add(s.resources.C, bump);
+      s.resources.E = add(s.resources.E, bump);
+      s.resources.lifetime_C = add(s.resources.lifetime_C, bump);
+    }
+    // dec는 C에 단조 — 배치 후 최종 C로 1회 동기화(층/도감). 중간 마일스톤도 최종 dec가 포섭.
     this.processProgression(computeDec(s.resources.C));
-    s.stats.manualCompresses += 1; // 통계: 누적 수동 압축(표시 전용).
-    bus.emit('manual_compress', {});
+    s.stats.manualCompresses += n; // 통계: 누적 수동 압축(표시 전용).
+    bus.emit('manual_compress', {}); // SFX(55ms 스로틀) — 배치 1회로 충분.
     this.notify();
   }
 

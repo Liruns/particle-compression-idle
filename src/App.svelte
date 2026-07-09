@@ -349,7 +349,7 @@
     // 슥슥 스윕 압축: 버튼을 누르지 않아도 포인터가 지나가는 float 세포를 흡수(누를 필요 없음).
     //   dragAbsorb는 세포 반경 진입 시 1회만 캡처 → 정지 포인터는 추가 흡수 0(경제 중립).
     const n = renderer.gameBoard.dragAbsorb(x, y);
-    for (let i = 0; i < n; i++) doCompress();
+    if (n > 0) doCompress(n); // 한 스윕에 여러 셀 흡수해도 압축·렌더는 1회 배치(메인스레드 블록 방지).
   }
 
   function onPointerLeave(): void {
@@ -357,10 +357,10 @@
   }
 
   /** 세포 흡수 = 수동 압축(실제 게임). 획득 E를 중심 떠오르는 수치로 피드백. */
-  function doCompress(): void {
+  function doCompress(times = 1): void {
     if (!game || !snap) return;
     const before = snap.E;
-    game.manualCompress(); // 동기 notify → snap 갱신
+    game.manualCompress(times); // n회 압축을 1회 notify/draw로 배치 → snap 갱신
     const gained = snap.E.sub(before);
     if (gained.gt(0)) renderer?.gameBoard.spawnCenterText(`+${formatNumber(gained, 2)} E`, '217,184,106');
   }
