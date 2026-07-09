@@ -150,6 +150,19 @@ const SHELL_COLORS: string[] = [
   '196,122,154', // T8 자홍
 ];
 
+/** 껍질색↔세계색 조화 비율(계층별 압축기 정체성 — 티어 구분은 유지하되 세계 톤을 입힌다). */
+const SHELL_LAYER_BLEND = 0.45;
+
+/** 'r,g,b' 두 색을 t(0..1)로 선형 혼합. */
+function mixRGB(a: string, b: string, t: number): string {
+  const pa = a.split(',').map(Number);
+  const pb = b.split(',').map(Number);
+  const r = Math.round(pa[0] + (pb[0] - pa[0]) * t);
+  const g = Math.round(pa[1] + (pb[1] - pa[1]) * t);
+  const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t);
+  return `${r},${g},${bl}`;
+}
+
 interface Cell {
   a: number;
   dist: number;
@@ -521,6 +534,12 @@ export class BoardRenderer {
     return '160,210,222';
   }
 
+  /** 티어 껍질색을 현재 세계색으로 조화(계층별 압축기 정체성). 티어 고유색은 유지하되 세계 톤을 입힘. */
+  private shellColor(tier: number): string {
+    const base = SHELL_COLORS[tier - 1] ?? this.layerColor;
+    return mixRGB(base, this.layerColor, SHELL_LAYER_BLEND);
+  }
+
   /** 위상 고정/해제 피드백(App이 pin/unpin 후 호출). 선택 노드에 잔광 + "고정/해제" 텍스트. */
   onPhase(state: BoardPhaseState, pinned: boolean): void {
     this.phasePinPulse = 1;
@@ -648,7 +667,7 @@ export class BoardRenderer {
   private drawShell(ctx: CanvasRenderingContext2D, s: BoardShell, now: number): void {
     const i = s.tier - 1;
     const r = this.shellRadius(s.tier);
-    const col = SHELL_COLORS[i] ?? this.layerColor;
+    const col = this.shellColor(s.tier);
     const owned = s.ownedLog10 > 0 ? s.ownedLog10 : 0;
     const boundNorm = s.producing ? Math.min(1, owned / 6) : 0;
     const can = s.affordable;
@@ -765,7 +784,7 @@ export class BoardRenderer {
       }
       const e = easeOutCubic(u);
       const r = this.shellRadius(f.tier) * e;
-      const col = SHELL_COLORS[f.tier - 1] ?? this.layerColor;
+      const col = this.shellColor(f.tier);
       const x = this.cx + Math.cos(f.angle) * r;
       const y = this.cy + Math.sin(f.angle) * r;
       const a = (1 - Math.abs(u - 0.5) * 1.4) * 0.9;
@@ -1153,7 +1172,7 @@ export class BoardRenderer {
     const ang = -Math.PI * 0.32;
     const ax = this.cx + Math.cos(ang) * (r + 14);
     const ay = this.cy + Math.sin(ang) * (r + 14);
-    const col = SHELL_COLORS[i] ?? this.layerColor;
+    const col = this.shellColor(tier);
     ctx.globalCompositeOperation = 'source-over';
     ctx.save();
     ctx.translate(ax, ay);
