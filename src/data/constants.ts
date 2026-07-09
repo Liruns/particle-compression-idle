@@ -82,6 +82,13 @@ export const RESONANCE = {
    * 자동 공명은 SLOT_INTERVAL+WINDOW 주기마다 1회 발화하므로 D_PER_CLICK 대비 누적도 느리다.
    */
   D_PER_IDLE: 0.2,
+  /**
+   * 공명 콤보(개선 — 연속 성공 보상을 D로). 연달아 성공할수록 클릭 D가 커진다(놓치면 리셋).
+   *  D는 연구 연료라 생산 레이스와 분리(안전) — "집중의 보상"을 연구 축 가속으로 흘린다.
+   *  콤보 배율 = 1 + (combo-1)·COMBO_D_STEP, combo는 COMBO_MAX에서 상한. (배율 ×1.5는 불변.)
+   */
+  COMBO_MAX: 10,
+  COMBO_D_STEP: 0.5,
 } as const;
 
 // --- 수동 압축 (ui-flow §2 '압축' 버튼, systems §4-2·§4-3 60/40 능동) --------

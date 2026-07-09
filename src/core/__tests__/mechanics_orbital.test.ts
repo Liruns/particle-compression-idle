@@ -294,3 +294,66 @@ describe('직렬화 — mechanics.orbital 라운드트립 (state ↔ SaveData)',
     expect(s.resources.D_lifetime.eq(0)).toBe(true);
   });
 });
+
+// --- 공명 콤보 (개선 — 연속 성공 → D 가속, 놓치면 리셋) ------------------------
+describe('오비탈 공명 콤보', () => {
+  /** 슬롯을 열고 1회 클릭(성공). 클릭 결과 반환. */
+  function openAndClick(m: OrbitalResonance) {
+    advance(m, RESONANCE.SLOT_INTERVAL_SECONDS + 0.5); // closed→open(부동소수 경계 여유, 창 내).
+    return m.click();
+  }
+
+  it('연속 성공 시 콤보 증가 + 클릭 D 가속(생산 배율은 불변)', () => {
+    const m = new OrbitalResonance();
+    const r1 = openAndClick(m);
+    expect(m.getCombo()).toBe(1);
+    expect(r1.dGained).toBeCloseTo(RESONANCE.D_PER_CLICK, 6); // combo1 = 기본.
+
+    const r2 = openAndClick(m);
+    expect(m.getCombo()).toBe(2);
+    expect(r2.dGained).toBeCloseTo(RESONANCE.D_PER_CLICK * (1 + RESONANCE.COMBO_D_STEP), 6);
+    expect(r2.dGained).toBeGreaterThan(r1.dGained); // 콤보로 D↑.
+
+    // 생산 배율(bonus)은 콤보와 무관하게 CLICK_BONUS 상한(레이스 안전).
+    expect(m.getMultiplier()).toBeCloseTo(RESONANCE.CLICK_BONUS, 6);
+  });
+
+  it('놓친 슬롯(자동 공명)은 콤보를 0으로 리셋', () => {
+    const m = new OrbitalResonance();
+    openAndClick(m);
+    openAndClick(m);
+    expect(m.getCombo()).toBe(2);
+    // 한 슬롯을 통째로 놓침(열림→만료 자동 공명).
+    advance(m, RESONANCE.SLOT_INTERVAL_SECONDS + RESONANCE.SLOT_WINDOW_SECONDS + 0.1);
+    expect(m.getCombo()).toBe(0);
+    // 이후 클릭은 다시 콤보 1부터.
+    const r = openAndClick(m);
+    expect(m.getCombo()).toBe(1);
+    expect(r.dGained).toBeCloseTo(RESONANCE.D_PER_CLICK, 6);
+  });
+
+  it('콤보는 COMBO_MAX에서 상한', () => {
+    const m = new OrbitalResonance();
+    for (let i = 0; i < RESONANCE.COMBO_MAX + 3; i++) openAndClick(m);
+    expect(m.getCombo()).toBe(RESONANCE.COMBO_MAX);
+  });
+
+  it('콤보 직렬화/복원', () => {
+    const m = new OrbitalResonance();
+    openAndClick(m);
+    openAndClick(m);
+    openAndClick(m);
+    const saved = m.serialize();
+    const m2 = new OrbitalResonance();
+    m2.deserialize(saved);
+    expect(m2.getCombo()).toBe(3);
+  });
+
+  it('닫힌 슬롯 클릭(실패)은 콤보 변화 없음', () => {
+    const m = new OrbitalResonance();
+    // 초기 closed에서 클릭 → 실패.
+    const r = m.click();
+    expect(r.success).toBe(false);
+    expect(m.getCombo()).toBe(0);
+  });
+});

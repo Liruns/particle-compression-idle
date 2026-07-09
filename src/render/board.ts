@@ -49,6 +49,8 @@ export interface BoardResonance {
   active: boolean;
   open: boolean;
   progress: number;
+  /** 연속 성공 콤보(0~COMBO_MAX). >1이면 "×N" 콤보 표시(개선 피드백). */
+  combo: number;
 }
 
 /** 위상 상태 식별(phase.ts PhaseState와 동일 — 표현 전용 재선언, core 비의존). */
@@ -225,7 +227,7 @@ export class BoardRenderer {
     shells: [],
     decadeProgress: 0,
     energyLabel: '0',
-    resonance: { active: false, open: false, progress: 0 },
+    resonance: { active: false, open: false, progress: 0, combo: 0 },
     phase: { active: false, state: 'coherent', pinned: false, cycleProgress: 0, pinCostLabel: '', nodes: [] },
     harmonics: { active: false, chargeProgress: 0, nextTier: 1, burstingTiers: [], totalResonances: 0 },
   };
@@ -944,6 +946,17 @@ export class BoardRenderer {
       ctx.strokeStyle = `rgba(150,168,178,${0.3 * this.resonanceMissPulse})`;
       ctx.lineWidth = 1;
       ctx.stroke();
+    }
+    // 콤보 표시(개선 — 연속 성공 시 전자 위에 "×N", 클릭 D 가속의 시각 피드백).
+    if (r.combo > 1) {
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = "600 11px 'Spline Sans Mono', ui-monospace, monospace";
+      ctx.fillStyle = `rgba(225,244,247,${r.open ? 0.9 : 0.6})`;
+      ctx.shadowColor = `rgba(${col},0.8)`;
+      ctx.shadowBlur = 8;
+      ctx.fillText(`×${r.combo}`, e.x, e.y - 20);
+      ctx.restore();
     }
   }
 

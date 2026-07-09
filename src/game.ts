@@ -157,6 +157,8 @@ export interface ResonanceSnapshot {
   progress: number;
   /** 현재 공명 배율(1.0~1.5). 체인 production에 곱(표시·로그용). */
   multiplier: number;
+  /** 현재 연속 성공 콤보(0~COMBO_MAX). UI 콤보 표시(개선). */
+  combo: number;
 }
 
 /**
@@ -1181,6 +1183,7 @@ export class Game {
       phase: orbital.getPhase(),
       progress: orbital.getPhaseProgress(),
       multiplier: orbital.getMultiplier(),
+      combo: orbital.getCombo(),
     };
 
     // 위상 겹침 위젯 상태(프리온층 L6+ 활성, M1.6). 표시 전용.

@@ -54,6 +54,8 @@ interface OrbitalSave {
   timer: number;
   /** 현재 공명 배율(1.0~1.5). 감쇠 중. */
   bonus: number;
+  /** 연속 성공 콤보(0~COMBO_MAX). 성공 클릭 시 증가, 놓친 슬롯(자동 공명) 시 0. */
+  combo: number;
 }
 
 /**
@@ -69,6 +71,8 @@ export class OrbitalResonance implements LayerMechanic {
   private timer: number = RESONANCE.SLOT_INTERVAL_SECONDS;
   /** 현재 공명 배율(1.0~CLICK_BONUS). 1.0이면 비활성. */
   private bonus = 1;
+  /** 연속 성공 콤보(개선 — 연달아 맞힐수록 클릭 D↑, 놓치면 0). */
+  private combo = 0;
 
   /**
    * 고정 dt 전진(systems §2-A 슬롯 상태머신 + 배율 감쇠). game.ts tick에서 매 틱 호출.
@@ -103,6 +107,7 @@ export class OrbitalResonance implements LayerMechanic {
         this.phase = 'closed';
         this.timer += RESONANCE.SLOT_INTERVAL_SECONDS;
         this.bonus = Math.max(this.bonus, RESONANCE.IDLE_BASE);
+        this.combo = 0; // 놓친 슬롯 → 콤보 리셋(연속 성공 끊김).
         dGained += RESONANCE.D_PER_IDLE;
         autoResonated = true;
       }
@@ -120,11 +125,14 @@ export class OrbitalResonance implements LayerMechanic {
     if (this.phase !== 'open') {
       return { success: false, dGained: 0 };
     }
-    // 성공: 배율 상향(이미 더 높으면 유지), D 지급, 슬롯 즉시 닫힘(다음 주기 대기).
+    // 성공: 배율 상향(이미 더 높으면 유지), 슬롯 소비. 콤보↑ → D 가속(연속 성공 보상, 놓치면 리셋).
+    //   생산 배율(×1.5)은 불변 — 콤보는 D(연구 연료)만 키운다(레이스 안전).
     this.bonus = Math.max(this.bonus, RESONANCE.CLICK_BONUS);
     this.phase = 'closed';
     this.timer = RESONANCE.SLOT_INTERVAL_SECONDS;
-    return { success: true, dGained: RESONANCE.D_PER_CLICK };
+    this.combo = Math.min(RESONANCE.COMBO_MAX, this.combo + 1);
+    const comboMult = 1 + (this.combo - 1) * RESONANCE.COMBO_D_STEP;
+    return { success: true, dGained: RESONANCE.D_PER_CLICK * comboMult };
   }
 
   /** 현재 공명 배율(1.0~1.5). 체인 production에 곱(game.ts). 비활성 시 정확히 1.0. */
@@ -135,6 +143,11 @@ export class OrbitalResonance implements LayerMechanic {
   /** 현재 슬롯 상태(UI 위젯 표시). */
   getPhase(): SlotPhase {
     return this.phase;
+  }
+
+  /** 현재 연속 성공 콤보(0~COMBO_MAX). UI 피드백 표시용. */
+  getCombo(): number {
+    return this.combo;
   }
 
   /**
@@ -156,7 +169,7 @@ export class OrbitalResonance implements LayerMechanic {
    *   배율(bonus)도 보존 — 로드 직후 진행 중인 공명이 끊기지 않게(짧은 끊김도 체감 손해).
    */
   serialize(): OrbitalSave {
-    return { phase: this.phase, timer: this.timer, bonus: this.bonus };
+    return { phase: this.phase, timer: this.timer, bonus: this.bonus, combo: this.combo };
   }
 
   /** 복원(§1.3 누락/손상 방어 — 기본값으로). 범위 밖 값은 안전 클램프. */
@@ -171,6 +184,11 @@ export class OrbitalResonance implements LayerMechanic {
       typeof d.bonus === 'number' && Number.isFinite(d.bonus)
         ? Math.min(RESONANCE.CLICK_BONUS, Math.max(1, d.bonus))
         : 1;
+
+    this.combo =
+      typeof d.combo === 'number' && Number.isFinite(d.combo) && d.combo >= 0
+        ? Math.min(RESONANCE.COMBO_MAX, Math.floor(d.combo))
+        : 0;
   }
 
   /**

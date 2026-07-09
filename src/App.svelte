@@ -254,6 +254,7 @@
       active: s.resonance.active,
       open: s.resonance.active && s.resonance.phase === 'open',
       progress: s.resonance.progress,
+      combo: s.resonance.combo,
     };
     // 위상 겹침(프리온층+) — 세 상태 노드 직접 조작(§4 표 3행). 배율은 표시 전용 상수(로직 불변).
     //   발견 임계(누적 유지시간): 응집/분산 10s, 공명 20s (PhaseWidget 정보 로직 보존).
