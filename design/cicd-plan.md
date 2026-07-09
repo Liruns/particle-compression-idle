@@ -164,6 +164,8 @@ pnpm build
 
 ### 3.3 NW.js 패키징 (Steam 빌드)
 
+> **⚠ v0.3 SUPERSEDED — Tauri 전환.** 아래 절차는 NW.js 기준(v0.2). 패키징이 **Tauri v2 + steamworks-rs**로 바뀌어(GDD §11 / tech-arch §5.1) 실제 빌드 경로는 `tauri build`(WebView2 래핑 + steamworks-rs 플러그인 + 위젯 창 설정)로 **재기술 예정**. NW.js 특정 단계(package.nw·nwjs-sdk 합본·~150MB 런타임·오버레이 검증)는 무효 — 새 전제는 저발열·소형(~10MB)·오버레이 제외.
+
 tech-arch §5.3 빌드 파이프라인을 구현 관점으로 구체화한다.
 
 ```
@@ -206,7 +208,7 @@ tech-arch §5.3 빌드 파이프라인을 구현 관점으로 구체화한다.
 | **정거장 1 (프로토타입)** | 로컬 파일 / 팀 내부 링크 | 코어 루프 재미 확인. 외부 공개 불필요. |
 | **정거장 2 (수직 슬라이스)** | **itch.io (웹 빌드)** | 소규모 플레이테스터에 공유. 위시리스트 깔때기 시작. |
 | **정거장 3 준비** | **Steam 스토어 페이지 개설** | 위시리스트 축적. Next Fest 등록(launch-plan §6). |
-| **정거장 3 완료** | **Steam EA / v1.0 출시** | NW.js 빌드 steamcmd 업로드. |
+| **정거장 3 완료** | **Steam EA / v1.0 출시** | Tauri 빌드 steamcmd 업로드. |
 | **출시 후** | Steam 업데이트 (same depot) | 라이브 콘텐츠 패치. |
 
 ### 4.2 itch.io 웹 배포 (정거장 2부터)
@@ -219,8 +221,8 @@ tech-arch §5.3 빌드 파이프라인을 구현 관점으로 구체화한다.
 ### 4.3 Steam 업로드 (정거장 3)
 
 - **방법**: `steamcmd` + Steamworks SDK `SteamPipeFileListGenerator`. Steamworks 파트너 계정 필요(App ID, Depot ID 설정).
-- **자동화 방향**: 릴리스 태그 push → CI가 NW.js 빌드 + 번들 준비 → `steamcmd +login ... +run_app_build ...` 실행. **단, Steam 계정 자격증명(username, password, Steam Guard)을 CI Secrets에 넣는 것은 보안 위험.** 초기에는 CI가 번들까지 준비하고 steamcmd 업로드는 **수동**으로 시작. 안정화 후 자동화 검토.
-- **Steam Cloud 연동**: NW.js `fs`가 Steam Cloud 경로에 직접 쓰므로 steamcmd에서 별도 설정 불필요. `Steamworks 파트너 포털 > App > Cloud` 설정(경로·용량)만 맞추면 자동.
+- **자동화 방향**: 릴리스 태그 push → CI가 Tauri 빌드 + 번들 준비 → `steamcmd +login ... +run_app_build ...` 실행. **단, Steam 계정 자격증명(username, password, Steam Guard)을 CI Secrets에 넣는 것은 보안 위험.** 초기에는 CI가 번들까지 준비하고 steamcmd 업로드는 **수동**으로 시작. 안정화 후 자동화 검토.
+- **Steam Cloud 연동**: Tauri fs 플러그인이 Steam Cloud 경로에 직접 쓰므로 steamcmd에서 별도 설정 불필요. `Steamworks 파트너 포털 > App > Cloud` 설정(경로·용량)만 맞추면 자동.
 - **브랜치 구분**: Steam의 "Default" 브랜치 = EA/v1.0 안정 버전. "beta" 브랜치 = 테스트 빌드(Steam 패스워드 보호 채널 활용).
 
 ### 4.4 버전 태깅·릴리스 노트
@@ -264,7 +266,7 @@ F-게이트(roadmap §1-A) 달성 전까지는 CI 설정 자체에 시간을 쓰
 
 **하지 말아야 할 것 (솔로 팀 기준):**
 
-- **Kubernetes / Docker 컨테이너화**: 정적 웹 게임에 서버 인프라는 과잉. NW.js 데스크톱 앱이므로 서버 배포가 없다.
+- **Kubernetes / Docker 컨테이너화**: 정적 웹 게임에 서버 인프라는 과잉. Tauri 데스크톱 앱이므로 서버 배포가 없다.
 - **블루-그린 배포 / 카나리 릴리스**: Steam 브랜치(beta/default)가 충분한 채널 분리 제공.
 - **자체 CI 서버 (Jenkins/GitLab CI) 즉시 구축**: GitHub Actions 무료 티어로 정거장 3까지 충분. 필요 시 Forgejo Actions 자체 러너로 전환.
 - **모노레포 툴링 (Turborepo/Nx)**: 단일 게임 프로젝트에는 불필요.
@@ -276,5 +278,5 @@ F-게이트(roadmap §1-A) 달성 전까지는 CI 설정 자체에 시간을 쓰
 
 1. **Git 워크플로**: `main`(안정)+`feature/*`(작업) 2-트랙, Conventional Commits, SemVer 태깅. 세이브 스키마 버전은 SemVer와 독립.
 2. **CI(GitHub Actions)**: typecheck → ESLint(native 연산 금지 게이트) → Vitest → Vite build. 정거장 1은 로컬 훅으로 시작, 정거장 2부터 Actions 추가.
-3. **빌드**: Vite `dist/` 정적 번들이 웹(itch.io)·데스크톱(NW.js+steamworks.js) 공통 원본. `data/` 수치 파일은 HMR·청크 분리로 밸런스 이터레이션을 빠르게.
+3. **빌드**: Vite `dist/` 정적 번들이 웹(itch.io)·데스크톱(Tauri) 공통 원본. `data/` 수치 파일은 HMR·청크 분리로 밸런스 이터레이션을 빠르게.
 4. **배포**: 정거장 1=로컬, 2=itch.io butler 자동, 3=Steam steamcmd 반자동→자동. 릴리스 태그 + 세이브 호환성 고지 규칙 엄수.

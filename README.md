@@ -35,8 +35,8 @@ npm run dev      # Vite 개발 서버 (HMR). 브라우저에서 표시되는 주
 | `npm run check` | `svelte-check` 타입검사만 |
 | `npm test` | vitest — F게이트·코어 수식 단위 테스트 |
 
-빌드 산출물(`dist/`)은 상대 경로(`base: './'`)라 itch.io 정적 호스팅과 NW.js
-`package.nw` 양쪽에 그대로 올라간다(tech-architecture §5.3 "공통 정적 번들").
+빌드 산출물(`dist/`)은 상대 경로(`base: './'`)라 itch.io 정적 호스팅과 Tauri
+(WebView2) 데스크톱 래핑 양쪽에 그대로 올라간다(tech-architecture §5.3 "공통 정적 번들").
 
 ---
 
@@ -90,7 +90,7 @@ src/
   data/              # 데이터 주도: 코어 경제 상수 (입자/연구 JSON은 후속)
   ui/                # tokens.css + Svelte UI + stores(prefs·reduced-motion) + Settings/Stats/Achievements/Help 뷰
   render/            # 우주적 현미경 렌더(11 세계 + 공허 게임판 BoardRenderer)
-  platform/          # 웹 vs NW.js/Steam 격리 (§5.2)
+  platform/          # 웹 vs Tauri/Steam 격리 (§5.2)
 ```
 
 **원칙:**

@@ -1,5 +1,5 @@
 /**
- * platform — 빌드 타깃 분기: 웹 vs NW.js / Steam 연동 격리. (tech-architecture.md §5.2·§5.3)
+ * platform — 빌드 타깃 분기: 웹 vs Tauri(WebView) / Steam 연동 격리. (tech-architecture.md §5.2·§5.3)
  *
  * "연동 코드는 platform/에 격리: 게임 로직은 Steam API를 직접 부르지 않고 **추상 인터페이스**로만 호출.
  *  웹 빌드에선 이 인터페이스가 no-op. → 웹 우선 개발이 Steam 의존으로 오염되지 않고,
@@ -8,7 +8,7 @@
  * 업적 ↔ 도감/상전이 매핑(§5.2): codex 발견·상전이 이벤트(events.ts)를 구독해 Steam 업적으로 변환.
  *   게임 코어는 Steam을 모른다.
  *
- * 1일차: 추상 인터페이스(PlatformAdapter) + 웹 no-op 구현을 둔다. NW.js+steamworks.js 구현은 M3.7.
+ * 1일차: 추상 인터페이스(PlatformAdapter) + 웹 no-op 구현을 둔다. Tauri + steamworks-rs 구현은 M3.7.
  *   StorageAdapter 선택(웹=localStorage / Steam=fs)도 이 레이어가 부팅 시 결정(§1.6).
  */
 
@@ -44,13 +44,13 @@ export class WebPlatform implements PlatformAdapter {
   }
 }
 
-// TODO(M3.7): SteamPlatform — NW.js fs StorageAdapter + steamworks.js 업적/오버레이/Cloud.
+// TODO(M3.7): SteamPlatform — Tauri fs StorageAdapter + steamworks-rs 업적/Cloud(오버레이 제외 — 위젯 불요).
 
 /**
  * 현재 빌드의 플랫폼 어댑터 선택(부팅 시 주입, §5.3).
- * NW.js 런타임 감지(window.nw 등)로 분기 — 지금은 웹 고정.
+ * Tauri 런타임 감지(window.__TAURI__ 등)로 분기 — 지금은 웹 고정.
  */
 export function detectPlatform(): PlatformAdapter {
-  // TODO(M3.7): typeof (globalThis as any).nw !== 'undefined' → SteamPlatform
+  // TODO(M3.7): typeof (globalThis as any).__TAURI__ !== 'undefined' → SteamPlatform
   return new WebPlatform();
 }

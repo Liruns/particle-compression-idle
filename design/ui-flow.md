@@ -39,7 +39,7 @@
 | §9 | 빅 크런치 → 재하강 흐름 (타임라인 + 집중 서브층 선택 UI) |
 | §10 | 오프라인 복귀 모달 |
 | §11 | 점진 공개 규칙 & 알림/배지 |
-| §12 | 플랫폼 차이 (웹 ↔ 데스크톱 NW.js) |
+| §12 | 플랫폼 차이 (웹 ↔ 데스크톱 Tauri, +위젯) |
 | §13 | 정거장별 구현 우선순위 |
 
 ---
@@ -148,7 +148,7 @@
 
 **반응형 분기점:**
 - 화면 폭 < 900px: LEFT PANEL 접힘(collapse), 아이콘 전용 세로 바로 전환
-- 화면 폭 < 640px: 웹 전용(NW.js 창 최소폭 900px 강제, §12 참조)
+- 화면 폭 < 640px: 웹 전용(Tauri 창 최소폭 900px 강제, §12 참조)
 
 ### 2-B. r 게이지 상세 스펙
 
@@ -1041,16 +1041,16 @@ T+0.5s  RUN_START (최소 버전), 암전 생략
 
 ---
 
-## 12. 플랫폼 차이 (웹 ↔ 데스크톱 NW.js)
+## 12. 플랫폼 차이 (웹 ↔ 데스크톱 Tauri, +위젯)
 
 ### 12-A. 창 크기 & 반응형
 
-| 항목 | 웹 브라우저 | NW.js 데스크톱 |
+| 항목 | 웹 브라우저 | Tauri 데스크톱 |
 |---|---|---|
 | 최소 폭 | 640px (LEFT PANEL 접힘) | 900px 강제 (최소창 크기 설정) |
 | 최소 높이 | 480px | 600px 강제 |
 | 최적 해상도 | 1280×720 이상 | 1280×720 이상 (Steam 기본) |
-| 전체화면 | F11 / 브라우저 전체화면 | NW.js win.enterFullscreen() |
+| 전체화면 | F11 / 브라우저 전체화면 | Tauri window `setFullscreen()` |
 | 확대/축소 | 브라우저 줌 (제한 없음) | 설정 탭 "텍스트 크기" 옵션만 |
 | 핀치 줌 | user-scalable=no (비활성화) | 해당 없음 |
 
@@ -1066,23 +1066,24 @@ T+0.5s  RUN_START (최소 버전), 암전 생략
 ```
 hover 시 툴팁으로 수치 표시.
 
-### 12-B. Steam 전용 기능 (NW.js)
+### 12-B. Steam 전용 기능 (Tauri) + 위젯 창
 
 | 기능 | 구현 방식 | 웹 대응 |
 |---|---|---|
-| Steam 오버레이 (Shift+Tab) | NW.js + steamworks.js 자동 지원 | 해당 없음 |
-| Steam Cloud 세이브 | lz-string 압축 → Steam Cloud 경로 기록 | localStorage 폴백 |
-| Steam 업적 | steamworks.js `activateAchievement()` | 해당 없음 |
-| 창 크기 저장/복원 | NW.js win 설정 저장 | localStorage 폴백 |
-| 시스템 트레이 | NW.js tray API (선택, 방치형 적합) | 해당 없음 |
+| ~~Steam 오버레이 (Shift+Tab)~~ | **제외(v0.3)** — WebView2 그래픽 후킹 차단(#6196), 위젯/방치형은 불요 | 해당 없음 |
+| Steam Cloud 세이브 | lz-string 압축 → Tauri fs로 Steam Cloud 경로 기록 | localStorage 폴백 |
+| Steam 업적 | steamworks-rs (Tauri 커맨드로 노출) `activate_achievement` | 해당 없음 |
+| 창 크기·위치 저장/복원 | Tauri window-state 플러그인 | localStorage 폴백 |
+| 시스템 트레이 | Tauri tray API (방치형·위젯 적합) | 해당 없음 |
+| **위젯 창(v0.3 신규)** | Tauri: 투명·프레임리스·always-on-top·skipTaskbar + 위치 기억 → 바탕화면 앰비언트(`#widget`) | 해당 없음(웹은 `?widget` 씬만) |
 
 ### 12-C. 접근성 플랫폼별
 
-| 기능 | 웹 | NW.js |
+| 기능 | 웹 | Tauri 데스크톱 |
 |---|---|---|
 | prefers-reduced-motion | CSS 미디어 쿼리 자동 감지 | 동일 (Chromium 기반) |
 | 키보드 Tab 이동 | 표준 브라우저 동작 | 동일 |
-| 스크린리더 | NVDA/JAWS (Windows), VoiceOver (Mac) | 제한적 (NW.js ARIA 지원 확인 필요) |
+| 스크린리더 | NVDA/JAWS (Windows), VoiceOver (Mac) | 제한적 (Tauri WebView2 ARIA 지원 확인 필요) |
 | Steam Deck 터치 | 해당 없음 | 44px 타깃 + 터치 이벤트 |
 
 ### 12-D. 해상도 스케일 (accessibility.md §3-A 연계)
@@ -1136,7 +1137,7 @@ CSS root font-size 배율 기준점:
 | SCR-08/09 재하강 | RUN_START + FOCUS_SELECT + 회차별 텍스트 |
 | 87입자 도감 전체 | 미지 섹션 완전 해금, 전설 11개 연출 |
 | 연구 핵심 가지 완성 | A 전체 + C 전체 + B/D 핵심 노드 |
-| Steam 연동 | NW.js + steamworks.js + Steam Cloud + 업적 |
+| Steam 연동 | Tauri + steamworks-rs + Steam Cloud + 업적 |
 | 스크린리더 ARIA | 탭바 + 정적 라벨 + 발견 토스트 aria-live |
 | Steam Deck 타깃 검증 | 44px 타깃 + 터치 이벤트 |
 

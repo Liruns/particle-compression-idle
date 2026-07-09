@@ -24,7 +24,8 @@
 - 장르: 아이들러 / 인크리멘탈 / 방치형
 - 페이싱: **순수 방치 / 장기(하드코어).** 오프라인 진행이 1급 시민. (계보: Antimatter Dimensions, Universal Paperclips)
 - 정체성: **B. 입자 실험실** — 플레이어는 연구소장(Director). 압축으로 미지의 입자를 발견. 메인 후킹 = 입자 도감 + 연구 트리. (세계관 [§14](#14-세계관--톤))
-- 플랫폼: 웹(HTML/JS/TS) 프로토타입 → 최종 **PC Steam**. 패키징 = **NW.js + steamworks.js** (Tauri는 Steam 오버레이 미지원이라 제외 — 리서치 확정, §11). 중간 단계는 itch.io/galaxy.click 배포 가능.
+- 플랫폼: 웹(HTML/JS/TS) 프로토타입 → 최종 **PC Steam** + **데스크탑 위젯 모드**. 패키징 = **Tauri v2 + steamworks-rs** (v0.3에서 NW.js→Tauri 전환 — §11. Steam 오버레이 요구 철회로 Tauri 기각 사유 소멸, 위젯 상시구동 저발열이 결정타). 중간 단계는 itch.io/galaxy.click 배포 가능.
+- 위젯 모드(v0.3 신규): 게임 진행이 바탕화면 앰비언트 우주(원자→은하→블랙홀→빅크런치→재탄생)로 표시되는 **데스크탑 방치형** 얼굴. 본체(깊은 인크리멘탈)는 유지, 위젯은 초경량 관전 레이어(장르 계보: Rusty's Retirement/ROPUKA). 투명·프레임리스·always-on-top.
 
 ## 3. 디자인 필러 (절대 안 어김)
 1. **작아짐 = 강해짐.** 모든 시스템이 이 역설을 강화.
@@ -141,8 +142,8 @@
 | 빌드 | **Vite** | Svelte/TS 네이티브 + 즉각 HMR(밸런싱 이터레이션) |
 | 큰 수 | **break_eternity.js** | 테트레이션(10^^1e308)까지 — "작아짐"의 극소 표현. break_infinity.js와 드롭인 호환 |
 | 세이브 | **lz-string + fs** | 압축 후 Steam Cloud 경로 직접 기록. 포맷에 `{version,data}` 필수 |
-| 패키징 | **NW.js** | Steam 오버레이 작동(Tauri는 미지원, #6196). 단일 JS 컨텍스트가 인크리멘탈에 자연스러움 |
-| Steam 연동 | **steamworks.js** | npm 설치만, 컴파일 불필요 |
+| 패키징 | **Tauri v2** | 시스템 WebView2 재사용 → 번들 ~10MB·메모리 ~30–50MB·저발열(Chromium 미번들). 위젯 상시구동/투명·프레임리스·always-on-top 네이티브 창 제어. *v0.3 NW.js에서 전환 — Steam 오버레이 철회로 기각 사유 소멸(§tech-arch 5.1)* |
+| Steam 연동 | **steamworks-rs** | Rust 크레이트. 업적·클라우드 지원(오버레이는 불요라 포기). 게임 로직은 WebView JS 유지, Rust는 창 셸+Steam 브리지만(platform/ 격리) |
 
 > 코드 1순위 레퍼런스: **Antimatter Dimensions**(구조 동일, MIT — `big-crunch.js`/`serializer.js`/`intervals.js`). 보조: Synergism(TS+Steam), The Modding Tree(프레스티지 `addLayer` 선언형), Profectus(TS+Vue3). 상세 `research/open-source-games.md`.
 > Gotcha: break_eternity의 `Decimal`은 JSON 직렬화 안 됨(`.toString()`/`new Decimal()` 명시). lz-string 인코딩 혼용 금지. 오프라인 틱배치는 Web Worker로.
@@ -207,7 +208,7 @@
 - **★ 현 방향 (우주적 현미경 피벗 — 2026-06-26)**: `cosmic-direction.md`(**통합 방향 SSOT** — 비주얼+UX+UI 모델+이관 진행) · `art-direction-cosmic.md`(**비주얼 권위** — 11층 발광색·색온도 아크·서체·금지목록·머니샷). 표현/비주얼 결정은 이 둘이 우선.
 - 설계: `systems.md`(메커니즘·층·상전이) · `economy.md`(수식·시뮬·페이싱) · `codex.md`(입자 도감) · `research-tree.md`(연구 노드) · `narrative.md`(세계관·보이스) · `ux.md`(화면·FTUE — *정보 로직 유효 / 대시보드 레이아웃 SUPERSEDED → cosmic-direction*)
 - 후속 경제 패스(R3): `followup-systems.md`(연구 시너지 C안·D보존·재하강 차별화) · `followup-codex-ramp.md`(도감 곡선 B·베켄슈타인 K) · `followup-bigcrunch-framing.md`(빅 크런치 시작점 프레이밍 + ux) · `economy.md` §7 v0.3
-- **프로덕션·기술·출시(신규)**: `scope-mvp.md`(MVP 컷·4단계 게이트) · `roadmap.md`(4정거장 제작 순서 — v0.2 피벗 반영) · `tech-architecture.md`(세이브·BigNumber·NW.js 패키징) · ~~`art-direction.md`~~ → **`art-direction-cosmic.md`로 피벗**(art-direction.md v0.1 = SUPERSEDED) · `audio-design.md`(사운드) · `launch-plan.md`(Steam 출시·가격·EA) · `risk-register.md`(리스크 점검) · `asset-list.md`(에셋 트래커)
+- **프로덕션·기술·출시(신규)**: `scope-mvp.md`(MVP 컷·4단계 게이트) · `roadmap.md`(4정거장 제작 순서 — v0.2 피벗 반영) · `tech-architecture.md`(세이브·BigNumber·Tauri 패키징) · ~~`art-direction.md`~~ → **`art-direction-cosmic.md`로 피벗**(art-direction.md v0.1 = SUPERSEDED) · `audio-design.md`(사운드) · `launch-plan.md`(Steam 출시·가격·EA) · `risk-register.md`(리스크 점검) · `asset-list.md`(에셋 트래커)
 - **상용·출시·운영(신규)**: `business-legal-checklist.md`(GRAC 등급분류·사업자·W-8BEN·개인정보) · `budget.md`(예산·손익분기) · `reality-check.md`(정직한 공수·헌신) · `localization-plan.md`(한+영 i18n) · `accessibility.md`(색맹·모션·대비) · `analytics-plan.md`(리텐션·퍼널·텔레메트리) · `playtest-plan.md`(실플레이어 검증) · `community-ops.md`(커뮤니티·라이브옵스)
 - **개발·엔지니어링(신규, TDD·구현 스펙·프로세스)**: `tech-spec.md`(기술사양) · `dev-schedule.md`(개발일정·마일스톤) · `glossary.md`(용어집) · `ui-flow.md`(UI·화면흐름 상세 — *흐름·상태 로직 유효 / 대시보드 레이아웃 SUPERSEDED → cosmic-direction*) · `data-spec.md`(데이터 사전) · `system-flows.md`(시스템흐름·예외) · `content-pipeline.md`(콘텐츠 파이프라인) · `account-sync-recovery.md`(계정·동기화·복구) · `cicd-plan.md`(CI/CD) · `asset-pipeline.md`(에셋 관리) · `test-strategy.md`(테스트 전략) · `DESIGN.md`(디자인 토큰 — *비색상 토큰 유효 / 색상 팔레트 SUPERSEDED → art-direction-cosmic §2*)
 - 검증/결정: `director-review.md`(필러 검토·FAIL-1 중재·CONCERN-NEW·**§8 R3 통합 심판**) · `qa-report.md`·`qa-report-v2.md`·`qa-report-v3.md`(독립 검증)

@@ -42,8 +42,8 @@
 | Svelte | 오픈소스 (MIT) | 무료 |
 | break_eternity.js | 오픈소스 (MIT) | 무료 |
 | lz-string | 오픈소스 (MIT) | 무료 |
-| NW.js | 오픈소스 (MIT) | 무료 |
-| steamworks.js | 오픈소스 (MIT) | 무료 |
+| Tauri v2 | 오픈소스 (MIT/Apache-2.0) | 무료 |
+| steamworks-rs | 오픈소스 (MIT/Apache-2.0) | 무료 |
 | VS Code / Cursor | 무료 (개인) | 무료 |
 
 **엔진 비용 = 0원.**
@@ -293,7 +293,7 @@ VAT/세금 제외:     Steam이 각국 VAT 처리 (조정 총수익 기준)
 |---|---|---|---|
 | 엔진/프레임워크 | Unity, Unreal ($0~수십만원) | TypeScript+Svelte+Vite (오픈소스) | 적용 (이미 확정) |
 | BigNumber 라이브러리 | — | break_eternity.js (MIT) | 적용 |
-| Steam 래퍼 | Electron (무료이나 IPC 필요) | NW.js (오픈소스) | 적용 |
+| Steam 래퍼 | Electron/NW.js | Tauri v2 (오픈소스) | 적용 (v0.3 전환) |
 | DAW | FL Studio $200, Ableton $800+ | Reaper $60 / LMMS 무료 | Reaper 권장 |
 | 합성기 | Serum $200 | Vital Free, Surge XT | 적용 가능 |
 | 그래픽 편집 | Photoshop 월 구독 | GIMP, Inkscape, Figma(무료 플랜) | 적용 가능 |

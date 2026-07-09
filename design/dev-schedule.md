@@ -217,11 +217,11 @@ roadmap §1-A·tech-arch §7 후속 메모: 이 4개는 **프로토타입 첫날
 
 > **M3.6은 정거장 2(M2.x) 의존** — 2의 아트/사운드 방향을 6층으로 확장하는 것.
 
-#### M3.7 — Steam 패키징 + 인프라 `[플랫폼]` `M`
+#### M3.7 — Tauri 패키징 + 위젯 + 인프라 `[플랫폼]` `M`
 | 작업 | 내용 | DoD |
 |---|---|---|
-| **W3.7.a** | NW.js + steamworks.js 패키징 | 데스크톱 실행파일 / FileSystem 어댑터로 교체(게임 로직 0줄, W1.1.b 덕분) |
-| **W3.7.b** | Steam Cloud + 오버레이 + 업적 + lz-string | Cloud 동기화 / 오버레이 작동 / 업적이 이벤트 버스 구독으로 매핑(platform 격리) |
+| **W3.7.a** | Tauri v2 + steamworks-rs 패키징 | 데스크톱 실행파일 / FileSystem 어댑터(Tauri fs)로 교체(게임 로직 0줄, W1.1.b 덕분) |
+| **W3.7.b** | 위젯 창(투명·프레임리스·always-on-top) + Steam Cloud + 업적 + lz-string | 위젯 상시구동 저발열 / Cloud 동기화 / 업적이 이벤트 버스 구독으로 매핑(platform 격리). *오버레이는 제외 — 위젯 불요* |
 
 > **M3.7 = 콘텐츠와 병렬 가능**(platform 레이어 격리, tech-arch §5.2). W1.1.b StorageAdapter가 자리를 잡아둔 덕에 fs 교체가 0줄 수정.
 

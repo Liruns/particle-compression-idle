@@ -273,7 +273,7 @@ growth_k = 2.2 − (0.4/7)·(k−1)      ← 내림차순: T1=2.2 ... T8=1.8
 ### 3.3 시계 조작 방어
 
 - `elapsed = min(now − last_save, 48h)` 하드 상한. 클라이언트 시계를 +1년 돌려도 최대 48h(유효 18h)만 지급.
-- Steam 빌드: 가능시 서버/Steam 타임스탬프 교차검증. NW.js 환경에선 last_save를 암호화/체크섬해 변조 탐지. (tech-architect 영역 — 본 문서는 수식만 확정.)
+- Steam 빌드: 가능시 서버/Steam 타임스탬프 교차검증. 데스크톱(Tauri) 환경에선 last_save를 암호화/체크섬해 변조 탐지. (tech-architect 영역 — 본 문서는 수식만 확정.)
 
 ---
 

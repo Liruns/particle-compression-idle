@@ -112,7 +112,7 @@
 | **파생 캐시 (저장 안 함)** | 비용·생산량·dec·r·holographic_mult 등은 전부 파생값 → 저장 금지, 로드 후 재계산. | tech §1.1 |
 | **lastSave 이중 기록** | 시계 무결성. last_save를 파일·Steam Cloud 양쪽에 기록하고 **최댓값** 채택(가장 보수적 = elapsed 최소). | tech §1.7 |
 | **미니 시뮬 (정밀 모드)** | 오프라인 유효시간을 ≤1000 서브틱으로 분할 재생(복리 일부 반영). Web Worker 오프로드. 기본은 일괄 지급. | tech §3.1 |
-| **NW.js + steamworks.js** | 패키징 스택. Steam 오버레이 작동(Tauri는 #6196 미지원이라 기각). steamworks.js는 npm 설치만, 컴파일 불필요. | tech §5.1 |
+| **Tauri v2 + steamworks-rs** | 패키징 스택(v0.3 — NW.js에서 전환). 시스템 WebView2 → 저발열·소형·투명/프레임리스 위젯 창. Steam 오버레이 철회(#6196 불요)로 Tauri 기각 사유 소멸, steamworks-rs(Rust)로 업적·클라우드. | tech §5.1 |
 | **format 모듈** | Decimal→표시 문자열 전담(과학·접두사·극소 표기). 계산과 표시 완전 분리. | tech §2.3 |
 | **platform/ 격리** | Steam API를 추상 인터페이스로만 호출, 웹 빌드에선 no-op. Steam 이식이 게임 로직을 안 건드림. | tech §5.2 |
 
@@ -216,7 +216,7 @@
 **ㅌ** 탬퍼 클램프(§2)
 **ㅍ** 파생 캐시(§3) · 프리온(§5) · 플랑크온(§5) · 필러(4필러)(§4)
 **ㅎ** 핵력 게이지(§1) · 홀로그래픽 배율/인코딩(§1) · 홀론(§5) · 희귀도(§5) · 힉스 보손(§5)
-**A-Z** base_rate(§2) · base_k(§2) · break_eternity.js(§3) · codex_bonus_factor(§2) · D 보존율(§2) · Decimal 경계(§3) · F게이트(§3) · format 모듈(§3) · holo_factor(§2) · K(§2) · lifetime_C(§1) · negative result(§2) · NW.js(§3) · production_mult(§2) · P1~P5(§4) · research_mult(§2) · StorageAdapter(§3) · tick/render(§3) · WALLS(§2)
+**A-Z** base_rate(§2) · base_k(§2) · break_eternity.js(§3) · codex_bonus_factor(§2) · D 보존율(§2) · Decimal 경계(§3) · F게이트(§3) · format 모듈(§3) · holo_factor(§2) · K(§2) · lifetime_C(§1) · negative result(§2) · production_mult(§2) · P1~P5(§4) · research_mult(§2) · StorageAdapter(§3) · Tauri v2 + steamworks-rs(§3) · tick/render(§3) · WALLS(§2)
 
 ---
 

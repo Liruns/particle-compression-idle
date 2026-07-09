@@ -6,7 +6,7 @@
  * 어댑터 3종(LocalStorage / IndexedDB / FileSystem)이 동일 인터페이스를 구현한다.
  * 빌드 타깃(웹/Steam)에 따라 부팅 시 적절한 어댑터를 주입(§1.6).
  *   - §1.4 인코딩 규칙(UTF16 vs Base64)을 **어댑터가 책임** → 게임 코드는 인코딩을 모름.
- *   - 이식성 효과: NW.js 패키징 시 FileSystem 어댑터로 교체만 하면 됨. 게임 로직 0줄 수정.
+ *   - 이식성 효과: Tauri 패키징 시 FileSystem 어댑터(Tauri fs)로 교체만 하면 됨. 게임 로직 0줄 수정.
  *
  * 1일차 고정(F2): read/write/exists/backup 4개 메서드 시그니처를 지금 박는다(roadmap §1-A).
  */

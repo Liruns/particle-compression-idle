@@ -9,7 +9,7 @@
 
 ## 0. 한 줄 요약
 
-> 웹(itch.io) + PC(Steam) 단일 코드베이스. **TypeScript + Svelte + Vite** 빌드, **break_eternity.js**로 천문학적 수치, **lz-string**으로 세이브 압축, **NW.js + steamworks.js**로 Steam 패키징. 전용 게임엔진 없음(커스텀 고정-timestep 루프 + Canvas2D/WebGL).
+> 웹(itch.io) + PC(Steam) 단일 코드베이스. **TypeScript + Svelte + Vite** 빌드, **break_eternity.js**로 천문학적 수치, **lz-string**으로 세이브 압축, **Tauri v2 + steamworks-rs**로 Steam 패키징(+데스크탑 위젯). 전용 게임엔진 없음(커스텀 고정-timestep 루프 + Canvas2D/WebGL).
 
 ---
 
@@ -17,10 +17,10 @@
 
 | 항목 | 사양 | 비고 |
 |---|---|---|
-| **1차 타깃** | PC Windows (Steam) | 출시 본진. NW.js 패키징(§4) |
+| **1차 타깃** | PC Windows (Steam) + 데스크탑 위젯 | 출시 본진. Tauri 패키징(§4) |
 | **웹 타깃** | 브라우저 (itch.io / galaxy.click) | 프로토타입·플레이테스트 채널, 중간 배포. Steam 이전의 위시리스트 깔때기(GDD §2) |
-| **Mac / Linux** | 여지 남김 (1차 범위 밖) | NW.js가 3-OS 빌드 지원 → 코드 분기 없이 향후 확장 가능. v1.0은 Windows만 검증 |
-| **지원 브라우저** | Chromium 기반(Chrome/Edge/Brave 등) 최신 2버전 | NW.js가 Chromium 런타임이라 데스크톱·웹 거동 일치. **Firefox/Safari는 best-effort**(웹 빌드 한정, 1차 보증 대상 아님) |
+| **Mac / Linux** | 여지 남김 (1차 범위 밖) | Tauri가 3-OS 빌드 지원(WebView는 플랫폼별 상이) → 코드 분기 없이 향후 확장. v1.0은 Windows만 검증 |
+| **지원 브라우저** | Chromium 기반(Chrome/Edge/Brave 등) 최신 2버전 | 데스크톱은 Tauri WebView2(Windows=Edge/Chromium 기반)라 웹과 거동 근사. **Firefox/Safari는 best-effort**(웹 빌드 한정, 1차 보증 대상 아님). Mac/Linux WebView(WebKit 계열)는 v1.0 범위 밖 |
 | **최소 사양(목표)** | 듀얼코어 CPU / RAM 4GB / 통합 그래픽 / 디스크 ~300MB | 방치형이라 GPU 부하 낮음. 메모리 안정성이 사양보다 중요(장시간 구동, tech-arch §6.1) |
 | **해상도** | 1280×720 이상, DPI 스케일 대응 | 단일 창 UI. 풀스크린/창모드 (graphics-programmer·ux 상세) |
 | **온라인 요구** | **없음(오프라인 단독 동작)** | 계정·로그인 서버 불필요(→ `account-sync-recovery.md`). Steam 연동은 *있으면 좋은* 부가(업적·클라우드·오버레이)이지 *필수 의존* 아님 |
@@ -35,7 +35,7 @@
 | **UI 프레임워크** | **Svelte** | 컴파일타임 반응성, 매 틱 대량 갱신에 유리, 번들 ~1.6kb. 상태→화면 단방향(tech-arch §4.1) | GDD §11 |
 | **빌드 도구** | **Vite** | Svelte/TS 네이티브 + 즉각 HMR(밸런싱 이터레이션 직결) | GDD §11 |
 | **웹 빌드 타깃** | Vite build → 정적 번들(HTML/JS/CSS) | 웹·데스크톱 **공통 산출물**. 분기는 `platform/` 어댑터 주입만 | tech-arch §5.3 |
-| **데스크톱 빌드 타깃** | 정적 번들 + NW.js 런타임 + `package.nw` + steamworks.js → 실행파일 | 같은 번들을 NW.js로 감쌈. 게임 로직 0줄 수정 | tech-arch §5.3 |
+| **데스크톱 빌드 타깃** | 정적 번들 → Tauri(WebView2) 래핑 + steamworks-rs → 실행파일 | 같은 번들을 Tauri로 감쌈. 게임 로직 0줄 수정 | tech-arch §5.3 |
 | **게임 엔진** | **없음(커스텀)** | 전용 엔진 불필요. 고정-timestep tick 누산기 자작(tech-arch §4.1). Unity/Godot 등 도입 안 함 | tech-arch §4 |
 
 ---
@@ -46,10 +46,10 @@
 |---|---|---|---|
 | **break_eternity.js** (`Decimal`) | 모든 게임 수치(E·C·lifetime_C·QF·생산/비용·배율). native float 전면 금지 | JSON 직렬화 안 됨 → `.toString()`/`new Decimal()`. 정확 정수 카운팅엔 native 병행(§5). 패키지명에 점 포함 | tech-arch §2 |
 | **lz-string** | 세이브 페이로드 압축 | 인코딩 1종 통일(매체별 UTF16/Base64, **혼용 금지** → 복호화 실패). 세이브 봉투 `{version,data,checksum}` | tech-arch §1.2·§1.4 |
-| **steamworks.js** | Steam 연동(업적·플레이어 정보·오버레이·Cloud 훅) | `npm i`만, 네이티브 컴파일 불필요. 연동 코드는 `platform/`에 격리(웹 빌드=no-op) | tech-arch §5.2 |
-| **NW.js** (런타임/패키저) | 데스크톱 패키징. Node `fs` 직접 접근(Steam Cloud 경로 세이브) | 번들 ~150MB(Chromium 한 벌). 소스 노출(`package.nw`=ZIP) — 접근성 우선이라 기본 허용 | tech-arch §5.1 |
+| **steamworks-rs** | Steam 연동(업적·플레이어 정보·Cloud 훅; 오버레이 불요) | Rust 크레이트, Tauri 커맨드로 노출. 연동 코드는 `platform/`에 격리(웹 빌드=no-op) | tech-arch §5.2 |
+| **Tauri v2** (런타임/패키저) | 데스크톱 패키징. Tauri fs 플러그인으로 Steam Cloud 경로 세이브 | 시스템 WebView2 재사용 → 번들 ~10MB·저발열. 에셋 실행파일 번들 — 접근성 우선이라 난독화 기본 생략 | tech-arch §5.1 |
 
-> **확정 라이브러리 한 줄**: 큰 수 = **break_eternity.js** · 압축 = **lz-string** · 패키징 = **NW.js + steamworks.js**. 전부 GDD §11 / research에서 확정. 본 시트는 *목록*, 구조는 tech-arch.
+> **확정 라이브러리 한 줄**: 큰 수 = **break_eternity.js** · 압축 = **lz-string** · 패키징 = **Tauri v2 + steamworks-rs**(v0.3 전환, NW.js SUPERSEDED). GDD §11 / research 갱신 반영. 본 시트는 *목록*, 구조는 tech-arch.
 
 ### 보조 / 데이터 주도
 - **게임 데이터(입자 87·연구 52·층 11·경제 파라미터)는 코드 아닌 JSON**(`data/`, AD `secret-formula` 선례). 스키마·필드 사전은 `data-spec.md`. 로직 수정 없이 economy/content가 수치 주입(Vite HMR 밸런싱). (tech-arch §4.4)
@@ -103,15 +103,15 @@
 개발:  Vite dev + HMR
           │  (공통 정적 번들 1개)
 빌드:  Vite build ──┬── 웹 배포(itch.io / galaxy.click)
-                    └── 데스크톱: 번들 + NW.js + package.nw + steamworks.js
+                    └── 데스크톱: 번들 → Tauri(WebView2) + steamworks-rs
                               └── Steam 업로드(steamcmd / Steamworks SDK)
 ```
 
 | 결정 | 값 | 기각 대안 | 근거 위치 |
 |---|---|---|---|
-| **패키저** | **NW.js + steamworks.js** | Electron(IPC 분리 과잉), Tauri(**Steam 오버레이 미지원 #6196 = 치명**) | tech-arch §5.1 |
+| **패키저** | **Tauri v2 + steamworks-rs** (v0.3, NW.js→전환) | NW.js/Electron(오버레이 확보되나 상시구동 발열·크기) | tech-arch §5.1 |
 | **Steam 연동 경계** | `platform/`에 격리, 추상 인터페이스. 웹 빌드=no-op | greenworks(C++ 컴파일 의존) 기각 | tech-arch §5.2 |
-| **소스 보호** | 기본 생략(접근성 우선). 필요 시 `nwjc` 바이트코드(후속) | — | tech-arch §5.3 |
+| **소스 보호** | 기본 생략(접근성 우선). Tauri 실행파일 번들(평문 ZIP보다 나음), 필요 시 난독화(후속) | — | tech-arch §5.3 |
 
 ---
 
@@ -135,15 +135,15 @@ src/{ data, ui, render, platform }
 ```
 - **`data/` 분리** = 데이터 주도(수치는 economy/content, `data-spec.md`).
 - **`mechanics/` 자기완결** = 각 모듈이 serialize/idleBaseline/이벤트 책임 → "한 층=한 새로움"을 모듈 추가만으로 확장.
-- **`platform/` 분기** = 웹 vs NW.js / Steam 인터페이스 격리.
+- **`platform/` 분기** = 웹 vs Tauri(WebView) / Steam 인터페이스 격리.
 
 ---
 
 ## 10. 요약 (핵심 4줄)
 
 1. **스택**: TypeScript + Svelte + Vite. 게임엔진 없음(커스텀 고정-timestep tick / render 분리), 렌더는 Canvas2D/WebGL(graphics-programmer).
-2. **라이브러리**: break_eternity.js(큰 수, native float 금지) · lz-string(세이브 압축) · steamworks.js + NW.js(Steam 패키징, 오버레이 위해 Tauri 기각).
-3. **빌드 1벌, 타깃 2개**: Vite 정적 번들 하나가 웹(itch.io)과 데스크톱(NW.js)에 공통 투입 — 분기는 `platform/` 어댑터뿐(이식성의 구조적 근거).
+2. **라이브러리**: break_eternity.js(큰 수, native float 금지) · lz-string(세이브 압축) · Tauri v2 + steamworks-rs(Steam 패키징; 위젯 도입·오버레이 철회로 v0.3 NW.js에서 전환).
+3. **빌드 1벌, 타깃 2개**: Vite 정적 번들 하나가 웹(itch.io)과 데스크톱(Tauri)에 공통 투입 — 분기는 `platform/` 어댑터뿐(이식성의 구조적 근거).
 4. **근거는 tech-architecture.md, 본 시트는 결정 목록** — 상세 구조/인터페이스는 §링크로 가리킨다. 계정·동기화·복구는 `account-sync-recovery.md`.
 
 ---

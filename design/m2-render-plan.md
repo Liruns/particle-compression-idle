@@ -45,7 +45,7 @@ Canvas2D는 수백 개의 단순 `arc`/`fillRect`/`drawImage`를 60fps로 그릴
 **WebGL을 쓰지 않는 이유:**
 - 글로우 = `radialGradient`는 Canvas2D 네이티브. WebGL fragment shader로 같은 falloff를 내려면 셰이더·프로그램·유니폼 보일러플레이트가 필요한데, **객체 1개**를 위해 그 복잡도는 과투자.
 - 파티클 ≤120는 GPU 인스턴싱이 필요한 규모가 아니다(인스턴싱은 수천~수만에서 의미).
-- WebGL 컨텍스트는 컨텍스트 로스트(탭 백그라운드·GPU 리셋) 복구 처리, 이식(NW.js) 시 드라이버 변수가 늘어난다. 방치형 장시간 구동에서 **단순함이 안정성**.
+- WebGL 컨텍스트는 컨텍스트 로스트(탭 백그라운드·GPU 리셋) 복구 처리, 이식(Tauri WebView2) 시 드라이버 변수가 늘어난다. 방치형 장시간 구동에서 **단순함이 안정성**.
 - art §7이 "60fps 보장 조건"을 협의 항목으로 명시 → 2D로 보장되면 WebGL 불요.
 
 **WebGL로 승격할 미래 트리거(지금 아님):** 동시 파티클이 수천을 넘는 층(예: L11 픽셀 붕괴 화면 해체, L9 거품 대량 생성·소멸)이 60fps를 2D로 못 지키는 것이 **프로파일로 증명되면** 그 층만 WebGL 레이어로 분리. 현재 슬라이스(L1/L6)는 해당 없음. → §10 열린 질문.
@@ -68,7 +68,7 @@ Canvas2D는 수백 개의 단순 `arc`/`fillRect`/`drawImage`를 60fps로 그릴
 **(A) GameLoop의 render 콜백 확장** — `game.ts`에서 `render: (alpha) => { this.notify(); this.renderer?.draw(alpha); }`.
 
 - 장점: 단일 rAF(GameLoop가 이미 rAF 구동). 계약 문자 그대로(`draw(alpha)`가 GameLoop render에서 호출).
-- 단점: **Game이 캔버스를 알게 된다.** game.ts는 현재 "순수 로직, DOM/캔버스 무지"(§4.4 platform 격리). Renderer를 주입하려면 Game 생성자/필드가 표현 레이어를 참조 → platform 경계 오염. NW.js·테스트(jsdom, 캔버스 없음)에서 Game을 띄우면 렌더러 분기 필요.
+- 단점: **Game이 캔버스를 알게 된다.** game.ts는 현재 "순수 로직, DOM/캔버스 무지"(§4.4 platform 격리). Renderer를 주입하려면 Game 생성자/필드가 표현 레이어를 참조 → platform 경계 오염. 데스크톱(Tauri)·테스트(jsdom, 캔버스 없음)에서 Game을 띄우면 렌더러 분기 필요.
 - 결정성 영향: 없음(draw는 읽기전용). 단 구조적 결합이 생긴다.
 
 **(B) App.svelte가 canvas+렌더러 소유, 자체 rAF** — App.svelte `onMount`에서 canvas 생성·`CanvasRenderer` 인스턴스화·자체 `requestAnimationFrame` 루프로 `renderer.draw()`. 최신 snapshot은 기존 `subscribe`로 받아 렌더러에 푸시(`renderer.setSnapshot(snap)`).
@@ -79,7 +79,7 @@ Canvas2D는 수백 개의 단순 `arc`/`fillRect`/`drawImage`를 60fps로 그릴
 
 ### 2.2 결정: **(B) 채택**
 
-근거 우선순위: **platform 격리(tech §5.2 "웹 우선 개발이 Steam 의존으로 오염되지 않게") > rAF 1개 절약.** Game이 캔버스를 참조하는 순간, jsdom 테스트·NW.js·헤드리스 검증에서 분기가 필요해지고, "Game은 순수 로직"이라는 현 아키텍처의 깔끔한 경계가 깨진다. (B)는 그 경계를 지키면서 `Renderer` 계약을 100% 만족한다. rAF 2개는 측정상 무의미(둘 다 동일 프레임에 배치).
+근거 우선순위: **platform 격리(tech §5.2 "웹 우선 개발이 Steam 의존으로 오염되지 않게") > rAF 1개 절약.** Game이 캔버스를 참조하는 순간, jsdom 테스트·데스크톱(Tauri)·헤드리스 검증에서 분기가 필요해지고, "Game은 순수 로직"이라는 현 아키텍처의 깔끔한 경계가 깨진다. (B)는 그 경계를 지키면서 `Renderer` 계약을 100% 만족한다. rAF 2개는 측정상 무의미(둘 다 동일 프레임에 배치).
 
 **중요 관찰**: `game.subscribe(fn)`는 현재 `notify()`를 통해 **이미 rAF 빈도로** Svelte에 스냅샷을 푸시한다(`render: ()=>this.notify()`). 즉 App은 이미 매 프레임 최신 snapshot을 받는다. 렌더러는 그 snapshot을 참조만 하면 된다. 별도 폴링 불필요.
 
@@ -345,7 +345,7 @@ dev 서버 `localhost:5174` 가동 중 전제. 착수 후:
 
 ## 열린 질문 / 리뷰어가 봐줄 지점
 
-1. **[와이어링 A/B] — tech-architect 핵심 결정.** (B) App 소유·rAF 2개·Game 무오염 vs (A) GameLoop 단일 rAF·Game이 Renderer 참조. 본 계획은 **platform 격리 우선으로 (B)** 권장. rAF 1개 절약(A)이 그 결합을 정당화하는가? 특히 NW.js/테스트 관점에서.
+1. **[와이어링 A/B] — tech-architect 핵심 결정.** (B) App 소유·rAF 2개·Game 무오염 vs (A) GameLoop 단일 rAF·Game이 Renderer 참조. 본 계획은 **platform 격리 우선으로 (B)** 권장. rAF 1개 절약(A)이 그 결합을 정당화하는가? 특히 데스크톱(Tauri)/테스트 관점에서.
 2. **[글로우 DOM 대체] — art-director.** `.r-core` 16px DOM 점을 캔버스 글로우로 **대체**(권장) vs 캔버스를 DOM 뒤/위에 겹쳐 보강. 대체 시 JS 비활성 폴백(점진적 향상)을 어디까지 보장?
 3. **[배경 캔버스 z-스택] — ux-designer·art-director.** 배경 캔버스를 `<main>` 뒤(z-1)로 두고 main 콘텐츠 박스(카드·체인) 사이로 헤이즈가 비치게 할지, 아니면 main 배경을 transparent로 하고 캔버스가 base+haze 전담할지. 카드 가독성(art §1-A "빛이 정보, 배경은 침묵") 영향.
 4. **[layer-visuals 위치] — tech-architect.** `src/render/layer-visuals.ts`(표현 분리) vs `src/data/`(수치 일원화). 표현 파라미터는 로직 수치와 성격이 달라 render 분리를 권장하나, "수치는 data/" 원칙과의 절충.
