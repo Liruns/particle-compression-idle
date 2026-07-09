@@ -1,0 +1,63 @@
+name: Deploy to GitHub Pages
+
+# main 푸시 시 정적 번들을 빌드해 GitHub Pages로 배포한다.
+#  vite.config.ts의 base:'./'(상대경로)라 프로젝트 사이트(/particle-compression-idle/)에서
+#  에셋이 그대로 해석됨 — 레포명 하드코딩·base 분기 불필요.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+# 배포에 필요한 최소 권한(정적 파일 읽기 + Pages 쓰기 + OIDC 토큰).
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 동시 배포 1건만 — 진행 중 런은 취소해 최신 커밋을 우선한다.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (clean, lockfile 고정)
+        run: npm ci
+
+      - name: Test (배포 게이트 — 실패 시 배포 중단)
+        run: npm test
+
+      - name: Build (svelte-check + vite build → dist/)
+        run: npm run build
+
+      - name: Configure Pages (미활성 시 자동 활성화)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
