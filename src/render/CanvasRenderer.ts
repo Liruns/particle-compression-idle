@@ -11,6 +11,7 @@
 import type { Renderer } from './index';
 import { WorldRenderer } from './world-renderer';
 import { BoardRenderer } from './board';
+import { CosmicCycle } from './cosmic-cycle';
 
 export class CanvasRenderer implements Renderer {
   /** 풀스크린 게임 캔버스(세계 배경 + 전경 게임판). */
@@ -20,6 +21,9 @@ export class CanvasRenderer implements Renderer {
   private world: WorldRenderer;
   /** 전경 = 다이제틱 공허 게임판(중심 코어·궤도 껍질·세포). */
   private board: BoardRenderer;
+  /** 데스크톱 위젯 "코스믹 사이클" 씬(진행 연동). widget 모드일 때만 그린다. */
+  private cosmic: CosmicCycle;
+  private widget = false;
   /** 게임판 애니메이션 누적 시간(초). bg dt를 적분 — 사인 위상 일관(world.t와 독립). */
   private boardTime = 0;
   private reducedMotion = false;
@@ -41,6 +45,7 @@ export class CanvasRenderer implements Renderer {
     this.bgCtx = opts.bgCanvas?.getContext('2d') ?? null;
     this.world = new WorldRenderer();
     this.board = new BoardRenderer();
+    this.cosmic = new CosmicCycle();
 
     this.dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
@@ -83,6 +88,22 @@ export class CanvasRenderer implements Renderer {
     this.reducedMotion = v;
     this.world.setReducedMotion(v);
     this.board.setReducedMotion(v);
+    this.cosmic.setReducedMotion(v);
+  }
+
+  /** 데스크톱 위젯 모드 on/off — draw가 게임판 대신 코스믹 사이클을 그린다. */
+  setWidgetMode(v: boolean): void {
+    this.widget = v;
+  }
+
+  /** 코스믹 사이클 진행도 주입(0..1 = 게임 dec/26 연동). App pushRender에서 매 스냅샷 갱신. */
+  setCosmicProgress(p: number): void {
+    this.cosmic.setProgress(p);
+  }
+
+  /** 빅크런치 → 빅뱅 섬광(App이 bigCrunch 이벤트에서 호출). */
+  cosmicBang(): void {
+    this.cosmic.bang();
   }
 
   /**
@@ -137,6 +158,11 @@ export class CanvasRenderer implements Renderer {
     if (dt > 0.1) dt = 0.1;
 
     ctx.clearRect(0, 0, this.bgW, this.bgH);
+    if (this.widget) {
+      // 데스크톱 위젯: 코스믹 사이클 씬만(게임판 대체). 진행도는 App이 setCosmicProgress로 주입.
+      this.cosmic.draw(ctx, this.bgW, this.bgH, dt);
+      return;
+    }
     this.world.draw(ctx, this.bgW, this.bgH, dt); // 세계 배경(자체 합성 복원)
     if (!this.reducedMotion) this.boardTime += dt;
     this.board.setLayerColor(this.world.currentColorRGB());

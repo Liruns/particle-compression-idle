@@ -44,6 +44,12 @@
   let unsub: (() => void) | null = null;
   const busUnsubs: (() => void)[] = [];
   let toast: Toast;
+  /** 데스크톱 위젯 모드(#widget 또는 ?widget) — 게임 UI를 숨기고 코스믹 사이클 씬만 그린다(진행 연동). */
+  const widget =
+    typeof location !== 'undefined' &&
+    (location.hash.includes('widget') || new URLSearchParams(location.search).has('widget'));
+  /** DEV: ?p=0.6 으로 코스믹 진행도 강제(단계 확인용). null이면 게임 dec/26 연동. */
+  const cosmicDevP = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('p') : null;
 
   // 풀스크린 게임 캔버스(세계 배경 + 전경 게임판). 글로우 게이지 캔버스는 폐기(null) — 게이지=코어로 대체.
   let bgCanvas: HTMLCanvasElement | null = null;
@@ -102,6 +108,8 @@
     installUnloadSave(game);
 
     setupRenderer();
+    renderer?.setWidgetMode(widget);
+    busUnsubs.push(bus.on('bigCrunch', () => renderer?.cosmicBang())); // 빅크런치 → 위젯 빅뱅 섬광.
     rmUnsub = effectiveReducedMotion.subscribe((v) => {
       renderer?.setReducedMotion(v);
       // 발열/전력: 감소모션이면 앰비언트가 정지 → 렌더 12fps로 더 낮춤(정지 프레임 재그리기 낭비 감소).
@@ -237,6 +245,13 @@
   /** snapshot → 렌더러(읽기전용 파생). 층 변화 감지 + 게임판 입력 주입 + draw. */
   function pushRender(s: GameSnapshot): void {
     if (!renderer) return;
+    if (widget) {
+      // 위젯: 게임판 대신 코스믹 사이클. 진행도 = dec/26(빅크런치 시 dec 리셋→원자 회귀). DEV는 ?p 고정.
+      const cp = cosmicDevP != null ? +cosmicDevP : Math.min(1, Math.max(0, s.dec / 26));
+      renderer.setCosmicProgress(cp);
+      renderer.draw();
+      return;
+    }
     if (s.layer.slug !== lastSlug) {
       const first = lastSlug !== ''; // 부팅 첫 슬러그(빈 lastSlug)는 즉시 스냅 — 전환 아님
       lastSlug = s.layer.slug;
@@ -542,7 +557,7 @@
 
 <svelte:window on:keydown={onKeydown} on:pointerup={endPointer} on:blur={endPointer} />
 
-<Toast bind:this={toast} />
+{#if !widget}<Toast bind:this={toast} />{/if}
 
 <!-- 풀스크린 게임 캔버스 — 세계 배경 + 전경 게임판. 포인터=만지기 표면(공허가 곧 게임판 §3). -->
 <canvas
@@ -556,12 +571,12 @@
 ></canvas>
 
 <!-- 오프라인 복귀 모달(ui-flow §10, 정보 로직 보존). -->
-{#if snap?.offline}
+{#if snap?.offline && !widget}
   <OfflineModal offline={snap.offline} onDismiss={onDismissOffline} />
 {/if}
 
 <!-- 오프닝 인트로(신규 게임 1회, narrative §5-D) — 공허 중앙에 잠깐 떠오르는 첫 비트. 상호작용 비차단. -->
-{#if showIntro}
+{#if showIntro && !widget}
   <div class="intro" class:reduced={$effectiveReducedMotion} aria-hidden="true">
     {#each FIRST_SCREEN_LINES as line, i}
       <div class="intro-line" style="animation-delay: {i * 0.7}s">{line}</div>
@@ -569,7 +584,7 @@
   </div>
 {/if}
 
-{#if snap}
+{#if snap && !widget}
   <!-- 공허에 뜬 희미한 주석층(테두리·카드·배경 0 — §3-A·§3-B). pointer-events는 상호작용 요소만. -->
   <div class="annot-layer" aria-hidden={activePanel ? 'true' : 'false'}>
     <!-- 좌상단: 결속(구매) 수량 모드. -->
@@ -709,7 +724,7 @@
       </div>
     </div>
   {/if}
-{:else}
+{:else if !snap}
   <p class="booting">초기화 중…</p>
 {/if}
 
