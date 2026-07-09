@@ -78,8 +78,6 @@
   type Panel = 'research' | 'codex' | 'prestige' | 'settings' | 'stats' | 'achievements' | 'help';
   let activePanel: Panel | null = null;
 
-  /** 포인터 드래그(누른 채 쓸어담기) 상태. */
-  let pointerDown = false;
 
   /** 현재 층 발광색(QF 성표 = 층색 §3-C). pushRender에서 갱신. */
   let layerRgb = '159,184,154';
@@ -336,7 +334,6 @@
   function onPointerDown(e: PointerEvent): void {
     if (!renderer || !game || !snap || e.button !== 0) return;
     unlockAudio();
-    pointerDown = true;
     const { x, y } = canvasXY(e);
     renderer.gameBoard.setPointer(x, y);
     const hit = renderer.gameBoard.activate();
@@ -346,20 +343,16 @@
     else if (hit.kind === 'phase') doPhase(hit.state);
   }
   function onPointerMove(e: PointerEvent): void {
-    if (!renderer) return;
+    if (!renderer || !game) return;
     const { x, y } = canvasXY(e);
     renderer.gameBoard.setPointer(x, y);
-    if (pointerDown && game) {
-      // 드래그 쓸어담기 — 지나간 float 세포만큼 압축·흡수(연속 손맛).
-      const n = renderer.gameBoard.dragAbsorb(x, y);
-      for (let i = 0; i < n; i++) doCompress();
-    }
+    // 슥슥 스윕 압축: 버튼을 누르지 않아도 포인터가 지나가는 float 세포를 흡수(누를 필요 없음).
+    //   dragAbsorb는 세포 반경 진입 시 1회만 캡처 → 정지 포인터는 추가 흡수 0(경제 중립).
+    const n = renderer.gameBoard.dragAbsorb(x, y);
+    for (let i = 0; i < n; i++) doCompress();
   }
-  function endPointer(): void {
-    pointerDown = false;
-  }
+
   function onPointerLeave(): void {
-    pointerDown = false;
     renderer?.gameBoard.clearPointer();
   }
 
@@ -531,7 +524,7 @@
                   : '';
 </script>
 
-<svelte:window on:keydown={onKeydown} on:pointerup={endPointer} on:blur={endPointer} />
+<svelte:window on:keydown={onKeydown} />
 
 <Toast bind:this={toast} />
 
