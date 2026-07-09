@@ -125,12 +125,33 @@
       document.body.classList.add('widget-transparent');
     }
     busUnsubs.push(bus.on('bigCrunch', () => renderer?.cosmicBang())); // 빅크런치 → 위젯 빅뱅 섬광.
+    // 발열/전력 fps 정책. 감소모션=12(앰비언트 정지). 위젯 비포커스=15로 스로틀(정지 아님 —
+    //   데스크탑 방치형은 안 볼 때도 계속 흐르는 게 핵심). 포커스/일반=30. 입력(드래그·구매)은
+    //   직접 notify라 캡과 무관하게 즉시 반응.
+    let rmActive = false;
+    let widgetBlurred = typeof document !== 'undefined' ? !document.hasFocus() : false;
+    const applyFps = () => game?.setRenderFps(rmActive ? 12 : widget && widgetBlurred ? 15 : 30);
     rmUnsub = effectiveReducedMotion.subscribe((v) => {
+      rmActive = v;
       renderer?.setReducedMotion(v);
-      // 발열/전력: 감소모션이면 앰비언트가 정지 → 렌더 12fps로 더 낮춤(정지 프레임 재그리기 낭비 감소).
-      //   입력(드래그 압축·구매)은 직접 notify라 캡과 무관하게 즉시 반응.
-      game?.setRenderFps(v ? 12 : 30);
+      applyFps();
     });
+    if (widget && typeof window !== 'undefined') {
+      const onFocus = () => {
+        widgetBlurred = false;
+        applyFps();
+      };
+      const onBlur = () => {
+        widgetBlurred = true;
+        applyFps();
+      };
+      window.addEventListener('focus', onFocus);
+      window.addEventListener('blur', onBlur);
+      busUnsubs.push(() => {
+        window.removeEventListener('focus', onFocus);
+        window.removeEventListener('blur', onBlur);
+      });
+    }
 
     // 사운드 엔진 — 이벤트 버스 구독(읽기 전용). 층 인덱스로 음역 결정. prefs로 mute/volume 반영.
     audio = new AudioEngine({ getLayerIndex: () => snap?.layer.index ?? 1 });
