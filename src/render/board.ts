@@ -285,6 +285,8 @@ export class BoardRenderer {
 
   private seedCells(): void {
     this.cells = [];
+    // 재시드 시 stale 호버 인덱스 무효화(축소된 배열을 draw가 참조하는 크래시 방지).
+    this.hoverCell = -1;
     for (let i = 0; i < CELL_TARGET; i++) this.spawnCell(false);
   }
   private spawnCell(atEdge: boolean): void {
@@ -619,7 +621,9 @@ export class BoardRenderer {
     // 6) dec 진행 호(다음 세계 하강 게이트).
     this.drawDecArc(ctx);
     // 7) 호버 툴팁(세포/껍질) — 공허에 뜬 텍스트.
-    if (this.hoverCell >= 0) this.drawCellHover(ctx, this.cells[this.hoverCell]);
+    // 7) 호버 툴팁(세포/껍질) — 공허에 뜬 텍스트. 셀이 흡수로 사라졌을 수 있어 존재 가드(방어).
+    const hoverC = this.hoverCell >= 0 ? this.cells[this.hoverCell] : undefined;
+    if (hoverC) this.drawCellHover(ctx, hoverC);
     else if (this.hoverShellTier > 0) this.drawShellHover(ctx, this.hoverShellTier);
     // 8) 떠오르는 수치(흡수 보상).
     this.drawFloatTexts(ctx, d);
@@ -817,6 +821,10 @@ export class BoardRenderer {
           this.coreFlash = Math.min(1.4, this.coreFlash + 0.7);
           this.spawnAbsorbSparks(this.cx, this.cy, wcol);
           this.cells.splice(i, 1);
+          // 인덱스 시프트에 hoverCell 동기화 — 제거된 게 호버 셀이면 해제, 앞쪽이면 한 칸 당김.
+          //   (안 하면 draw가 this.cells[stale]=undefined를 참조해 크래시 → 매 프레임 throw로 멈춤.)
+          if (i === this.hoverCell) this.hoverCell = -1;
+          else if (i < this.hoverCell) this.hoverCell--;
           this.cellRespawn = Math.min(this.cellRespawn, 0);
           continue;
         }
@@ -1099,7 +1107,7 @@ export class BoardRenderer {
 
   // ── 호버 툴팁(source-over 텍스트 — 공허에 직접, 테두리 0). 그린 뒤 lighter 복원. ──
   private drawCellHover(ctx: CanvasRenderingContext2D, c: Cell): void {
-    if (c.state !== 'float') return;
+    if (!c || c.state !== 'float') return;
     const p = this.cellPos(c);
     ctx.globalCompositeOperation = 'source-over';
     ctx.save();
