@@ -70,8 +70,47 @@ export class CosmicCycle {
     this.transparent = v;
   }
 
+  /** 색별 글로우 스프라이트 캐시(팔레트가 정적이라 유한). 프레임당 gradient 할당 제거(성능/GC). */
+  private readonly glowSprites = new Map<string, HTMLCanvasElement | null>();
+  /** 투명 배경 radial 캐시(W×H 키 — 위젯 리사이즈에서만 재생성). */
+  private bgGrad: { key: string; g: CanvasGradient } | null = null;
+
+  private glowSprite(col: string): HTMLCanvasElement | null {
+    let s = this.glowSprites.get(col);
+    if (s === undefined) {
+      s = null;
+      if (typeof document !== 'undefined') {
+        const cv = document.createElement('canvas');
+        const SR = 96; // 스프라이트 반경(px). 씬 최대 글로우까지 업스케일 열화 무시 가능.
+        cv.width = cv.height = SR * 2;
+        const c2 = cv.getContext('2d');
+        if (c2) {
+          const g = c2.createRadialGradient(SR, SR, 0, SR, SR, SR);
+          g.addColorStop(0, `rgba(${col},1)`);
+          g.addColorStop(0.4, `rgba(${col},0.35)`);
+          g.addColorStop(1, `rgba(${col},0)`);
+          c2.fillStyle = g;
+          c2.fillRect(0, 0, SR * 2, SR * 2);
+          s = cv;
+        }
+      }
+      this.glowSprites.set(col, s);
+    }
+    return s;
+  }
+
   private glow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, col: string, a: number): void {
     if (a <= 0 || r <= 0) return;
+    const s = this.glowSprite(col);
+    if (s) {
+      // 스톱(1, 0.35, 0)은 a에 선형 → globalAlpha 곱이 기존 (a, 0.35a, 0)과 동일.
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = prev * Math.min(1, a);
+      ctx.drawImage(s, x - r, y - r, r * 2, r * 2);
+      ctx.globalAlpha = prev;
+      return;
+    }
+    // 폴백(document 없음 — 테스트/노드): 기존 gradient 경로.
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
     g.addColorStop(0, `rgba(${col},${a})`);
     g.addColorStop(0.4, `rgba(${col},${a * 0.35})`);
@@ -97,11 +136,15 @@ export class CosmicCycle {
     ctx.globalCompositeOperation = 'source-over';
     if (this.transparent) {
       // 투명 위젯: 중앙만 은은히 어둡고 가장자리는 완전 투명 → 우주가 바탕화면에 떠 있는 느낌.
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.6);
-      g.addColorStop(0, 'rgba(5,6,10,0.62)');
-      g.addColorStop(0.6, 'rgba(5,6,10,0.30)');
-      g.addColorStop(1, 'rgba(5,6,10,0)');
-      ctx.fillStyle = g;
+      const key = `${W}x${H}`;
+      if (!this.bgGrad || this.bgGrad.key !== key) {
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(W, H) * 0.6);
+        g.addColorStop(0, 'rgba(5,6,10,0.62)');
+        g.addColorStop(0.6, 'rgba(5,6,10,0.30)');
+        g.addColorStop(1, 'rgba(5,6,10,0)');
+        this.bgGrad = { key, g };
+      }
+      ctx.fillStyle = this.bgGrad.g;
       ctx.fillRect(0, 0, W, H);
     } else {
       ctx.fillStyle = '#05060a';
