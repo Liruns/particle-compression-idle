@@ -61,6 +61,9 @@
   const cosmicDevP = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('p') : null;
   /** Tauri 투명창 위젯에서만 투명 배경(웹 ?widget은 어두운 씬 그대로 확인용). */
   const widgetTransparent = widget && isTauriDesktop;
+  /** 위젯 호버 HUD 표시 상태(포인터 이동 시 2.2s 페이드인 — 기본 정보 0). */
+  let widgetHudVisible = false;
+  let hudTimer: ReturnType<typeof setTimeout> | null = null;
 
   // 풀스크린 게임 캔버스(세계 배경 + 전경 게임판). 글로우 게이지 캔버스는 폐기(null) — 게이지=코어로 대체.
   let bgCanvas: HTMLCanvasElement | null = null;
@@ -162,6 +165,17 @@
       };
       window.addEventListener('pointerdown', onPoke);
       busUnsubs.push(() => window.removeEventListener('pointerdown', onPoke));
+      // 호버 HUD: 포인터가 움직일 때만 층·사이클 진행을 잠깐 보여준다(기본 정보 0 — 앰비언트 유지).
+      const onHudMove = () => {
+        widgetHudVisible = true;
+        if (hudTimer) clearTimeout(hudTimer);
+        hudTimer = setTimeout(() => (widgetHudVisible = false), 2200);
+      };
+      window.addEventListener('pointermove', onHudMove);
+      busUnsubs.push(() => {
+        window.removeEventListener('pointermove', onHudMove);
+        if (hudTimer) clearTimeout(hudTimer);
+      });
     }
 
     // 사운드 엔진 — 이벤트 버스 구독(읽기 전용). 층 인덱스로 음역 결정. prefs로 mute/volume 반영.
@@ -529,6 +543,17 @@
     else if (e.key === '2') buyMode = 10;
     else if (e.key === '3') buyMode = 100;
     else if (e.key === '4' || e.key.toLowerCase() === 'm') buyMode = 'max';
+    else {
+      // 패널 단축키(라틴 니모닉) — 노드가 떠 있는 패널만. 같은 키 재입력 = 토글(openPanel 동작).
+      const k = e.key.toLowerCase();
+      if (k === 'r' && showResearchNode) openPanel('research');
+      else if (k === 'c' && showCodexNode) openPanel('codex');
+      else if (k === 'p' && showPrestigeNode) openPanel('prestige');
+      else if (k === 't') openPanel('stats');
+      else if (k === 'a') openPanel('achievements');
+      else if (k === 's') openPanel('settings');
+      else if (k === 'h') openPanel('help');
+    }
   }
 
   // --- 설정(game 위임) ----------------------------------------------------------
@@ -614,6 +639,12 @@
 {#if widget && isTauriDesktop}
   <!-- Tauri 프레임리스 위젯: 테두리가 없으니 전체 창을 드래그 핸들로(위젯엔 클릭 상호작용 없음). -->
   <div class="widget-drag" data-tauri-drag-region aria-hidden="true"></div>
+{/if}
+{#if widget && snap}
+  <!-- 호버 HUD — 진행 연동을 읽을 수 있게(층·사이클%). 기본 숨김, 포인터 이동 시만. -->
+  <div class="widget-hud" class:show={widgetHudVisible} aria-hidden="true">
+    {snap.layer.nameKo} · 사이클 {Math.round(Math.min(1, Math.max(0, snap.dec / 26)) * 100)}%
+  </div>
 {/if}
 
 <!-- 풀스크린 게임 캔버스 — 세계 배경 + 전경 게임판. 포인터=만지기 표면(공허가 곧 게임판 §3). -->
@@ -807,6 +838,26 @@
   }
   .widget-drag:active {
     cursor: grabbing;
+  }
+  /* 위젯 호버 HUD — 하단 중앙, 발광 미니 텍스트. pointer-events 없음(드래그/포크 방해 0). */
+  .widget-hud {
+    position: fixed;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    z-index: 50;
+    pointer-events: none;
+    font-family: var(--font-numeric, monospace);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: rgba(200, 214, 235, 0.62);
+    text-shadow: 0 0 8px rgba(120, 150, 220, 0.35);
+    opacity: 0;
+    transition: opacity 0.45s ease;
+    white-space: nowrap;
+  }
+  .widget-hud.show {
+    opacity: 1;
   }
 
   /* 풀스크린 게임 캔버스 — 만질 표면. (세계+전경 한 파이프라인) */

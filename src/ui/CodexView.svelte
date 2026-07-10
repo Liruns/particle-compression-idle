@@ -31,10 +31,22 @@
   };
 
   let selectedLayer = 1;
+  /** 표시 필터 — 전체/발견/미발견(입자 수가 늘수록 스캔 비용 절감). 표시 전용. */
+  type CodexFilter = 'all' | 'found' | 'missing';
+  let filter: CodexFilter = 'all';
+  const filterOpts: { id: CodexFilter; label: string }[] = [
+    { id: 'all', label: '전체' },
+    { id: 'found', label: '발견' },
+    { id: 'missing', label: '미발견' },
+  ];
 
   $: discovered = codex.discovered;
   $: holoMult = holographicMultiplier(discovered);
   $: selectedParticles = particlesByLayer(selectedLayer);
+  $: shownParticles =
+    filter === 'all'
+      ? selectedParticles
+      : selectedParticles.filter((p) => discovered.has(p.id) === (filter === 'found'));
 
   $: visibleLayers = LAYERS.filter((l) => l.kind === 'known' || l.index <= codex.maxLayerReached);
   $: completionByLayer = new Map(
@@ -99,12 +111,22 @@
   </nav>
 
   <div class="cx-layerhead">
-    {layerName(selectedLayer)}<span class="dim"> · {pct(selectedLayer)}</span>
+    <span>{layerName(selectedLayer)}<span class="dim"> · {pct(selectedLayer)}</span></span>
+    <div class="cx-filter" role="radiogroup" aria-label="표시 필터">
+      {#each filterOpts as f}
+        <button
+          class="cx-fbtn"
+          class:on={filter === f.id}
+          role="radio"
+          aria-checked={filter === f.id}
+          on:click={() => (filter = f.id)}>{f.label}</button>
+      {/each}
+    </div>
   </div>
 
   <!-- 입자 = 테두리 없는 표본 행(카드 폐기). 발견=밝음, 미발견=물러난 마스킹. -->
   <ul class="cx-list" role="list">
-    {#each selectedParticles as p (p.id)}
+    {#each shownParticles as p (p.id)}
       {@const found = discovered.has(p.id)}
       <li class="cx-row" class:found class:legendary={found && p.rarity === 'LEGENDARY'}>
         <span class="cx-badge" title={rarityKo[p.rarity]}>{rarityBadge[p.rarity]}</span>
@@ -119,6 +141,9 @@
         <span class="cx-flavor">{found ? p.flavorKo : lockHint(p)}</span>
       </li>
     {/each}
+    {#if shownParticles.length === 0}
+      <li class="cx-empty">{filter === 'found' ? '아직 이 층에서 기록된 표본이 없습니다.' : '이 층의 미발견 표본이 없습니다 — 완성.'}</li>
+    {/if}
   </ul>
 </div>
 
@@ -213,9 +238,43 @@
   }
 
   .cx-layerhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     font-family: var(--font-label);
     font-size: var(--text-label-md);
     color: var(--layer-accent);
+  }
+  .cx-filter {
+    display: inline-flex;
+    gap: 2px;
+    background: color-mix(in srgb, var(--surface) 60%, transparent);
+    border-radius: 999px;
+    padding: 2px;
+  }
+  .cx-fbtn {
+    font-family: var(--font-label);
+    font-size: var(--text-label-sm, 12px);
+    color: var(--foreground-dim);
+    background: none;
+    border: none;
+    border-radius: 999px;
+    padding: 3px 10px;
+    cursor: pointer;
+    transition:
+      color 0.2s ease,
+      background 0.2s ease;
+  }
+  .cx-fbtn.on {
+    color: var(--foreground);
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
+  }
+  .cx-empty {
+    font-family: var(--font-narrative);
+    font-size: var(--text-narr-sm, 12px);
+    color: var(--foreground-dim);
+    padding: 10px 0;
   }
 
   /* 표본 행 — 2줄 엔트리(테두리 0). [표식] 이름 … 물리값 / 두 번째 줄 플레이버. */

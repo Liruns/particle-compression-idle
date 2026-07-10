@@ -19,7 +19,9 @@
   const keys: Row[] = [
     { key: '스페이스', desc: '압축' },
     { key: '1 · 2 · 3 · 4', desc: '결속 수량 ×1 · ×10 · ×100 · 최대' },
-    { key: 'Esc', desc: '열린 패널 닫기' },
+    { key: 'R · C · P', desc: '연구 · 도감 · 상전이 (노드가 떠 있을 때)' },
+    { key: 'T · A · S · H', desc: '기록 · 목표 · 설정 · 안내' },
+    { key: 'Esc', desc: '열린 패널 닫기 (위젯에선 게임 화면 복귀)' },
     { key: '?', desc: '이 안내 열기/닫기' },
   ];
   const resources: Row[] = [
