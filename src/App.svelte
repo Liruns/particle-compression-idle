@@ -17,6 +17,7 @@
    */
   import { onMount, onDestroy } from 'svelte';
   import { Game, installUnloadSave, type GameSnapshot, type BuyMode } from './game';
+  import { SAVE_KEY } from './core/save';
   import { formatNumber, formatRadius, formatMultiplier } from './core/format';
   import { bus } from './core/events';
   import { CanvasRenderer } from './render';
@@ -44,19 +45,28 @@
   let unsub: (() => void) | null = null;
   const busUnsubs: (() => void)[] = [];
   let toast: Toast;
-  /** 데스크톱 위젯 모드 — 게임 UI를 숨기고 코스믹 사이클 씬만 그린다(진행 연동).
-   *  트리거: #widget/?widget, 또는 Tauri 데스크톱 앱(기본 위젯; #game/?game으로 풀게임 오버라이드). */
+  /** 데스크톱 위젯 모드 — 게임 UI를 숨기고 위젯 장면만 그린다(게임과 동기화).
+   *  트리거: #widget/?widget, 또는 Tauri 데스크톱(기본 위젯 — 단 **첫 실행(세이브 없음)은
+   *  게임 모드로 부팅**해 온보딩·인트로·FTUE를 거친다. GDD v0.4 §2). #game/?game = 오버라이드. */
   const isTauriDesktop =
     typeof window !== 'undefined' &&
     ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
   const forceGame =
     typeof location !== 'undefined' &&
     (location.hash.includes('game') || new URLSearchParams(location.search).has('game'));
+  /** 세이브 존재(동기 체크 — 위젯/게임 부팅 분기용). 첫 실행 = 온보딩이 있는 게임 모드. */
+  const hasSave = (() => {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem(SAVE_KEY) != null;
+    } catch {
+      return false;
+    }
+  })();
   const widget =
     typeof location !== 'undefined' &&
     (location.hash.includes('widget') ||
       new URLSearchParams(location.search).has('widget') ||
-      (isTauriDesktop && !forceGame));
+      (isTauriDesktop && !forceGame && hasSave));
   /** DEV: ?p=0.6 으로 코스믹 진행도 강제(단계 확인용). null이면 게임 dec/26 연동. */
   const cosmicDevP = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('p') : null;
   /** Tauri 투명창 위젯에서만 투명 배경(웹 ?widget은 어두운 씬 그대로 확인용). */
@@ -176,16 +186,23 @@
         window.removeEventListener('pointermove', onHudMove);
         if (hudTimer) clearTimeout(hudTimer);
       });
+      // 위젯 진입 1회 안내: HUD를 잠깐 자동 노출("층 · 진행% · Esc = 게임" — 복귀 발견성).
+      widgetHudVisible = true;
+      hudTimer = setTimeout(() => (widgetHudVisible = false), 4000);
     }
     if (isTauriDesktop && typeof window !== 'undefined') {
       // Tauri(모드 무관): 부팅 정규화(직전 세션을 다른 모드로 끝냈으면 창 흔적 불일치 → 재적용) +
       //   트레이 "게임 ↔ 위젯 전환" 이벤트 수신(양방향 — 게임 모드에서도 위젯으로 복귀 가능).
       void (async () => {
-        const { normalizeTauriWindowMode } = await import('./platform/window-mode');
-        await normalizeTauriWindowMode(widget ? 'widget' : 'game');
-        const { listen } = await import('@tauri-apps/api/event');
-        const un = await listen('toggle-widget-mode', () => void switchWidgetMode(widget ? 'game' : 'widget'));
-        busUnsubs.push(un);
+        try {
+          const { normalizeTauriWindowMode } = await import('./platform/window-mode');
+          await normalizeTauriWindowMode(widget ? 'widget' : 'game');
+          const { listen } = await import('@tauri-apps/api/event');
+          const un = await listen('toggle-widget-mode', () => void switchWidgetMode(widget ? 'game' : 'widget'));
+          busUnsubs.push(un);
+        } catch {
+          // Tauri API 실패(비정상 환경)는 치명 아님 — 위젯/게임 렌더는 계속 동작.
+        }
       })();
     }
 
