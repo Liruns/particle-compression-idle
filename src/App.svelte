@@ -83,7 +83,7 @@
   let audio: AudioEngine | null = null;
   let audioUnlocked = false;
   let prefsUnsub: (() => void) | null = null;
-  let curPrefs: Prefs = { muted: false, volume: 0.7, motion: 'auto', ambient: true };
+  let curPrefs: Prefs = { muted: false, volume: 0.7, motion: 'auto', ambient: true, widgetScene: 'world' };
 
   /** 결속(구매) 수량 모드 — 공허 좌상단 셀렉터. */
   let buyMode: BuyMode = 1;
@@ -127,7 +127,7 @@
     if (widgetTransparent && typeof document !== 'undefined') {
       document.body.classList.add('widget-transparent');
     }
-    busUnsubs.push(bus.on('bigCrunch', () => renderer?.cosmicBang())); // 빅크런치 → 위젯 빅뱅 섬광.
+    busUnsubs.push(bus.on('bigCrunch', () => renderer?.widgetBang())); // 빅크런치 → 위젯 빅뱅 섬광.
     // 발열/전력 fps 정책. 감소모션=12(앰비언트 정지). 위젯 비포커스=15로 스로틀(정지 아님 —
     //   데스크탑 방치형은 안 볼 때도 계속 흐르는 게 핵심). 포커스/일반=30. 입력(드래그·구매)은
     //   직접 notify라 캡과 무관하게 즉시 반응.
@@ -161,7 +161,7 @@
       const onPoke = (e: PointerEvent) => {
         if (e.button !== 0 || !bgCanvas) return;
         const rect = bgCanvas.getBoundingClientRect();
-        renderer?.cosmicPoke(e.clientX - rect.left, e.clientY - rect.top);
+        renderer?.widgetPoke(e.clientX - rect.left, e.clientY - rect.top);
       };
       window.addEventListener('pointerdown', onPoke);
       busUnsubs.push(() => window.removeEventListener('pointerdown', onPoke));
@@ -186,6 +186,7 @@
       audio?.setMuted(p.muted);
       audio?.setVolume(p.volume);
       audio?.setAmbientEnabled(p.ambient);
+      renderer?.setWidgetScene(p.widgetScene); // 위젯 장면(세계=동기화 기본 / 코스믹 선택)
     });
 
     if (import.meta.env.DEV) {
@@ -306,13 +307,7 @@
   /** snapshot → 렌더러(읽기전용 파생). 층 변화 감지 + 게임판 입력 주입 + draw. */
   function pushRender(s: GameSnapshot): void {
     if (!renderer) return;
-    if (widget) {
-      // 위젯: 게임판 대신 코스믹 사이클. 진행도 = dec/26(빅크런치 시 dec 리셋→원자 회귀). DEV는 ?p 고정.
-      const cp = cosmicDevP != null ? +cosmicDevP : Math.min(1, Math.max(0, s.dec / 26));
-      renderer.setCosmicProgress(cp);
-      renderer.draw();
-      return;
-    }
+    // 층 변화 감지 — 게임/위젯 공통. 위젯(세계 장면)도 현재 층 세계를 그대로 비춘다(게임과 동기화).
     if (s.layer.slug !== lastSlug) {
       const first = lastSlug !== ''; // 부팅 첫 슬러그(빈 lastSlug)는 즉시 스냅 — 전환 아님
       lastSlug = s.layer.slug;
@@ -322,6 +317,15 @@
       if (enteringUnknown) seenUnknown = true;
       renderer.onLayerChange(s.layer.slug, moneyShot); // 세계·게임판 색은 렌더러가 slug로 직접 구동
       audio?.setLayer(s.layer.index); // 앰비언트 사운드스케이프 층 크로스페이드(사운드 2차)
+    }
+    if (widget) {
+      // 위젯: DOM UI 없이 장면만. 세계 장면은 게임판까지 그대로 그리므로(동기화) 입력 데이터도 주입.
+      //   코스믹 진행도 = dec/26(빅크런치 시 dec 리셋→회귀). DEV는 ?p 고정.
+      const cp = cosmicDevP != null ? +cosmicDevP : Math.min(1, Math.max(0, s.dec / 26));
+      renderer.setCosmicProgress(cp);
+      renderer.gameBoard.setInput(buildBoardInput(s));
+      renderer.draw();
+      return;
     }
     renderer.gameBoard.setInput(buildBoardInput(s));
     layerRgb = renderer.layerColorRGB;
@@ -643,7 +647,7 @@
 {#if widget && snap}
   <!-- 호버 HUD — 진행 연동을 읽을 수 있게(층·사이클%). 기본 숨김, 포인터 이동 시만. -->
   <div class="widget-hud" class:show={widgetHudVisible} aria-hidden="true">
-    {snap.layer.nameKo} · 사이클 {Math.round(Math.min(1, Math.max(0, snap.dec / 26)) * 100)}%
+    {snap.layer.nameKo} · 진행 {Math.round(Math.min(1, Math.max(0, snap.dec / 26)) * 100)}%
   </div>
 {/if}
 

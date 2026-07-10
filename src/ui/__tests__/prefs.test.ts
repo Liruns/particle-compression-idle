@@ -13,7 +13,7 @@ import { prefs, effectiveReducedMotion, setMuted, setVolume, setMotion } from '.
 
 beforeEach(() => {
   // 각 테스트 독립 — 기본으로 되돌림.
-  prefs.set({ muted: false, volume: 0.7, motion: 'auto', ambient: true });
+  prefs.set({ muted: false, volume: 0.7, motion: 'auto', ambient: true, widgetScene: 'world' });
 });
 
 describe('prefs 기본값', () => {

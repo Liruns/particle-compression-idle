@@ -36,3 +36,13 @@ export function mixRGB(a: string, b: string, t: number): string {
   const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t);
   return `${r},${g},${bl}`;
 }
+
+/** '#0a0b0c' → 'r,g,b'. 짧은 '#abc'도 지원. 파싱 실패 시 '0,0,0'. */
+export function hexToRgb(hex: string): string {
+  const h = hex.replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  if (full.length !== 6) return '0,0,0';
+  const n = parseInt(full, 16);
+  if (Number.isNaN(n)) return '0,0,0';
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+}

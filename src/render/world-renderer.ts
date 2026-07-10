@@ -12,6 +12,7 @@
  *  CanvasRenderer가 배경 캔버스 컨텍스트를 넘겨 위임한다(게이지 글로우는 별도 캔버스 유지).
  */
 import { WORLDS, worldIndexForSlug, initWorlds, type World } from './layer-worlds';
+import { hexToRgb } from './util';
 
 /** 전환 길이(초). 프로토타입 DUR=1.7 — 느린 하강(art §5-B). */
 const TRANSITION_DUR = 1.7;
@@ -36,6 +37,44 @@ export class WorldRenderer {
   private reducedMotion = false;
   /** 앰비언트 누적 시간(초). performance.now 기반 dt 적분 — 로직 tick과 독립. */
   private t = 0;
+  /** 투명 위젯 모드 — void/어둠/비네팅을 불투명 풀렉트 대신 중앙 radial(가장자리 완전 투명)로. */
+  private transparent = false;
+
+  /** 투명 배경 모드 on/off(Tauri 투명창 위젯 — CanvasRenderer가 전파). */
+  setTransparent(v: boolean): void {
+    this.transparent = v;
+  }
+
+  /** void 채움 — 불투명: 풀렉트 / 투명: 중앙 소프트 헤일로(코스믹과 동일 문법). */
+  private fillVoid(ctx: CanvasRenderingContext2D, W: number, H: number, voidHex: string): void {
+    if (!this.transparent) {
+      ctx.fillStyle = voidHex;
+      ctx.fillRect(0, 0, W, H);
+      return;
+    }
+    const rgb = hexToRgb(voidHex);
+    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.6);
+    g.addColorStop(0, `rgba(${rgb},0.62)`);
+    g.addColorStop(0.6, `rgba(${rgb},0.30)`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  /** 전환 어둠 오버레이 — 투명 모드에선 radial(가장자리 투명 유지, 검은 사각 플래시 방지). */
+  private darkOverlay(ctx: CanvasRenderingContext2D, W: number, H: number, alpha: number): void {
+    if (alpha <= 0) return;
+    if (!this.transparent) {
+      ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+      ctx.fillRect(0, 0, W, H);
+      return;
+    }
+    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.6);
+    g.addColorStop(0, `rgba(0,0,0,${alpha})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
 
   constructor() {
     initWorlds();
@@ -125,8 +164,7 @@ export class WorldRenderer {
     if (!this.trans) {
       // 정적: 현재 세계의 void 채움 + 세계 드로우(상시 줌 없음 — sc=1).
       const w = WORLDS[this.cur];
-      ctx.fillStyle = w.void;
-      ctx.fillRect(0, 0, W, H);
+      this.fillVoid(ctx, W, H, w.void);
       ctx.globalCompositeOperation = 'lighter';
       this.drawWorld(w, ctx, t, cx, cy, 1, 1, W, H, d);
     } else {
@@ -136,8 +174,7 @@ export class WorldRenderer {
       const p = Math.min(1, this.trans.p);
       const from = WORLDS[this.trans.from];
       const to = WORLDS[this.trans.to];
-      ctx.fillStyle = p < 0.5 ? from.void : to.void;
-      ctx.fillRect(0, 0, W, H);
+      this.fillVoid(ctx, W, H, p < 0.5 ? from.void : to.void);
       ctx.globalCompositeOperation = 'lighter';
       // A: 현재 세계로 *떨어진다* (확대 + 페이드아웃).
       if (p < 0.62) {
@@ -153,8 +190,7 @@ export class WorldRenderer {
       ctx.globalCompositeOperation = 'source-over';
       const darkPeak = money ? 0.82 : 0.55;
       const darkCurve = money ? Math.pow(Math.sin(p * Math.PI), 0.7) : Math.sin(p * Math.PI);
-      ctx.fillStyle = `rgba(0,0,0,${darkPeak * darkCurve})`;
-      ctx.fillRect(0, 0, W, H);
+      this.darkOverlay(ctx, W, H, darkPeak * darkCurve);
       // 머니샷 도착 냉색 블룸 — 어둠을 뚫고 새(더 차가운) 세계색이 번진다(플래시 아님, 부드러운 상승).
       if (money && p > 0.72) {
         const k = (p - 0.72) / 0.28; // 0→1
@@ -174,7 +210,7 @@ export class WorldRenderer {
     }
 
     // 비네팅 — 현미경 시야(art §2-B: 중심 밝고 가장자리 어둠). 항상 source-over.
-    this.vignette(ctx, W, H);
+    if (!this.transparent) this.vignette(ctx, W, H);
   }
 
   /** 세계 드로우 디스패치. Foam(L9)은 확률적 스폰이라 dt를 추가 인자로 받는다. */

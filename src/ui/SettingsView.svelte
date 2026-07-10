@@ -9,7 +9,7 @@
    *   - 세이브 export/import/reset = game 위임(F1 봉투). import 실패는 검증 예외 → 인라인 오류.
    */
   import type { NotationKind } from '../core/format';
-  import { prefs, setMuted, setVolume, setMotion, setAmbient, type MotionPref } from './stores/prefs';
+  import { prefs, setMuted, setVolume, setMotion, setAmbient, setWidgetScene, type MotionPref } from './stores/prefs';
 
   /** 현재 표기법(스냅샷). 활성 표시용. */
   export let notation: NotationKind;
@@ -167,9 +167,27 @@
       <span class="s-label">위젯 모드</span>
       <button class="s-btn" on:click={openWidget}>위젯으로 전환</button>
     </div>
+    <div class="s-row">
+      <span class="s-sublabel">위젯 장면</span>
+      <div class="s-seg" role="radiogroup" aria-label="위젯 장면">
+        <button
+          class="seg"
+          class:on={$prefs.widgetScene === 'world'}
+          role="radio"
+          aria-checked={$prefs.widgetScene === 'world'}
+          on:click={() => setWidgetScene('world')}>게임 세계</button>
+        <button
+          class="seg"
+          class:on={$prefs.widgetScene === 'cosmic'}
+          role="radio"
+          aria-checked={$prefs.widgetScene === 'cosmic'}
+          on:click={() => setWidgetScene('cosmic')}>우주 사이클</button>
+      </div>
+    </div>
     <p class="s-hint">
-      게임 UI를 숨기고 진행을 앰비언트 우주(원자→행성계→은하→블랙홀→빅 크런치)로 봅니다.
-      진행·자동 생산은 계속됩니다. Esc로 돌아옵니다. 데스크톱 앱에선 기본 화면입니다.
+      게임 UI를 숨기고 관조합니다. <b>게임 세계</b>(기본) = 지금 있는 층의 세계를 그대로 비춥니다(게임과 동기화).
+      <b>우주 사이클</b> = 진행도가 원자→은하→블랙홀로 자라는 별도 장면. 진행·자동 생산은 계속됩니다.
+      Esc로 돌아옵니다. 데스크톱 앱에선 위젯이 기본 화면입니다.
     </p>
   </section>
 

@@ -14,6 +14,8 @@ import { writable, derived, type Readable } from 'svelte/store';
 import { reducedMotion as osReducedMotion } from './reduced-motion';
 
 export type MotionPref = 'auto' | 'reduce';
+/** 위젯 장면 — 'world'=현재 층 세계(게임과 동기화, 기본) / 'cosmic'=우주 사이클(별도 은유). */
+export type WidgetScene = 'world' | 'cosmic';
 
 export interface Prefs {
   /** 사운드 뮤트. */
@@ -24,11 +26,13 @@ export interface Prefs {
   motion: MotionPref;
   /** 앰비언트 사운드스케이프 on/off(SFX와 별개, audio-design §4-3). */
   ambient: boolean;
+  /** 위젯 장면(기기 취향 — 세이브 밖). */
+  widgetScene: WidgetScene;
 }
 
 const KEY = 'micro_idle_prefs';
 
-const DEFAULTS: Prefs = { muted: false, volume: 0.7, motion: 'auto', ambient: true };
+const DEFAULTS: Prefs = { muted: false, volume: 0.7, motion: 'auto', ambient: true, widgetScene: 'world' };
 
 function load(): Prefs {
   if (typeof localStorage === 'undefined') return { ...DEFAULTS };
@@ -44,6 +48,7 @@ function load(): Prefs {
           : DEFAULTS.volume,
       motion: parsed.motion === 'reduce' ? 'reduce' : DEFAULTS.motion,
       ambient: typeof parsed.ambient === 'boolean' ? parsed.ambient : DEFAULTS.ambient,
+      widgetScene: parsed.widgetScene === 'cosmic' ? 'cosmic' : DEFAULTS.widgetScene,
     };
   } catch {
     return { ...DEFAULTS };
@@ -84,4 +89,7 @@ export function setMotion(motion: MotionPref): void {
 }
 export function setAmbient(ambient: boolean): void {
   prefs.update((p) => ({ ...p, ambient }));
+}
+export function setWidgetScene(widgetScene: WidgetScene): void {
+  prefs.update((p) => ({ ...p, widgetScene }));
 }

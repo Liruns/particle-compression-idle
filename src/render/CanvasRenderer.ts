@@ -21,9 +21,16 @@ export class CanvasRenderer implements Renderer {
   private world: WorldRenderer;
   /** 전경 = 다이제틱 공허 게임판(중심 코어·궤도 껍질·세포). */
   private board: BoardRenderer;
-  /** 데스크톱 위젯 "코스믹 사이클" 씬(진행 연동). widget 모드일 때만 그린다. */
+  /** 데스크톱 위젯 "코스믹 사이클" 씬(선택 장면). widget+scene='cosmic'일 때만 그린다. */
   private cosmic: CosmicCycle;
   private widget = false;
+  /** 위젯 장면: 'world'=현재 층 세계(게임과 동기화, 기본) / 'cosmic'=우주 사이클(별도 은유). */
+  private widgetScene: 'world' | 'cosmic' = 'world';
+  /** 투명 배경 모드(Tauri 투명창) — FX 풀렉트 백화를 radial로 대체. */
+  private transparentBg = false;
+  /** 위젯 FX(장면 공통): 포크 리플(최대 6) + 빅뱅 섬광. 렌더 전용 — 보상·경제 없음. */
+  private readonly pokes: { x: number; y: number; t: number }[] = [];
+  private bangT = 0;
   /** 게임판 애니메이션 누적 시간(초). bg dt를 적분 — 사인 위상 일관(world.t와 독립). */
   private boardTime = 0;
   private reducedMotion = false;
@@ -91,9 +98,14 @@ export class CanvasRenderer implements Renderer {
     this.cosmic.setReducedMotion(v);
   }
 
-  /** 데스크톱 위젯 모드 on/off — draw가 게임판 대신 코스믹 사이클을 그린다. */
+  /** 데스크톱 위젯 모드 on/off — draw가 게임판 대신 위젯 장면(세계 또는 코스믹)을 그린다. */
   setWidgetMode(v: boolean): void {
     this.widget = v;
+  }
+
+  /** 위젯 장면 선택(설정 prefs.widgetScene — 기본 'world' = 게임과 동기화). */
+  setWidgetScene(v: 'world' | 'cosmic'): void {
+    this.widgetScene = v;
   }
 
   /** 코스믹 사이클 진행도 주입(0..1 = 게임 dec/26 연동). App pushRender에서 매 스냅샷 갱신. */
@@ -101,19 +113,22 @@ export class CanvasRenderer implements Renderer {
     this.cosmic.setProgress(p);
   }
 
-  /** 빅크런치 → 빅뱅 섬광(App이 bigCrunch 이벤트에서 호출). */
-  cosmicBang(): void {
-    this.cosmic.bang();
+  /** 빅크런치 → 빅뱅 섬광(App이 bigCrunch 이벤트에서 호출). 장면 공통 위젯 FX. */
+  widgetBang(): void {
+    this.bangT = 1;
   }
 
-  /** 투명 배경 모드(Tauri 투명창 위젯) — 코스믹 씬이 불투명 배경 대신 소프트 헤일로로 그린다. */
+  /** 투명 배경 모드(Tauri 투명창 위젯) — 두 장면 모두 불투명 배경 대신 소프트 헤일로로 그린다. */
   setTransparent(v: boolean): void {
+    this.transparentBg = v;
     this.cosmic.setTransparent(v);
+    this.world.setTransparent(v);
   }
 
-  /** 위젯 만지기(포크) — 렌더 전용 리플(보상·경제 없음). 좌표는 캔버스 CSS px. */
-  cosmicPoke(x: number, y: number): void {
-    this.cosmic.poke(x, y);
+  /** 위젯 만지기(포크) — 렌더 전용 리플(보상·경제 없음). 좌표는 캔버스 CSS px. 장면 공통. */
+  widgetPoke(x: number, y: number): void {
+    if (this.pokes.length >= 6) this.pokes.shift();
+    this.pokes.push({ x, y, t: 0 });
   }
 
   /**
@@ -168,15 +183,76 @@ export class CanvasRenderer implements Renderer {
     if (dt > 0.1) dt = 0.1;
 
     ctx.clearRect(0, 0, this.bgW, this.bgH);
-    if (this.widget) {
-      // 데스크톱 위젯: 코스믹 사이클 씬만(게임판 대체). 진행도는 App이 setCosmicProgress로 주입.
+    if (this.widget && this.widgetScene === 'cosmic') {
+      // 위젯(코스믹): 우주 사이클 장면 + FX. 진행도는 App이 setCosmicProgress로 주입.
       this.cosmic.draw(ctx, this.bgW, this.bgH, dt);
+      this.drawWidgetFx(ctx, dt);
       return;
     }
+    // 게임 화면과 위젯(세계 장면)은 동일 드로우 경로 — 위젯 = 게임 그대로, UI/상호작용만 없음(동기화).
     this.world.draw(ctx, this.bgW, this.bgH, dt); // 세계 배경(자체 합성 복원)
     if (!this.reducedMotion) this.boardTime += dt;
     this.board.setLayerColor(this.world.currentColorRGB());
     this.board.draw(ctx, this.bgW, this.bgH, dt, this.boardTime); // 전경 게임판(lighter)
+    if (this.widget) this.drawWidgetFx(ctx, dt);
+  }
+
+  /** 위젯 FX — 포크 리플 + 빅뱅 섬광(장면 위 합성). 클릭/크런치 때만 발생(저빈도 — gradient 즉석 OK). */
+  private drawWidgetFx(ctx: CanvasRenderingContext2D, dt: number): void {
+    const W = this.bgW;
+    const H = this.bgH;
+    const R = Math.min(W, H) * 0.42;
+    if (this.pokes.length > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = this.pokes.length - 1; i >= 0; i--) {
+        const k = this.pokes[i];
+        k.t += dt;
+        const u = Math.min(1, k.t / 0.8);
+        if (u >= 1) {
+          this.pokes.splice(i, 1);
+          continue;
+        }
+        const e = 1 - Math.pow(1 - u, 3);
+        const rr = R * (this.reducedMotion ? 0.1 : 0.04 + e * 0.16);
+        const al = (1 - u) * 0.5;
+        ctx.beginPath();
+        ctx.arc(k.x, k.y, rr, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(210,225,255,${al})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        this.fxGlow(ctx, k.x, k.y, rr * 0.8, '210,225,255', al * 0.6);
+      }
+    }
+    if (this.bangT > 0) {
+      this.bangT = Math.max(0, this.bangT - dt / 1.4);
+      const b = this.bangT;
+      if (b > 0.01) {
+        ctx.globalCompositeOperation = 'lighter';
+        this.fxGlow(ctx, W / 2, H / 2, R * (0.3 + (1 - b) * 2.2), '255,250,240', b * 0.9);
+        ctx.globalCompositeOperation = 'source-over';
+        if (this.transparentBg) {
+          // 투명창: 풀렉트 백화 대신 radial(가장자리 투명 유지 — 흰 사각 플래시 방지).
+          this.fxGlow(ctx, W / 2, H / 2, Math.max(W, H) * 0.7, '255,252,245', b * b * 0.5);
+        } else {
+          ctx.fillStyle = `rgba(255,252,245,${b * b * 0.5})`;
+          ctx.fillRect(0, 0, W, H);
+        }
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  /** FX 전용 radial 글로우(저빈도 — 스프라이트 캐시 불필요). */
+  private fxGlow(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, col: string, a: number): void {
+    if (a <= 0 || r <= 0) return;
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, `rgba(${col},${a})`);
+    g.addColorStop(0.4, `rgba(${col},${a * 0.35})`);
+    g.addColorStop(1, `rgba(${col},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   /** 정리(누수 방지). dpr 리스너 제거. */

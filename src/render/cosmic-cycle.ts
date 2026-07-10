@@ -8,7 +8,7 @@
  *  경계에서 크로스페이드. 경제·로직 무관 — snapshot 파생 p만 읽는다(단방향).
  */
 
-import { TAU, clamp, lerp, fract, rnd, mixRGB, easeOutCubic } from './util';
+import { TAU, clamp, lerp, fract, rnd, mixRGB } from './util';
 
 interface Orbiter {
   /** 궤도 반경 비율(0..1, R 기준). */
@@ -29,15 +29,12 @@ export class CosmicCycle {
   private p = 0; // 부드럽게 추적한 현재 진행도.
   private target = 0;
   private time = 0;
-  private bangT = 0; // 빅뱅 플래시(0..1 감쇠).
   private reduced = false;
   /** 투명 위젯 모드 — 불투명 배경 대신 중앙 소프트 헤일로(가장자리 완전 투명 → 바탕화면에 떠 있는 느낌). */
   private transparent = false;
 
   private readonly stars: { x: number; y: number; s: number; ph: number }[] = [];
   private readonly orbs: Orbiter[] = [];
-  /** 포크 리플(만지기 피드백, 렌더 전용 — 최대 6). 좌표는 캔버스 CSS px. */
-  private readonly pokes: { x: number; y: number; t: number }[] = [];
 
   constructor() {
     // 배경 성단(정적 시드 — 화면 비율 무관 0..1 좌표).
@@ -60,21 +57,12 @@ export class CosmicCycle {
   setProgress(p: number): void {
     this.target = clamp(Number.isFinite(p) ? p : 0, 0, 1);
   }
-  /** 빅크런치 → 빅뱅 섬광. */
-  bang(): void {
-    this.bangT = 1;
-  }
   setReducedMotion(v: boolean): void {
     this.reduced = v;
   }
   /** 투명 배경 모드 on/off(Tauri 투명창 위젯). */
   setTransparent(v: boolean): void {
     this.transparent = v;
-  }
-  /** 만지기(포크) — 렌더 전용 리플. 보상/경제 없음(장난감 피드백, Ropuka식 관전+콕). */
-  poke(x: number, y: number): void {
-    if (this.pokes.length >= 6) this.pokes.shift();
-    this.pokes.push({ x, y, t: 0 });
   }
 
   /** 색별 글로우 스프라이트 캐시(팔레트가 정적이라 유한). 프레임당 gradient 할당 제거(성능/GC). */
@@ -132,7 +120,6 @@ export class CosmicCycle {
     if (W <= 0 || H <= 0) return;
     this.p = lerp(this.p, this.target, Math.min(1, dt * 2.5));
     if (!this.reduced) this.time += dt;
-    if (this.bangT > 0) this.bangT = Math.max(0, this.bangT - dt / 1.4);
     const t = this.time;
     const cx = W / 2;
     const cy = H / 2;
@@ -183,37 +170,6 @@ export class CosmicCycle {
     if (aGalaxy > 0.01) this.drawGalaxy(ctx, cx, cy, R, t, aGalaxy);
     if (aHole > 0.01) this.drawBlackHole(ctx, cx, cy, R, t, aHole);
 
-    // 포크 리플(만지기) — 확장 링 + 잔광, 0.8s 페이드. 보상 없음(렌더 전용).
-    if (this.pokes.length > 0) {
-      ctx.globalCompositeOperation = 'lighter';
-      for (let i = this.pokes.length - 1; i >= 0; i--) {
-        const k = this.pokes[i];
-        k.t += dt;
-        const u = Math.min(1, k.t / 0.8);
-        if (u >= 1) {
-          this.pokes.splice(i, 1);
-          continue;
-        }
-        const e = easeOutCubic(u);
-        const rr = R * (this.reduced ? 0.1 : 0.04 + e * 0.16);
-        const al = (1 - u) * 0.5;
-        ctx.beginPath();
-        ctx.arc(k.x, k.y, rr, 0, TAU);
-        ctx.strokeStyle = `rgba(210,225,255,${al})`;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        this.glow(ctx, k.x, k.y, rr * 0.8, '210,225,255', al * 0.6);
-      }
-    }
-
-    // 빅뱅 섬광(빅크런치 직후).
-    if (this.bangT > 0.01) {
-      const b = this.bangT;
-      this.glow(ctx, cx, cy, R * (0.3 + (1 - b) * 2.2), '255,250,240', b * 0.9);
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = `rgba(255,252,245,${b * b * 0.5})`;
-      ctx.fillRect(0, 0, W, H);
-    }
     ctx.globalCompositeOperation = 'source-over';
   }
 
