@@ -24,7 +24,7 @@ pub fn run() {
       let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
       let menu = Menu::with_items(app, &[&toggle, &mode, &quit])?;
       let mut tray = TrayIconBuilder::new()
-        .tooltip("입자 압축 · 코스믹 위젯")
+        .tooltip("입자 압축 — 데스크탑 위젯")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
           "toggle" => {

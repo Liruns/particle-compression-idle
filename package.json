@@ -2,7 +2,7 @@
   "name": "micro-idle",
   "version": "0.0.1",
   "private": true,
-  "description": "Micro Idle — 압축으로 미립자 세계로 내려가는 역방향 스케일 방치형 인크리멘탈 (웹 → Steam)",
+  "description": "입자 압축 — 바탕화면 위젯에서 물질을 압축하는 데스크탑 방치형 × 인크리멘탈 (분자→플랑크, 작아짐=강해짐)",
   "type": "module",
   "scripts": {
     "dev": "vite",
