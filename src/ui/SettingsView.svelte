@@ -21,6 +21,8 @@
   export let onImport: (raw: string) => void;
   /** 하드 리셋(→ game.resetToFresh). */
   export let onReset: () => void;
+  /** 위젯 모드로 전환(→ App.switchWidgetMode — 웹은 같은 탭 URL, Tauri는 창 변형+리로드). */
+  export let onWidget: () => void;
 
   const motionOpts: { id: MotionPref; label: string }[] = [
     { id: 'auto', label: '자동' },
@@ -82,10 +84,6 @@
     onReset();
   }
 
-  /** 위젯 모드로 전환(같은 탭 — 두 탭 동시 구동으로 인한 세이브 경합 방지). Esc로 복귀. */
-  function openWidget(): void {
-    if (typeof location !== 'undefined') location.href = './?widget';
-  }
 </script>
 
 <div class="settings">
@@ -165,7 +163,7 @@
   <section class="s-group">
     <div class="s-row">
       <span class="s-label">위젯 모드</span>
-      <button class="s-btn" on:click={openWidget}>위젯으로 전환</button>
+      <button class="s-btn" on:click={onWidget}>위젯으로 전환</button>
     </div>
     <div class="s-row">
       <span class="s-sublabel">위젯 장면</span>

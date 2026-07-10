@@ -177,6 +177,17 @@
         if (hudTimer) clearTimeout(hudTimer);
       });
     }
+    if (isTauriDesktop && typeof window !== 'undefined') {
+      // Tauri(모드 무관): 부팅 정규화(직전 세션을 다른 모드로 끝냈으면 창 흔적 불일치 → 재적용) +
+      //   트레이 "게임 ↔ 위젯 전환" 이벤트 수신(양방향 — 게임 모드에서도 위젯으로 복귀 가능).
+      void (async () => {
+        const { normalizeTauriWindowMode } = await import('./platform/window-mode');
+        await normalizeTauriWindowMode(widget ? 'widget' : 'game');
+        const { listen } = await import('@tauri-apps/api/event');
+        const un = await listen('toggle-widget-mode', () => void switchWidgetMode(widget ? 'game' : 'widget'));
+        busUnsubs.push(un);
+      })();
+    }
 
     // 사운드 엔진 — 이벤트 버스 구독(읽기 전용). 층 인덱스로 음역 결정. prefs로 mute/volume 반영.
     audio = new AudioEngine({ getLayerIndex: () => snap?.layer.index ?? 1 });
@@ -524,10 +535,27 @@
     const tag = t.tagName;
     return tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable;
   }
+
+  /**
+   * 위젯 ↔ 게임 모드 전환(웹·Tauri 공통 진입점).
+   *  웹: URL 내비게이션(같은 탭 — 두 탭 동시 구동 세이브 경합 방지).
+   *  Tauri: 창 모양 변형(위젯=프레임리스 스티커 / 게임=일반 창) 후 해시 라우팅 + 리로드.
+   */
+  async function switchWidgetMode(target: 'game' | 'widget'): Promise<void> {
+    if (typeof location === 'undefined') return;
+    if (isTauriDesktop) {
+      const { applyTauriWindowMode } = await import('./platform/window-mode');
+      await applyTauriWindowMode(target);
+      location.hash = target === 'game' ? 'game' : '';
+      location.reload();
+    } else {
+      location.href = target === 'game' ? './' : './?widget';
+    }
+  }
   function onKeydown(e: KeyboardEvent): void {
     if (widget) {
-      // 위젯: 게임 단축키 전부 차단(보이지 않는 압축/구매 오발동 방지). 웹에선 Esc = 게임 화면 복귀.
-      if (e.key === 'Escape' && !isTauriDesktop && typeof location !== 'undefined') location.href = './';
+      // 위젯: 게임 단축키 전부 차단(보이지 않는 압축/구매 오발동 방지). Esc = 게임 화면 복귀(웹·데스크톱 공통).
+      if (e.key === 'Escape') void switchWidgetMode('game');
       return;
     }
     unlockAudio();
@@ -647,7 +675,7 @@
 {#if widget && snap}
   <!-- 호버 HUD — 진행 연동을 읽을 수 있게(층·사이클%). 기본 숨김, 포인터 이동 시만. -->
   <div class="widget-hud" class:show={widgetHudVisible} aria-hidden="true">
-    {snap.layer.nameKo} · 진행 {Math.round(Math.min(1, Math.max(0, snap.dec / 26)) * 100)}%
+    {snap.layer.nameKo} · 진행 {Math.round(Math.min(1, Math.max(0, snap.dec / 26)) * 100)}% · Esc = 게임
   </div>
 {/if}
 
@@ -805,7 +833,8 @@
             {onNotation}
             {onExport}
             {onImport}
-            {onReset} />
+            {onReset}
+            onWidget={() => void switchWidgetMode('widget')} />
         {:else if activePanel === 'stats'}
           <StatsView stats={snap.stats} />
         {:else if activePanel === 'achievements'}

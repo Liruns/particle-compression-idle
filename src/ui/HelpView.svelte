@@ -81,8 +81,9 @@
     <h3 class="h-cat">위젯 모드</h3>
     <ul class="h-list" role="list">
       <li class="h-row"><span class="h-key">설정 → 위젯으로 전환</span><span class="h-desc">게임 UI를 숨기고 관조 — 기본은 지금 층의 세계 그대로(동기화), 설정에서 우주 사이클로 변경 가능</span></li>
-      <li class="h-row"><span class="h-key">위젯에서 클릭</span><span class="h-desc">잔물결(장난감 — 보상 없음). Esc로 게임 화면 복귀</span></li>
-      <li class="h-row"><span class="h-key">데스크톱 앱</span><span class="h-desc">투명 위젯 창이 기본 — 드래그로 이동, 트레이에서 보이기/숨기기</span></li>
+      <li class="h-row"><span class="h-key">위젯에서 클릭</span><span class="h-desc">잔물결(장난감 — 보상 없음)</span></li>
+      <li class="h-row"><span class="h-key">위젯 → 게임 복귀</span><span class="h-desc">Esc (웹·데스크톱 공통) · 데스크톱은 트레이 "게임 ↔ 위젯 전환"도 가능</span></li>
+      <li class="h-row"><span class="h-key">데스크톱 앱</span><span class="h-desc">투명 위젯 창이 기본 — 드래그로 이동, 트레이에서 보이기/숨기기. 게임 모드로 나가면 일반 창(테두리·태스크바)으로 변형</span></li>
     </ul>
   </section>
 
