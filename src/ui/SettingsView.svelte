@@ -81,6 +81,11 @@
     confirmReset = false;
     onReset();
   }
+
+  /** 위젯 모드로 전환(같은 탭 — 두 탭 동시 구동으로 인한 세이브 경합 방지). Esc로 복귀. */
+  function openWidget(): void {
+    if (typeof location !== 'undefined') location.href = './?widget';
+  }
 </script>
 
 <div class="settings">
@@ -154,6 +159,18 @@
       </div>
     </div>
     <p class="s-hint">과학 1.23×10²³ · 공학 1.23e+24 · 표준 1.23M · 로그 e23.09</p>
+  </section>
+
+  <!-- 위젯 모드 -->
+  <section class="s-group">
+    <div class="s-row">
+      <span class="s-label">위젯 모드</span>
+      <button class="s-btn" on:click={openWidget}>위젯으로 전환</button>
+    </div>
+    <p class="s-hint">
+      게임 UI를 숨기고 진행을 앰비언트 우주(원자→행성계→은하→블랙홀→빅 크런치)로 봅니다.
+      진행·자동 생산은 계속됩니다. Esc로 돌아옵니다. 데스크톱 앱에선 기본 화면입니다.
+    </p>
   </section>
 
   <!-- 세이브 데이터 -->

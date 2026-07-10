@@ -75,6 +75,15 @@
     </ul>
   </section>
 
+  <section class="h-group">
+    <h3 class="h-cat">위젯 모드</h3>
+    <ul class="h-list" role="list">
+      <li class="h-row"><span class="h-key">설정 → 위젯으로 전환</span><span class="h-desc">게임 UI를 숨기고 진행을 앰비언트 우주로 관조(원자→은하→블랙홀→빅 크런치)</span></li>
+      <li class="h-row"><span class="h-key">위젯에서 클릭</span><span class="h-desc">잔물결(장난감 — 보상 없음). Esc로 게임 화면 복귀</span></li>
+      <li class="h-row"><span class="h-key">데스크톱 앱</span><span class="h-desc">투명 위젯 창이 기본 — 드래그로 이동, 트레이에서 보이기/숨기기</span></li>
+    </ul>
+  </section>
+
   <p class="h-note">방치도 보상, 개입도 보상. 안 만져도 진행하고, 만지면 가속한다.</p>
 </div>
 

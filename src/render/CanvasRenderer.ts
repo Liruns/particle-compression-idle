@@ -111,6 +111,11 @@ export class CanvasRenderer implements Renderer {
     this.cosmic.setTransparent(v);
   }
 
+  /** 위젯 만지기(포크) — 렌더 전용 리플(보상·경제 없음). 좌표는 캔버스 CSS px. */
+  cosmicPoke(x: number, y: number): void {
+    this.cosmic.poke(x, y);
+  }
+
   /**
    * 층 전환(slug 변화 시 App에서 호출). 세계 전환 하강 재생 + 새 세계 물질 교체.
    *  첫 호출(부팅 슬러그)은 즉시 스냅(전환 없음), 이후 slug 변화는 떨어짐 전환(art §5-B).

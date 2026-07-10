@@ -152,6 +152,17 @@
         window.removeEventListener('blur', onBlur);
       });
     }
+    if (widget && typeof window !== 'undefined') {
+      // 만지기(포크): 위젯 어디를 눌러도 렌더 전용 리플(보상·경제 없음, Ropuka식 콕).
+      //   Tauri 드래그 div가 캔버스를 덮어도 window 레벨이라 동작(드래그와 공존 — 리플 후 이동).
+      const onPoke = (e: PointerEvent) => {
+        if (e.button !== 0 || !bgCanvas) return;
+        const rect = bgCanvas.getBoundingClientRect();
+        renderer?.cosmicPoke(e.clientX - rect.left, e.clientY - rect.top);
+      };
+      window.addEventListener('pointerdown', onPoke);
+      busUnsubs.push(() => window.removeEventListener('pointerdown', onPoke));
+    }
 
     // 사운드 엔진 — 이벤트 버스 구독(읽기 전용). 층 인덱스로 음역 결정. prefs로 mute/volume 반영.
     audio = new AudioEngine({ getLayerIndex: () => snap?.layer.index ?? 1 });
@@ -394,6 +405,7 @@
 
   function onPointerDown(e: PointerEvent): void {
     if (!renderer || !game || !snap || e.button !== 0) return;
+    if (widget) return; // 위젯: 게임판 히트테스트 금지(보이지 않는 압축/결속 오발동 방지). 포크는 전역 리스너.
     unlockAudio();
     pointerDown = true;
     const { x, y } = canvasXY(e);
@@ -405,7 +417,7 @@
     else if (hit.kind === 'phase') doPhase(hit.state);
   }
   function onPointerMove(e: PointerEvent): void {
-    if (!renderer) return;
+    if (!renderer || widget) return;
     const { x, y } = canvasXY(e);
     renderer.gameBoard.setPointer(x, y);
     // 드래그 쓸어담기 — 버튼을 누른 채 지나간 float 세포만큼 압축(호버 스윕 롤백, 조작감).
@@ -495,6 +507,11 @@
     return tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable;
   }
   function onKeydown(e: KeyboardEvent): void {
+    if (widget) {
+      // 위젯: 게임 단축키 전부 차단(보이지 않는 압축/구매 오발동 방지). 웹에선 Esc = 게임 화면 복귀.
+      if (e.key === 'Escape' && !isTauriDesktop && typeof location !== 'undefined') location.href = './';
+      return;
+    }
     unlockAudio();
     if (isTypingTarget(e.target)) return; // 텍스트 입력 중엔 단축키 무시
     if (e.key === 'Escape' && activePanel) closePanel();

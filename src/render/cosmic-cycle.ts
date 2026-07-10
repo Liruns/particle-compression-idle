@@ -8,7 +8,7 @@
  *  경계에서 크로스페이드. 경제·로직 무관 — snapshot 파생 p만 읽는다(단방향).
  */
 
-import { TAU, clamp, lerp, fract, rnd, mixRGB } from './util';
+import { TAU, clamp, lerp, fract, rnd, mixRGB, easeOutCubic } from './util';
 
 interface Orbiter {
   /** 궤도 반경 비율(0..1, R 기준). */
@@ -36,6 +36,8 @@ export class CosmicCycle {
 
   private readonly stars: { x: number; y: number; s: number; ph: number }[] = [];
   private readonly orbs: Orbiter[] = [];
+  /** 포크 리플(만지기 피드백, 렌더 전용 — 최대 6). 좌표는 캔버스 CSS px. */
+  private readonly pokes: { x: number; y: number; t: number }[] = [];
 
   constructor() {
     // 배경 성단(정적 시드 — 화면 비율 무관 0..1 좌표).
@@ -68,6 +70,11 @@ export class CosmicCycle {
   /** 투명 배경 모드 on/off(Tauri 투명창 위젯). */
   setTransparent(v: boolean): void {
     this.transparent = v;
+  }
+  /** 만지기(포크) — 렌더 전용 리플. 보상/경제 없음(장난감 피드백, Ropuka식 관전+콕). */
+  poke(x: number, y: number): void {
+    if (this.pokes.length >= 6) this.pokes.shift();
+    this.pokes.push({ x, y, t: 0 });
   }
 
   /** 색별 글로우 스프라이트 캐시(팔레트가 정적이라 유한). 프레임당 gradient 할당 제거(성능/GC). */
@@ -176,6 +183,29 @@ export class CosmicCycle {
     if (aGalaxy > 0.01) this.drawGalaxy(ctx, cx, cy, R, t, aGalaxy);
     if (aHole > 0.01) this.drawBlackHole(ctx, cx, cy, R, t, aHole);
 
+    // 포크 리플(만지기) — 확장 링 + 잔광, 0.8s 페이드. 보상 없음(렌더 전용).
+    if (this.pokes.length > 0) {
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = this.pokes.length - 1; i >= 0; i--) {
+        const k = this.pokes[i];
+        k.t += dt;
+        const u = Math.min(1, k.t / 0.8);
+        if (u >= 1) {
+          this.pokes.splice(i, 1);
+          continue;
+        }
+        const e = easeOutCubic(u);
+        const rr = R * (this.reduced ? 0.1 : 0.04 + e * 0.16);
+        const al = (1 - u) * 0.5;
+        ctx.beginPath();
+        ctx.arc(k.x, k.y, rr, 0, TAU);
+        ctx.strokeStyle = `rgba(210,225,255,${al})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        this.glow(ctx, k.x, k.y, rr * 0.8, '210,225,255', al * 0.6);
+      }
+    }
+
     // 빅뱅 섬광(빅크런치 직후).
     if (this.bangT > 0.01) {
       const b = this.bangT;
@@ -193,7 +223,14 @@ export class CosmicCycle {
   private drawAtom(ctx: CanvasRenderingContext2D, cx: number, cy: number, R: number, t: number, a: number): void {
     ctx.globalCompositeOperation = 'lighter';
     this.glow(ctx, cx, cy, R * 0.18, '150,190,255', a * 0.5);
-    this.glow(ctx, cx, cy, R * 0.05, '235,245,255', a * 0.9);
+    // 핵 = 양성자(웜)/중성자(쿨) 2톤 클러스터 — 단일 점보다 "원자" 정체성 또렷.
+    const nspin = this.reduced ? 0 : t * 0.9;
+    for (let n = 0; n < 3; n++) {
+      const na = nspin + (n / 3) * TAU;
+      const nx = cx + Math.cos(na) * R * 0.022;
+      const ny = cy + Math.sin(na) * R * 0.022;
+      this.glow(ctx, nx, ny, R * 0.042, n % 2 ? '255,214,190' : '235,245,255', a * 0.85);
+    }
     const spin = this.reduced ? 0 : t;
     for (let e = 0; e < 3; e++) {
       const rot = (e / 3) * Math.PI;
@@ -255,15 +292,28 @@ export class CosmicCycle {
     this.glow(ctx, cx, cy, R * 0.16, '255,244,220', a * 0.85);
     const arms = 2;
     for (const o of this.orbs) {
-      // 로그 나선: 각 = base + k·반경. 두 팔로 분배.
+      // 로그 나선: 각 = base + k·반경. 두 팔로 분배. 산포는 바깥으로 갈수록 좁게(팔이 또렷).
       const arm = (Math.round(o.hue * 100) % arms) * (TAU / arms);
+      const scatter = (o.ang / TAU - 0.5) * (0.55 - 0.4 * o.rad);
       const rr = o.rad * R * 0.95;
-      const ang = arm + o.rad * 6.0 + rot + o.ang * 0.02;
+      const ang = arm + o.rad * 5.6 + rot + scatter;
       const x = cx + Math.cos(ang) * rr;
       const y = cy + Math.sin(ang) * rr * 0.6;
       const c: [number, number, number] = o.hue < 0.5 ? [200, 214, 245] : [255, 214, 170];
       const sa = a * (0.35 + 0.5 * (1 - o.rad));
       this.glow(ctx, x, y, R * (0.012 + o.sz * 0.02), `${c[0]},${c[1]},${c[2]}`, sa);
+      // 팔 연속감: 반 스텝 뒤 보조 광점(희미) — 점 구름이 아니라 "띠"로 읽히게.
+      const r2 = Math.max(0.05, o.rad - 0.022);
+      const ang2 = arm + r2 * 5.6 + rot + scatter * 0.9;
+      const rr2 = r2 * R * 0.95;
+      this.glow(
+        ctx,
+        cx + Math.cos(ang2) * rr2,
+        cy + Math.sin(ang2) * rr2 * 0.6,
+        R * (0.008 + o.sz * 0.012),
+        `${c[0]},${c[1]},${c[2]}`,
+        sa * 0.45,
+      );
     }
   }
 
