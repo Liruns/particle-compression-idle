@@ -82,6 +82,8 @@ export interface ResearchNode {
   prerequisites: string[];
   /** D 비용(노드 1회 구매, native number). */
   costD: number;
+  /** 트리 좌표(표현 전용 — 0~100 viewBox, PoE식 공간 배치. y 아래 방향). 로직·세이브 무관. */
+  pos: { x: number; y: number };
   /** 플레이버(narrative §3 보이스 요약). */
   flavorKo: string;
 }
@@ -102,6 +104,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: '수동 압축(만지기) 파워 ×1.6',
     prerequisites: [],
     costD: 8,
+    pos: { x: 33, y: 47 },
     flavorKo: '손끝의 압력을 벼린다. 직접 만지는 한 번이 더 깊이 파고든다.',
   },
   {
@@ -114,6 +117,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: '발견·공명 데이터(D) 획득 ×1.35',
     prerequisites: [],
     costD: 12,
+    pos: { x: 67, y: 47 },
     flavorKo: '흐릿하던 관측 신호가 또렷해진다. 같은 발견에서 더 많은 데이터.',
   },
   {
@@ -126,6 +130,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: 'T1 압축기 생산 ×1.5',
     prerequisites: [],
     costD: 30,
+    pos: { x: 50, y: 38 },
     flavorKo: '체인의 기초를 강화한다. 첫 번째 단이 강해질수록 모든 것이 강해진다.',
   },
 
@@ -140,6 +145,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: '수동 압축 파워 추가 ×2.0',
     prerequisites: ['C1'],
     costD: 70,
+    pos: { x: 19, y: 37 },
     flavorKo: '관측이 외과적으로 정밀해진다. 만지는 손이 곧 압축기다.',
   },
   {
@@ -152,6 +158,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: '발견·공명 데이터(D) 추가 ×1.6',
     prerequisites: ['R1'],
     costD: 90,
+    pos: { x: 81, y: 37 },
     flavorKo: '잡음을 걷어내고 순수한 데이터만 남긴다. 연구가 가속된다.',
   },
   {
@@ -164,6 +171,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: 'T5~T8 압축기 생산 ×1.5 (4개 티어)',
     prerequisites: ['A1'],
     costD: 350,
+    pos: { x: 50, y: 20 },
     flavorKo: '체인의 정점을 밀어올린다. 높은 곳이 강해지면 아래도 따라온다.',
   },
   {
@@ -176,6 +184,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: 'T1 압축기 생산 추가 ×2.0',
     prerequisites: ['A2'],
     costD: 800,
+    pos: { x: 36, y: 12 },
     flavorKo: '기초 단을 공진시켜 폭발적으로 끌어올린다. 뿌리가 깊을수록 나무는 높다.',
   },
   {
@@ -188,6 +197,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: '공명 데이터(D) 획득 ×1.5 (클릭·자동)',
     prerequisites: ['R1'],
     costD: 60,
+    pos: { x: 71, y: 62 },
     flavorKo: '공명의 순간을 더 깊이 기록한다. 같은 공명에서 더 많은 데이터.',
   },
   {
@@ -200,6 +210,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: '공명 슬롯 유효 시간 +1.5초 (타이밍 관대)',
     prerequisites: ['Q1'],
     costD: 160,
+    pos: { x: 83, y: 72 },
     flavorKo: '공명의 창이 넓어진다. 서두르지 않아도 잡을 수 있다.',
   },
   {
@@ -212,6 +223,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: '공명 콤보 상한 +5 (연속 성공 D 천장↑)',
     prerequisites: ['Q2'],
     costD: 450,
+    pos: { x: 91, y: 84 },
     flavorKo: '공명이 공명을 부른다. 끊기지 않는 한 더 깊이 울린다.',
   },
   {
@@ -224,6 +236,7 @@ export const RESEARCH_NODES: readonly ResearchNode[] = [
     effectKo: '열린 공명 슬롯을 자동으로 잡음 (개입 자동화 — 콤보 유지)',
     prerequisites: ['Q1'],
     costD: 600,
+    pos: { x: 57, y: 78 },
     flavorKo: '관측 장치가 스스로 공명을 포착한다. 손을 떼도 공명은 이어진다.',
   },
 ] as const;
